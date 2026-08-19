@@ -30,6 +30,13 @@ def test_descarta_agregador_en_cualquier_tld():
         assert razon == "agregador", dominio
 
 
+def test_descarta_metabuscador_con_subdominio_de_pais():
+    # Caso real: vuelos.idealo.es pasaba antes de sumar "idealo" a la blacklist
+    ok, razon = is_relevant(_web(TEXTO_ES, "vuelos.idealo.es"))
+    assert ok is False
+    assert razon == "agregador"
+
+
 def test_descarta_tidal_y_jetcost():
     assert is_relevant(_web(TEXTO_ES, "tidal.com"))[1] == "agregador"
     assert is_relevant(_web(TEXTO_ES, "www.jetcost.pl"))[1] == "agregador"

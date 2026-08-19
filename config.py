@@ -81,7 +81,7 @@ COMPLAINT_DRIVERS = [
 BLACKLIST_DOMAIN_ROOTS = {
     "rehlat", "jetcost", "kayak", "despegar", "kiwi", "skyscanner",
     "expedia", "trip", "edreams", "viajala", "momondo", "cheapflights",
-    "tidal", "atoallinks",
+    "tidal", "atoallinks", "idealo",
 }
 
 SPANISH_STOPWORDS = {
