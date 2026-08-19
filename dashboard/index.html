@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avianca — Brand Sentiment Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --navy:     #0D1117;
+      --navy-2:   #161B22;
+      --navy-3:   #21262D;
+      --navy-4:   #30363D;
+      --orange:   #F97316;
+      --orange-dim: rgba(249,115,22,0.12);
+      --orange-mid: rgba(249,115,22,0.35);
+      --green:    #3FB950;
+      --red:      #F85149;
+      --blue:     #58A6FF;
+      --txt:      #E6EDF3;
+      --txt-2:    #8B949E;
+      --txt-3:    #484F58;
+      --border:   rgba(48,54,61,0.9);
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Inter', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      background: var(--navy);
+      color: var(--txt);
+      font-family: var(--sans);
+      font-size: 13px;
+    }
+
+    /* scanline texture */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── LOADING ── */
+    #loader {
+      position: fixed; inset: 0;
+      background: var(--navy);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+      z-index: 9998;
+      transition: opacity 0.4s;
+    }
+    #loader.out { opacity: 0; pointer-events: none; }
+
+    .loader-brand {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--orange);
+    }
+    .loader-msg {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--txt-3);
+    }
+    .loader-bar {
+      width: 180px; height: 2px;
+      background: var(--navy-4);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .loader-bar-fill {
+      height: 100%;
+      background: var(--orange);
+      animation: sweep 1.4s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0%   { transform: translateX(-100%) scaleX(0.4); }
+      50%  { transform: translateX(50%)   scaleX(1);   }
+      100% { transform: translateX(200%)  scaleX(0.4); }
+    }
+
+    /* ── LAYOUT ── */
+    #app {
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      grid-template-columns: 268px 1fr 264px;
+      height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: var(--navy-2);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    .h-left { display: flex; align-items: center; gap: 14px; }
+
+    .h-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      color: var(--orange);
+      border: 1px solid var(--orange-mid);
+      background: var(--orange-dim);
+      padding: 3px 9px;
+      border-radius: 2px;
+    }
+
+    .h-title {
+      font-size: 12px;
+      color: var(--txt-2);
+      letter-spacing: 0.01em;
+    }
+    .h-title b { color: var(--txt); font-weight: 600; }
+
+    .h-right { display: flex; align-items: center; gap: 18px; }
+
+    .live {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--txt-3);
+      letter-spacing: 0.04em;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: blink 2.2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(63,185,80,0.5); }
+      50%      { opacity:.6; box-shadow: 0 0 0 5px rgba(63,185,80,0); }
+    }
+
+    .h-upd {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--txt-3);
+    }
+
+    .s-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 4px 12px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+    .s-badge.pos { color: var(--green); border-color: rgba(63,185,80,.35); background: rgba(63,185,80,.07); }
+    .s-badge.neg { color: var(--red);   border-color: rgba(248,81,73,.35);  background: rgba(248,81,73,.07); }
+    .s-badge.neu { color: var(--txt-2); border-color: var(--border);        background: transparent; }
+
+    /* ── PANELS ── */
+    .col {
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .col:last-child { border-right: none; }
+
+    .sec {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sec-title {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--txt-3);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sec-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── LEFT COL ── */
+    .col-left { grid-column: 1; grid-row: 2; }
+
+    /* Gauge */
+    .gauge-wrap {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 16px;
+    }
+    .gauge-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .gauge-num {
+      font-family: var(--mono);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .gauge-lbl {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--txt-3);
+      margin-top: 4px;
+    }
+
+    /* Sentiment bars */
+    .sent-rows { display: flex; flex-direction: column; gap: 9px; }
+    .sent-row { display: flex; flex-direction: column; gap: 4px; }
+    .sent-top {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sent-pip {
+      width: 7px; height: 7px;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+    .sent-name { font-size: 11px; color: var(--txt-2); flex: 1; }
+    .sent-val {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--txt);
+      min-width: 36px;
+      text-align: right;
+    }
+    .sent-track {
+      height: 2px;
+      background: var(--navy-4);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .sent-fill {
+      height: 100%;
+      border-radius: 1px;
+      transition: width .9s cubic-bezier(.4,0,.2,1);
+      width: 0%;
+    }
+
+    /* Stats */
+    .stat-grid { display: flex; flex-direction: column; gap: 12px; }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-lbl {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--txt-3);
+    }
+    .stat-val {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--txt);
+      line-height: 1;
+    }
+    .stat-val.accent { color: var(--orange); font-size: 15px; letter-spacing: 0.05em; }
+
+    /* Platform list */
+    .plat-list { display: flex; flex-direction: column; gap: 10px; }
+    .plat-item { display: flex; flex-direction: column; gap: 5px; }
+    .plat-meta { display: flex; align-items: center; justify-content: space-between; }
+    .plat-name {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--txt-2);
+    }
+    .plat-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .plat-cnt { font-family: var(--mono); font-size: 10px; color: var(--txt-3); }
+    .plat-track { height: 2px; background: var(--navy-4); border-radius: 1px; }
+    .plat-fill { height: 100%; border-radius: 1px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+
+    /* ── CENTER COL ── */
+    .col-center {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tl-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .legend { display: flex; gap: 14px; }
+    .leg-item {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 10px; color: var(--txt-3);
+    }
+    .leg-line { width: 14px; height: 2px; border-radius: 1px; }
+
+    .chart-area {
+      flex: 1;
+      padding: 16px 20px;
+      position: relative;
+      min-height: 0;
+    }
+    .chart-area canvas { width: 100% !important; height: 100% !important; }
+
+    /* ── RIGHT COL ── */
+    .col-right {
+      grid-column: 3;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .neg-list {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--navy-4) transparent;
+    }
+    .neg-list::-webkit-scrollbar { width: 3px; }
+    .neg-list::-webkit-scrollbar-thumb { background: var(--navy-4); }
+
+    .neg-card {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      transition: background .12s;
+      cursor: default;
+    }
+    .neg-card:hover { background: var(--navy-2); }
+
+    .neg-meta {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .neg-plat {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .neg-rank {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--navy-4);
+      margin-right: 2px;
+    }
+    .neg-score {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--red);
+    }
+    .neg-author {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--txt-3);
+      margin-bottom: 4px;
+    }
+    .neg-text {
+      font-size: 11px;
+      color: var(--txt-2);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .neg-date {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--txt-3);
+      margin-top: 5px;
+    }
+
+    /* platform color classes */
+    .c-web       { color: #58A6FF; }
+    .c-instagram { color: #E1306C; }
+    .c-tiktok    { color: #69C9D0; }
+    .c-twitter   { color: #1DA1F2; }
+    .d-web       { background: #58A6FF; }
+    .d-instagram { background: #E1306C; }
+    .d-tiktok    { background: #69C9D0; }
+    .d-twitter   { background: #1DA1F2; }
+
+    .empty {
+      padding: 32px 18px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--txt-3);
+      letter-spacing: 0.08em;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+    .fade { animation: fadeUp .35s ease forwards; }
+  </style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-brand">Avianca Sentiment</div>
+  <div class="loader-msg" id="loaderMsg">Conectando a Supabase…</div>
+  <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="h-left">
+      <div class="h-badge">AV · CO</div>
+      <div class="h-title"><b>Avianca</b> Brand Sentiment Monitor &middot; Colombia</div>
+    </div>
+    <div class="h-right">
+      <div class="live">
+        <div class="live-dot"></div>
+        <span id="countdown">—</span>
+      </div>
+      <div class="h-upd" id="hUpd">—</div>
+      <div class="s-badge neu" id="sBadge">CARGANDO</div>
+    </div>
+  </header>
+
+  <!-- LEFT -->
+  <div class="col col-left">
+
+    <div class="sec">
+      <div class="sec-title">Sentiment Score</div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeChart"></canvas>
+        <div class="gauge-center">
+          <div class="gauge-num" id="gNum">—</div>
+          <div class="gauge-lbl">score</div>
+        </div>
+      </div>
+      <div class="sent-rows">
+        <div class="sent-row">
+          <div class="sent-top">
+            <div class="sent-pip" style="background:var(--green)"></div>
+            <span class="sent-name">Positivo</span>
+            <span class="sent-val" id="vPos">—</span>
+          </div>
+          <div class="sent-track"><div class="sent-fill" id="bPos" style="background:var(--green)"></div></div>
+        </div>
+        <div class="sent-row">
+          <div class="sent-top">
+            <div class="sent-pip" style="background:var(--red)"></div>
+            <span class="sent-name">Negativo</span>
+            <span class="sent-val" id="vNeg">—</span>
+          </div>
+          <div class="sent-track"><div class="sent-fill" id="bNeg" style="background:var(--red)"></div></div>
+        </div>
+        <div class="sent-row">
+          <div class="sent-top">
+            <div class="sent-pip" style="background:var(--txt-3)"></div>
+            <span class="sent-name">Neutral</span>
+            <span class="sent-val" id="vNeu">—</span>
+          </div>
+          <div class="sent-track"><div class="sent-fill" id="bNeu" style="background:var(--txt-3)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Totales</div>
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-lbl">Menciones</div>
+          <div class="stat-val" id="sTot">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">Emoción dominante</div>
+          <div class="stat-val accent" id="sEmo">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" style="flex:1; border-bottom:none; overflow:hidden auto;">
+      <div class="sec-title">Por plataforma</div>
+      <div class="plat-list" id="platList">
+        <div class="empty">cargando…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CENTER -->
+  <div class="col col-center">
+    <div class="tl-header">
+      <div class="sec-title" style="margin:0">Menciones por día</div>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-line" style="background:#58A6FF"></div>Web</div>
+        <div class="leg-item"><div class="leg-line" style="background:#E1306C"></div>Instagram</div>
+        <div class="leg-item"><div class="leg-line" style="background:#69C9D0"></div>TikTok</div>
+        <div class="leg-item"><div class="leg-line" style="background:#1DA1F2"></div>Twitter</div>
+      </div>
+    </div>
+    <div class="chart-area">
+      <canvas id="tlChart"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col col-right">
+    <div class="sec" style="padding-bottom:14px">
+      <div class="sec-title" style="margin-bottom:0">Top 10 Negativas</div>
+    </div>
+    <div class="neg-list" id="negList">
+      <div class="empty">cargando…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// CONFIG — pega tus credenciales aquí
+// ─────────────────────────────────────────────────────────────
+const SUPABASE_URL = '';   // https://xxxx.supabase.co
+const SUPABASE_KEY = '';   // anon public key
+
+// ─────────────────────────────────────────────────────────────
+const REFRESH_MS = 5 * 60 * 1000;
+const PLATFORMS  = ['web', 'instagram', 'tiktok', 'twitter'];
+const PLT_COLOR  = { web:'#58A6FF', instagram:'#E1306C', tiktok:'#69C9D0', twitter:'#1DA1F2' };
+const EMO_LABEL  = { happiness:'Felicidad', anger:'Enojo', love:'Amor', sadness:'Tristeza', neutral:'Neutral' };
+
+let gaugeInst = null;
+let tlInst    = null;
+let nextAt    = 0;
+
+// ── API ─────────────────────────────────────────────────────
+async function sq(table, qs = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}${qs ? '?' + qs : ''}`, {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+    }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── PROCESS ─────────────────────────────────────────────────
+function avgSentiment(rows) {
+  if (!rows.length) return { pos:0, neg:0, neu:1 };
+  let p=0, n=0, u=0;
+  for (const r of rows) {
+    p += r.sentiment_positive || 0;
+    n += r.sentiment_negative || 0;
+    u += r.sentiment_neutral  || 0;
+  }
+  const l = rows.length;
+  return { pos: p/l, neg: n/l, neu: u/l };
+}
+
+function topEmotion(rows) {
+  const c = {};
+  for (const r of rows) if (r.emotion && r.emotion !== 'neutral') c[r.emotion] = (c[r.emotion]||0)+1;
+  const e = Object.entries(c).sort((a,b)=>b[1]-a[1]);
+  return e.length ? e[0][0] : 'neutral';
+}
+
+function platCounts(rows) {
+  const c = {};
+  for (const r of rows) c[r.platform] = (c[r.platform]||0)+1;
+  return c;
+}
+
+function buildTimeline(rows) {
+  const byDP = {};
+  for (const r of rows) {
+    if (!r.published_at) continue;
+    const d = r.published_at.slice(0,10);
+    const k = d + '_' + r.platform;
+    byDP[k] = (byDP[k]||0)+1;
+  }
+  const dates = [...new Set(Object.keys(byDP).map(k=>k.slice(0,10)))].sort().slice(-30);
+  return {
+    labels: dates,
+    datasets: PLATFORMS.map(p => ({
+      label: p.charAt(0).toUpperCase()+p.slice(1),
+      data: dates.map(d => byDP[`${d}_${p}`]||0),
+      borderColor: PLT_COLOR[p],
+      backgroundColor: PLT_COLOR[p]+'18',
+      fill: true,
+      borderWidth: 2,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      pointBackgroundColor: PLT_COLOR[p],
+    }))
+  };
+}
+
+// ── RENDER ───────────────────────────────────────────────────
+function renderHeader(pos, neg) {
+  const now = new Date();
+  document.getElementById('hUpd').textContent =
+    'upd ' + now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  const b = document.getElementById('sBadge');
+  const s = pos - neg;
+  if      (s >  0.08) { b.className='s-badge pos'; b.textContent='POSITIVO'; }
+  else if (s < -0.04) { b.className='s-badge neg'; b.textContent='NEGATIVO'; }
+  else                { b.className='s-badge neu'; b.textContent='NEUTRAL'; }
+}
+
+function renderGauge(pos, neg, neu) {
+  const score = Math.round((pos - neg) * 100);
+  document.getElementById('gNum').textContent = (score>=0?'+':'')+score;
+  document.getElementById('vPos').textContent = Math.round(pos*100)+'%';
+  document.getElementById('vNeg').textContent = Math.round(neg*100)+'%';
+  document.getElementById('vNeu').textContent = Math.round(neu*100)+'%';
+  document.getElementById('bPos').style.width = Math.round(pos*100)+'%';
+  document.getElementById('bNeg').style.width = Math.round(neg*100)+'%';
+  document.getElementById('bNeu').style.width = Math.round(neu*100)+'%';
+
+  const ctx = document.getElementById('gaugeChart').getContext('2d');
+  if (gaugeInst) gaugeInst.destroy();
+  gaugeInst = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Positivo','Negativo','Neutral'],
+      datasets: [{
+        data: [Math.round(pos*100), Math.round(neg*100), Math.round(neu*100)],
+        backgroundColor: ['rgba(63,185,80,.8)','rgba(248,81,73,.8)','rgba(72,79,88,.7)'],
+        borderColor:     ['rgba(63,185,80,.25)','rgba(248,81,73,.25)','rgba(72,79,88,.25)'],
+        borderWidth: 1, hoverOffset: 5,
+      }]
+    },
+    options: {
+      cutout: '72%', responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: c => ` ${c.label}: ${c.raw}%` },
+          backgroundColor:'#21262D', titleColor:'#8B949E',
+          bodyColor:'#E6EDF3', borderColor:'#30363D', borderWidth:1,
+        }
+      },
+      animation: { animateRotate:true, duration:700 }
+    }
+  });
+}
+
+function renderStats(rows, emo) {
+  document.getElementById('sTot').textContent = rows.length.toLocaleString('es-CO');
+  document.getElementById('sEmo').textContent = EMO_LABEL[emo] || emo;
+}
+
+function renderPlatforms(counts, total) {
+  const sorted = PLATFORMS.map(p=>({p, c:counts[p]||0})).sort((a,b)=>b.c-a.c);
+  document.getElementById('platList').innerHTML = sorted.map(({p,c})=>{
+    const pct = total>0 ? Math.round(c/total*100) : 0;
+    return `<div class="plat-item fade">
+      <div class="plat-meta">
+        <div class="plat-name">
+          <div class="plat-dot d-${p}"></div>${p.charAt(0).toUpperCase()+p.slice(1)}
+        </div>
+        <div class="plat-cnt">${c.toLocaleString('es-CO')} · ${pct}%</div>
+      </div>
+      <div class="plat-track"><div class="plat-fill d-${p}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderTimeline(labels, datasets) {
+  const ctx = document.getElementById('tlChart').getContext('2d');
+  if (tlInst) tlInst.destroy();
+  tlInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor:'#21262D', titleColor:'#8B949E',
+          bodyColor:'#E6EDF3', borderColor:'#30363D', borderWidth:1, padding:10,
+        }
+      },
+      scales: {
+        x: {
+          grid: { color:'rgba(48,54,61,.45)', drawBorder:false },
+          ticks: { color:'#484F58', font:{ family:"'JetBrains Mono',monospace", size:9 }, maxTicksLimit:10 },
+          border: { color:'rgba(48,54,61,.8)' },
+        },
+        y: {
+          beginAtZero:true,
+          grid: { color:'rgba(48,54,61,.45)', drawBorder:false },
+          ticks: { color:'#484F58', font:{ family:"'JetBrains Mono',monospace", size:9 }, precision:0 },
+          border: { color:'rgba(48,54,61,.8)' },
+        }
+      },
+      animation: { duration:500 },
+      elements: { line:{ tension:.3 }, point:{ radius:2, hoverRadius:5 } }
+    }
+  });
+}
+
+function renderNegativas(rows) {
+  const list = document.getElementById('negList');
+  if (!rows.length) { list.innerHTML='<div class="empty">Sin datos aún</div>'; return; }
+  list.innerHTML = rows.map((m,i)=>{
+    const score = Math.round((m.sentiment_negative||0)*100);
+    const text  = (m.text||'').substring(0,120);
+    const date  = m.published_at
+      ? new Date(m.published_at).toLocaleDateString('es-CO',{day:'2-digit',month:'short'})
+      : '—';
+    return `<div class="neg-card fade">
+      <div class="neg-meta">
+        <div class="neg-plat c-${m.platform}">
+          <span class="neg-rank">#${i+1}</span>${m.platform||'—'}
+        </div>
+        <div class="neg-score">${score}%</div>
+      </div>
+      ${m.author?`<div class="neg-author">@${m.author}</div>`:''}
+      <div class="neg-text">${text}</div>
+      <div class="neg-date">${date}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── COUNTDOWN ────────────────────────────────────────────────
+function startCountdown() {
+  nextAt = Date.now() + REFRESH_MS;
+  const tick = () => {
+    const s = Math.max(0, Math.round((nextAt - Date.now())/1000));
+    const m = Math.floor(s/60), ss = s%60;
+    document.getElementById('countdown').textContent =
+      s>0 ? `próx. ${m}:${String(ss).padStart(2,'0')}` : 'actualizando…';
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ── MAIN ─────────────────────────────────────────────────────
+async function load() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    document.getElementById('loaderMsg').textContent =
+      'Configura SUPABASE_URL y SUPABASE_KEY en el archivo.';
+    return;
+  }
+
+  try {
+    document.getElementById('loaderMsg').textContent = 'Cargando menciones…';
+
+    const [rows, negs] = await Promise.all([
+      sq('brand_mentions',
+         'select=platform,sentiment_positive,sentiment_negative,sentiment_neutral,emotion,published_at&order=published_at.desc&limit=1000'),
+      sq('brand_mentions',
+         'select=platform,author,text,sentiment_negative,published_at&order=sentiment_negative.desc&limit=10'),
+    ]);
+
+    const { pos, neg, neu } = avgSentiment(rows);
+    const emo   = topEmotion(rows);
+    const plats = platCounts(rows);
+    const { labels, datasets } = buildTimeline(rows);
+
+    renderHeader(pos, neg);
+    renderGauge(pos, neg, neu);
+    renderStats(rows, emo);
+    renderPlatforms(plats, rows.length);
+    renderTimeline(labels, datasets);
+    renderNegativas(negs);
+
+    const loader = document.getElementById('loader');
+    loader.classList.add('out');
+    setTimeout(()=>{ loader.style.display='none'; }, 420);
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('loaderMsg').textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  load();
+  startCountdown();
+  setInterval(load, REFRESH_MS);
+});
+</script>
+</body>
+</html>
