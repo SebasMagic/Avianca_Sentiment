@@ -87,7 +87,7 @@ Cada unidad tiene una responsabilidad y una interfaz clara:
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | TEXT PK | uuid4 |
-| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + text[:80])` |
+| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + text)` — texto completo |
 | `platform` | TEXT NOT NULL | `web` / `instagram` / `tiktok` |
 | `source_url` | TEXT | |
 | `text` | TEXT NOT NULL | |
@@ -114,6 +114,13 @@ Cada unidad tiene una responsabilidad y una interfaz clara:
 **Semántica del `fingerprint`:** se calcula **después** de normalizar (sobre el
 texto ya limpiado y recortado), nunca sobre el texto crudo. De lo contrario un
 espacio en blanco distinto generaría un duplicado.
+
+Se hashea el **texto completo**, no un prefijo. Un diseño anterior truncaba a 80
+caracteres; se descartó porque las quejas de aerolínea tienen aperturas de
+plantilla ("Avianca canceló mi vuelo y no me han dado respuesta desde hace…") y
+dos comentarios distintos en la misma URL podían colisionar y perderse en
+silencio. La asimetría decide: un duplicado falso es una fila de más, visible y
+auditable; una fusión falsa es pérdida de datos irrecuperable.
 
 **Semántica del `run_id`:** guarda la corrida que **insertó** la mención por
 primera vez. Un upsert que encuentra el fingerprint existente no lo sobrescribe
