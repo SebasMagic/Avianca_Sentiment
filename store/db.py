@@ -88,10 +88,17 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
 
 def fingerprint(platform: str, source_url: str, text: str) -> str:
     """
-    Hash del contenido ya normalizado. Se calcula SIEMPRE después de
-    normalizar — sobre texto crudo, un espacio distinto crearía un duplicado.
+    Hash SHA256 del contenido completo (platform|url|text íntegro).
+
+    Se hashea el TEXTO COMPLETO sin truncar para evitar colisiones falsas.
+    Dos comentarios genuinamente distintos que comparten un prefijo largo
+    pueden coexistir en la misma URL — el dedup por fingerprint debe
+    distinguirlos correctamente.
+
+    Diseño: un duplicado falso es una fila auditable; una fusión falsa
+    es pérdida irrecuperable de datos. La asimetría decide: hashea completo.
     """
-    base = f"{platform}|{source_url or ''}|{(text or '')[:80]}"
+    base = f"{platform}|{source_url or ''}|{text or ''}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
