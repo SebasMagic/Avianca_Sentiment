@@ -3,7 +3,14 @@ Apify Twitter/X scraper.
 Extrae tweets del perfil oficial @avianca y @aviancacolombia.
 Nota: el scraping de búsqueda en X requiere actor de pago en Apify.
       Usamos el perfil oficial como fuente de datos confiable.
-Sentiment se procesa después en sentiment_engine.py.
+Sentiment se procesa después en pipeline/classifier.py.
+
+Fuera de v2: este módulo se conserva pero no está en la lista SCRAPERS
+de main.py. La búsqueda histórica por rango de fechas en X requiere un
+actor de pago en Apify, y v2 no tiene ese presupuesto — ver main.py y
+README.md §Limitaciones. No se borra porque el perfil oficial (sin
+rango de fechas) sigue siendo una fuente utilizable si en el futuro se
+justifica el gasto.
 """
 import uuid
 from datetime import datetime, timezone

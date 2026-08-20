@@ -15,7 +15,6 @@ pero no está en SCRAPERS.
 """
 import argparse
 import collections
-import sys
 import time
 from datetime import datetime, timezone
 
