@@ -1,7 +1,7 @@
 """
 Apify TikTok scraper.
 Extrae videos que mencionan Avianca en Colombia.
-Sentiment se procesa después en sentiment_engine.py.
+Sentiment se procesa después en pipeline/classifier.py.
 """
 import uuid
 from datetime import datetime, timezone
@@ -9,7 +9,7 @@ from apify_client import ApifyClient
 from config import APIFY_API_TOKEN, APIFY_TIKTOK_ACTOR, BRAND_KEYWORD, LIMIT_TIKTOK
 
 
-def scrape() -> list[dict]:
+def scrape(since: str | None = None) -> list[dict]:
     client = ApifyClient(APIFY_API_TOKEN)
 
     run_input = {
@@ -18,6 +18,8 @@ def scrape() -> list[dict]:
         "shouldDownloadVideos": False,
         "shouldDownloadCovers": False,
     }
+    if since:
+        run_input["oldestPostDate"] = since
 
     print(f"[TikTok] Iniciando actor {APIFY_TIKTOK_ACTOR}...")
     run = client.actor(APIFY_TIKTOK_ACTOR).call(run_input=run_input)
@@ -29,11 +31,6 @@ def scrape() -> list[dict]:
     for item in items:
         text = item.get("text", "") or item.get("description", "") or ""
         author_meta = item.get("authorMeta", {}) or {}
-
-        # Filtrar por año
-        created_iso = item.get("createTimeISO", "")
-        if created_iso and not created_iso.startswith("2026"):
-            continue
 
         results.append({
             "id": str(uuid.uuid4()),

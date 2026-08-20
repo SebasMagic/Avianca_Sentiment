@@ -2,17 +2,18 @@
 Apify Instagram scraper.
 Fase 1: obtiene posts recientes de @avianca.
 Fase 2: extrae comentarios de esos posts — son usuarios reales quejándose o elogiando.
-Sentiment se procesa después en sentiment_engine.py.
+Sentiment se procesa después en pipeline/classifier.py.
 """
 import uuid
 from datetime import datetime, timezone
 from apify_client import ApifyClient
-from config import APIFY_API_TOKEN, APIFY_INSTAGRAM_ACTOR, LIMIT_INSTAGRAM, BRAND_KEYWORD, INSTAGRAM_PROFILES
+from config import (
+    APIFY_API_TOKEN, APIFY_INSTAGRAM_ACTOR, LIMIT_INSTAGRAM, BRAND_KEYWORD,
+    INSTAGRAM_PROFILES, INSTAGRAM_POSTS_LIMIT,
+)
 
-YEAR_FILTER = "2026"
 
-
-def scrape() -> list[dict]:
+def scrape(since: str | None = None) -> list[dict]:
     client = ApifyClient(APIFY_API_TOKEN)
     fetched_at = datetime.now(timezone.utc).isoformat()
 
@@ -23,7 +24,7 @@ def scrape() -> list[dict]:
     posts_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
         "directUrls": profiles,
         "resultsType": "posts",
-        "resultsLimit": 20,
+        "resultsLimit": INSTAGRAM_POSTS_LIMIT,
     })
     posts = list(client.dataset(posts_run["defaultDatasetId"]).iterate_items())
 
@@ -45,8 +46,10 @@ def scrape() -> list[dict]:
     print(f"[Instagram] {len(post_urls)} posts encontrados — Fase 2: extrayendo comentarios...")
 
     # ── FASE 2: extraer comentarios de esos posts ────────────────
+    # post_urls ya viene acotado por INSTAGRAM_POSTS_LIMIT en Fase 1 (no
+    # se trunca de nuevo aquí a 15).
     comments_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
-        "directUrls": post_urls[:15],
+        "directUrls": post_urls,
         "resultsType": "comments",
         "resultsLimit": LIMIT_INSTAGRAM,
     })
@@ -61,15 +64,44 @@ def scrape() -> list[dict]:
         if not text.strip():
             continue
 
-        # Filtrar por año
         timestamp = item.get("timestamp", "")
-        if timestamp and YEAR_FILTER not in str(timestamp)[:4]:
+        if since and timestamp and str(timestamp)[:10] < since:
             continue
+
+        # DEFECTO CORREGIDO (Task 8): la Fase 2 pide comentarios de VARIOS
+        # posts a la vez (directUrls=post_urls), así que un mismo dataset
+        # mezcla comentarios de todos ellos. El actor de Apify no expone
+        # "url" en los ítems de tipo comentario (esa clave solo existe en
+        # los ítems de tipo post de la Fase 1); confiar en item.get("url")
+        # con fallback a post_urls[0] hacía que el 100% de los comentarios
+        # cayeran a la URL del primer post, sin importar de cuál vinieran
+        # realmente — eso fusionó personas distintas en el dedup por
+        # fingerprint (mitigado en Task 4 incluyendo el autor, pero la
+        # URL degenerada seguía siendo la causa raíz).
+        #
+        # Fix: usar "postUrl" (el post real al que pertenece el
+        # comentario, según el schema del actor) con fallback a "url" por
+        # compatibilidad, y sólo caer a post_urls[0] si el ítem no trae
+        # ninguno de los dos. Sobre esa base, anexar "#comment-{id}" con
+        # el id propio del comentario para que cada comentario tenga una
+        # source_url distinta — sin esto, todos los comentarios de un
+        # mismo post seguían colisionando entre sí. Si el ítem tampoco
+        # trae "id", se cae al comportamiento anterior (source_url = URL
+        # del post, compartida entre comentarios) en vez de inventar un
+        # identificador falso.
+        #
+        # NO "simplificar" esto de vuelta a item.get("url", post_urls[0]):
+        # eso fue el defecto original, verificado con datos reales de
+        # Apify donde el 100% de 189 comentarios colisionaban en una sola
+        # URL.
+        post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
+        comment_id = item.get("id")
+        source_url = f"{post_url}#comment-{comment_id}" if comment_id else post_url
 
         results.append({
             "id": str(uuid.uuid4()),
             "platform": "instagram",
-            "source_url": item.get("url", post_urls[0] if post_urls else ""),
+            "source_url": source_url,
             "text": text,
             "author": item.get("ownerUsername", None),
             "published_at": timestamp or None,
