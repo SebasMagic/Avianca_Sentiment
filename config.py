@@ -27,8 +27,9 @@ APIFY_TWITTER_ACTOR = "apidojo/tweet-scraper"
 # LIMIT_TWITTER son techos globales de la corrida. LIMIT_INSTAGRAM es la
 # excepción: apify_instagram.py lo aplica POR POST (resultsLimit de la
 # Fase 2, que se pide junto con directUrls=post_urls), no como techo
-# global — con INSTAGRAM_POSTS_LIMIT=80 posts, el techo teórico real es
-# 80 × LIMIT_INSTAGRAM, no LIMIT_INSTAGRAM solo.
+# global — con INSTAGRAM_POSTS_LIMIT posts (ver definición más abajo), el
+# techo teórico real es INSTAGRAM_POSTS_LIMIT × LIMIT_INSTAGRAM, no
+# LIMIT_INSTAGRAM solo.
 LIMIT_DATAFORSEO = 100
 LIMIT_INSTAGRAM = 50
 LIMIT_TIKTOK = 50
@@ -166,5 +167,20 @@ LANG_MIN_WORDS = 15
 # Nº de stopwords españolas distintas requeridas por encima de ese umbral
 LANG_MIN_STOPWORDS = 2
 
-# Instagram: cuántos posts del perfil recorrer para cubrir 4 meses
-INSTAGRAM_POSTS_LIMIT = 80
+# Instagram: cuántos posts del perfil recorrer, por marca, en la Fase 1.
+#
+# Era 80. Subido a 200 (2026-08-20) tras diagnosticar un sesgo de muestra
+# entre marcas: Avianca publica mucho más seguido que LATAM y, con 80,
+# chocaba EXACTO contra el tope — esos 80 posts solo alcanzaban a cubrir
+# desde 2026-05-12 (3 meses), mientras que LATAM, con el mismo tope, ni
+# siquiera lo tocaba (17 posts le bastaban para cubrir sus 4 meses
+# completos, 22-abr a 20-ago). La diferencia entre marcas que parecía
+# venir de los datos era en realidad el techo que nosotros mismos
+# pusimos: la marca que más publica queda truncada primero, y comparar
+# una ventana de 3 meses contra una de 7 no es una comparación honesta.
+# 200 es suficiente para que la marca más activa (Avianca) alcance a
+# cubrir REPORT_WINDOW_START (2026-01-01, ~7 meses) sin volver a chocar
+# contra el tope — verificar tras cada re-corrida que el conteo de posts
+# obtenidos quede por debajo de 200; si vuelve a topar, la ventana sigue
+# sesgada y hay que subirlo de nuevo o acortar REPORT_WINDOW_START.
+INSTAGRAM_POSTS_LIMIT = 200

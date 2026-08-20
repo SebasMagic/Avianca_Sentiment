@@ -11,6 +11,7 @@ main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
   python main.py --export-excel                 # vuelca la DB a .xlsx
   python main.py --enriquecer-engagement         # puebla saves/views desde el raw ya guardado
   python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
+  python main.py --solo-instagram --since 2026-01-01  # re-corre SOLO Instagram, sin re-pagar DataForSEO/TikTok
   python main.py --schedule                     # semanal, lunes 8am
 
 `--brand` (default: config.DEFAULT_BRAND = "Avianca") acota TODO el
@@ -33,6 +34,14 @@ desde BACKFILL_SINCE y el filtro de fecha de Instagram quedaría
 deshabilitado por completo (since=None) — cada corrida "semanal" se
 comportaría como un mini-backfill repetido, pagando el costo completo
 de Apify cada vez.
+
+`--solo-instagram`: acota `SCRAPERS` a un único elemento (Instagram) antes
+de llamar a run_pipeline(). Existe para re-correr Instagram tras subir
+config.INSTAGRAM_POSTS_LIMIT (o cualquier otro cambio que solo afecte a
+ese scraper) sin volver a pagar DataForSEO ni TikTok, que ya corrieron y
+cuyos resultados ya están en la DB. El dedup por fingerprint hace que
+re-correr sea seguro: lo ya visto se ignora (INSERT OR IGNORE), solo se
+suma lo nuevo.
 """
 import argparse
 import collections
@@ -79,9 +88,17 @@ def compute_weekly_since(conn, now: datetime | None = None) -> str:
 
 
 def run_pipeline(mode: str = "weekly", since: str | None = None,
-                  brand_name: str = DEFAULT_BRAND) -> dict:
+                  brand_name: str = DEFAULT_BRAND,
+                  scrapers: list[tuple[str, "callable"]] | None = None) -> dict:
+    """
+    `scrapers`: lista [(nombre, scrape_fn), ...] a ejecutar en esta corrida.
+    None (default) usa el módulo SCRAPERS completo (comportamiento
+    histórico). `main()` pasa un subconjunto acotado a Instagram cuando se
+    invoca con `--solo-instagram` — ver docstring del módulo.
+    """
     conn = db.connect()
     brand = get_brand(brand_name)  # falla temprano y claro si la marca no existe
+    active_scrapers = scrapers if scrapers is not None else SCRAPERS
 
     # --since explícito siempre gana; solo se calcula si no se pasó nada.
     if mode == "weekly" and since is None:
@@ -96,7 +113,7 @@ def run_pipeline(mode: str = "weekly", since: str | None = None,
 
     raw = []
     errores = []
-    for nombre, scrape_fn in SCRAPERS:
+    for nombre, scrape_fn in active_scrapers:
         try:
             raw.extend(scrape_fn(brand, since=since))
         except Exception as e:
@@ -185,6 +202,9 @@ def main():
                              "(1 llamada de Fase 1 a Apify — gasta unos centavos)")
     parser.add_argument("--schedule", action="store_true",
                         help="corre cada lunes a las 8am")
+    parser.add_argument("--solo-instagram", action="store_true",
+                        help="corrida (backfill o weekly) que ejecuta SOLO el scraper de "
+                             "Instagram — no re-scrapea DataForSEO ni TikTok, ya pagados")
     args = parser.parse_args()
 
     # Falla temprano y con mensaje claro si --brand no existe en config.BRANDS,
@@ -230,10 +250,13 @@ def main():
             time.sleep(60)
         return
 
+    scrapers_activos = [("Instagram", apify_instagram.scrape)] if args.solo_instagram else None
+
     if args.backfill:
-        run_pipeline("backfill", args.since or BACKFILL_SINCE, brand_name=args.brand)
+        run_pipeline("backfill", args.since or BACKFILL_SINCE, brand_name=args.brand,
+                     scrapers=scrapers_activos)
     else:
-        run_pipeline("weekly", args.since, brand_name=args.brand)
+        run_pipeline("weekly", args.since, brand_name=args.brand, scrapers=scrapers_activos)
 
 
 if __name__ == "__main__":

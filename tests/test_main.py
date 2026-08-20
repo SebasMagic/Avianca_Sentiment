@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 import main
+from scrapers import apify_instagram
 from store import db as store_db
 
 
@@ -167,3 +168,62 @@ def test_run_pipeline_marca_desconocida_falla_con_mensaje_claro(tmp_path, monkey
         assert False, "debía lanzar ValueError"
     except ValueError as e:
         assert "Delta" in str(e)
+
+
+# ── --solo-instagram (muestras comparables: re-correr solo Instagram) ────
+
+def test_run_pipeline_con_scrapers_explicito_ignora_los_demas(tmp_path, monkeypatch):
+    """run_pipeline(scrapers=[...]) debe usar SOLO esa lista, no el
+    SCRAPERS completo del módulo — así --solo-instagram no dispara
+    DataForSEO ni TikTok."""
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    llamados = []
+
+    def fake_web(brand, since=None):
+        llamados.append("web")
+        return []
+
+    def fake_instagram(brand, since=None):
+        llamados.append("instagram")
+        return []
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    # SCRAPERS completo trae "web" — si run_pipeline lo usara en vez del
+    # subconjunto pasado, "web" aparecería en `llamados`.
+    monkeypatch.setattr(main, "SCRAPERS", [("Web", fake_web), ("Instagram", fake_instagram)])
+
+    main.run_pipeline("weekly", "2026-01-01", scrapers=[("Instagram", fake_instagram)])
+
+    assert llamados == ["instagram"]
+
+
+def test_cli_solo_instagram_pasa_solo_instagram_a_run_pipeline(monkeypatch):
+    """La flag --solo-instagram debe acotar run_pipeline() a
+    [('Instagram', apify_instagram.scrape)] — nada de DataForSEO ni TikTok."""
+    llamada = {}
+
+    def fake_run_pipeline(mode, since, brand_name=main.DEFAULT_BRAND, scrapers=None):
+        llamada["mode"] = mode
+        llamada["since"] = since
+        llamada["brand_name"] = brand_name
+        llamada["scrapers"] = scrapers
+        return {}
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main.py", "--solo-instagram", "--since", "2026-01-01", "--brand", "LATAM"],
+    )
+
+    main.main()
+
+    assert llamada["since"] == "2026-01-01"
+    assert llamada["brand_name"] == "LATAM"
+    assert llamada["scrapers"] == [("Instagram", apify_instagram.scrape)]
