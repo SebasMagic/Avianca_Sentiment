@@ -1,13 +1,15 @@
 import sqlite3
 
+from config import DEFAULT_BRAND
 from store import db
 
 
 def _mention(text="Avianca me perdió la maleta en Bogotá",
              url="https://x.com/1", mid="m-1",
              fetched_at="2026-08-19T00:00:00+00:00",
-             author="usuario1", published_at="2026-05-01T10:00:00+00:00"):
-    return {
+             author="usuario1", published_at="2026-05-01T10:00:00+00:00",
+             brand=None):
+    m = {
         "id": mid,
         "platform": "tiktok",
         "source_url": url,
@@ -29,19 +31,44 @@ def _mention(text="Avianca me perdió la maleta en Bogotá",
         "raw": {"foo": "bar"},
         "fetched_at": fetched_at,
     }
+    if brand is not None:
+        m["brand"] = brand
+    return m
 
 
 def test_fingerprint_es_estable_y_ignora_id():
-    a = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
-    b = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
+    a = db.fingerprint("Avianca", "tiktok", "https://x.com/1", "user1", "hola mundo")
+    b = db.fingerprint("Avianca", "tiktok", "https://x.com/1", "user1", "hola mundo")
     assert a == b
     assert len(a) == 64
 
 
 def test_fingerprint_distingue_texto_distinto_en_misma_url():
-    a = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
-    b = db.fingerprint("tiktok", "https://x.com/1", "user1", "otro comentario distinto")
+    a = db.fingerprint("Avianca", "tiktok", "https://x.com/1", "user1", "hola mundo")
+    b = db.fingerprint("Avianca", "tiktok", "https://x.com/1", "user1", "otro comentario distinto")
     assert a != b
+
+
+def test_fingerprint_distingue_marcas_distintas_mismo_contenido():
+    """Dos marcas pueden compartir una mención legítimamente idéntica (p.ej.
+    una nota de prensa que nombra a ambas) — no deben fusionarse en el dedup."""
+    a = db.fingerprint("Avianca", "web", "https://noticias.co/1", "noticias.co", "anuncio conjunto")
+    b = db.fingerprint("LATAM", "web", "https://noticias.co/1", "noticias.co", "anuncio conjunto")
+    assert a != b
+
+
+def test_dos_marcas_con_texto_identico_no_se_deduplican_entre_si(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    ins, dup = db.upsert_mentions(
+        tmp_db,
+        [
+            _mention(mid="m-1", brand="Avianca"),
+            _mention(mid="m-2", brand="LATAM"),
+        ],
+        run_id,
+    )
+    assert (ins, dup) == (2, 0)
+    assert len(db.all_mentions(tmp_db)) == 2
 
 
 def test_fingerprint_distingue_autores_distintos_en_misma_url_mismo_texto(tmp_db):
@@ -88,6 +115,51 @@ def test_insertar_menciones_nuevas(tmp_db):
     ins, dup = db.upsert_mentions(tmp_db, [_mention()], run_id)
     assert (ins, dup) == (1, 0)
     assert len(db.all_mentions(tmp_db)) == 1
+
+
+def test_mencion_sin_brand_explicito_usa_el_default(tmp_db):
+    """Una mención sin 'brand' (compatibilidad con el pipeline pre-multimarca)
+    debe quedar etiquetada con DEFAULT_BRAND, no con NULL."""
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+    assert db.all_mentions(tmp_db)[0]["brand"] == DEFAULT_BRAND
+
+
+def test_all_mentions_filtra_por_marca(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [
+        _mention(mid="m-1", brand="Avianca"),
+        _mention(mid="m-2", brand="LATAM"),
+    ], run_id)
+
+    assert len(db.all_mentions(tmp_db)) == 2
+    assert len(db.all_mentions(tmp_db, brand="Avianca")) == 1
+    assert len(db.all_mentions(tmp_db, brand="LATAM")) == 1
+    assert db.all_mentions(tmp_db, brand="LATAM")[0]["id"] == "m-2"
+
+
+def test_pending_classification_filtra_por_marca(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [
+        _mention(mid="m-1", brand="Avianca"),
+        _mention(mid="m-2", brand="LATAM"),
+    ], run_id)
+
+    assert len(db.pending_classification(tmp_db)) == 2
+    assert len(db.pending_classification(tmp_db, brand="Avianca")) == 1
+    assert len(db.pending_classification(tmp_db, brand="LATAM")) == 1
+
+
+def test_start_run_guarda_la_marca(tmp_db):
+    run_id = db.start_run(tmp_db, "weekly", None, brand="LATAM")
+    fila = tmp_db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert fila["brand"] == "LATAM"
+
+
+def test_start_run_sin_marca_usa_el_default(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    fila = tmp_db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert fila["brand"] == DEFAULT_BRAND
 
 
 def test_reinsertar_el_mismo_lote_es_idempotente(tmp_db):
@@ -364,3 +436,166 @@ def test_update_engagement_sin_campos_permitidos_no_hace_nada(tmp_db):
 
     fila = db.all_mentions(tmp_db)[0]
     assert fila["text"] == "Avianca me perdió la maleta en Bogotá"
+
+
+# ── Tarea 1 (multi-marca): migración de brand + recálculo de fingerprint ──
+
+def test_migracion_agrega_brand_a_runs_sin_perder_filas():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE runs (
+            id              TEXT PRIMARY KEY,
+            started_at      TEXT NOT NULL,
+            finished_at     TEXT,
+            mode            TEXT NOT NULL,
+            since           TEXT,
+            raw_count       INTEGER DEFAULT 0,
+            filtered_count  INTEGER DEFAULT 0,
+            inserted_count  INTEGER DEFAULT 0,
+            duplicate_count INTEGER DEFAULT 0,
+            notes           TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO runs (id, started_at, mode, raw_count) "
+        "VALUES ('r1', '2026-01-01T00:00:00+00:00', 'seed', 42)"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    assert "brand" in cols
+    fila = conn.execute("SELECT * FROM runs WHERE id = 'r1'").fetchone()
+    assert fila["raw_count"] == 42  # dato viejo intacto
+    assert fila["brand"] == DEFAULT_BRAND
+
+    # Idempotente.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()]
+    assert cols_2.count("brand") == 1
+    conn.close()
+
+
+def test_migracion_agrega_brand_y_recalcula_fingerprint_sin_perder_filas():
+    """
+    Migración aditiva (Tarea 1, multi-marca): una DB con el schema viejo de
+    `mentions` (sin `brand`, fingerprint calculado sin marca) debe ganar la
+    columna `brand='Avianca'` y recalcular el fingerprint de cada fila con
+    la nueva firma fingerprint(brand, platform, source_url, author, text),
+    sin perder ninguna fila ni colapsar ninguna por colisión. Esto es lo
+    que protege las 1.261 filas reales de data/avianca.db.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT
+        );
+    """)
+    old_fp_1 = "old-fingerprint-sin-marca-1"
+    old_fp_2 = "old-fingerprint-sin-marca-2"
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, source_url, author, text, "
+        "date_confidence, classification_status) VALUES "
+        "('m1', ?, 'tiktok', 'https://x.com/1', 'user1', 'hola mundo', 'exact', 'classified')",
+        (old_fp_1,),
+    )
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, source_url, author, text, "
+        "date_confidence, classification_status) VALUES "
+        "('m2', ?, 'tiktok', 'https://x.com/1', 'user2', 'otro comentario', 'exact', 'classified')",
+        (old_fp_2,),
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar brand y recalcular fingerprint
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert "brand" in cols
+
+    filas = {r["id"]: r for r in conn.execute("SELECT * FROM mentions").fetchall()}
+    assert len(filas) == 2
+    assert filas["m1"]["brand"] == DEFAULT_BRAND
+    assert filas["m2"]["brand"] == DEFAULT_BRAND
+
+    # El fingerprint cambió (nueva firma con marca) y sigue siendo único.
+    assert filas["m1"]["fingerprint"] != old_fp_1
+    assert filas["m1"]["fingerprint"] == db.fingerprint(
+        DEFAULT_BRAND, "tiktok", "https://x.com/1", "user1", "hola mundo"
+    )
+    distinct = conn.execute("SELECT COUNT(DISTINCT fingerprint) FROM mentions").fetchone()[0]
+    assert distinct == 2
+
+    # Idempotente: correrlo otra vez no rompe ni duplica la columna ni vuelve
+    # a tocar el fingerprint ya recalculado.
+    fp_antes_de_repetir = filas["m1"]["fingerprint"]
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("brand") == 1
+    fila_m1 = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila_m1["fingerprint"] == fp_antes_de_repetir
+    conn.close()
+
+
+def test_migracion_indice_de_brand_no_revienta_en_db_vieja():
+    """El índice sobre `brand` se crea después de garantizar que la columna
+    existe — si se creara junto con el resto de SCHEMA (que corre antes de
+    la migración), reventaría con 'no such column: brand' en una DB vieja."""
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT
+        );
+    """)
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # no debe lanzar
+
+    idx = {row[1] for row in conn.execute("PRAGMA index_list(mentions)").fetchall()}
+    assert "idx_mentions_brand" in idx
+    conn.close()
