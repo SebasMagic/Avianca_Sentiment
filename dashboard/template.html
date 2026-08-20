@@ -9,21 +9,26 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --navy:#0D1117; --navy-2:#161B22; --navy-3:#21262D; --navy-4:#30363D;
-    --orange:#F97316; --orange-dim:rgba(249,115,22,.12); --orange-mid:rgba(249,115,22,.35);
+    --bg:#0E0C0B; --bg-2:#17130F; --bg-3:#211B16; --bg-4:#2B241D;
+    /* Rojo Avianca — SOLO para chrome/marca (encabezados, logo, acentos de UI,
+       barras de un solo driver). El sentiment negativo usa un rojo distinto
+       (--red, más coral/claro) para que "marca" y "negativo" nunca se lean
+       como la misma señal — ver nota en el bloque 5. */
+    --brand:#F62839; --brand-dim:rgba(246,40,57,.12); --brand-mid:rgba(246,40,57,.35);
     --green:#3FB950; --green-dim:rgba(63,185,80,.12);
     --red:#F85149;   --red-dim:rgba(248,81,73,.12);
     --blue:#58A6FF;  --blue-dim:rgba(88,166,255,.12);
-    --txt:#E6EDF3; --txt-2:#8B949E; --txt-3:#484F58;
-    --border:rgba(48,54,61,.9);
+    --gold:#E3B341;  /* única línea de tendencia (sentiment en el timeline) — nunca roja, para no colisionar con marca ni con "negativo" */
+    --txt:#F2ECE6; --txt-2:#A9A29A; --txt-3:#7A7268;
+    --border:rgba(255,244,235,.09);
     /* Fallbacks explícitos: el archivo debe verse bien sin internet */
     --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
   }
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  html{background:var(--navy)}
+  html{background:var(--bg)}
   body{
-    background:var(--navy);color:var(--txt);font-family:var(--sans);
+    background:var(--bg);color:var(--txt);font-family:var(--sans);
     font-size:13px;line-height:1.5;
     overflow-x:hidden;               /* scroll vertical SÍ permitido, horizontal NUNCA */
     -webkit-font-smoothing:antialiased;
@@ -32,19 +37,22 @@
 
   /* ── header ── */
   header{
-    display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;
-    gap:8px 20px;padding-bottom:18px;margin-bottom:28px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    gap:10px 20px;padding-bottom:18px;margin-bottom:28px;border-bottom:1px solid var(--border);
   }
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand-logo{height:30px;width:auto;display:block}
+  .brand-div{width:1px;height:18px;background:var(--border)}
   header h1{
-    font-size:19px;font-weight:600;letter-spacing:.01em;color:var(--txt);
+    font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--txt-2);
   }
-  header h1 span{color:var(--orange)}
   #rango{font-family:var(--mono);font-size:11px;color:var(--txt-2);letter-spacing:.02em}
 
   section{margin-bottom:36px}
   section > h2{
     font-family:var(--mono);font-size:11px;letter-spacing:.16em;
-    text-transform:uppercase;color:var(--orange);margin-bottom:14px;
+    text-transform:uppercase;color:var(--brand);margin-bottom:14px;
     display:flex;align-items:center;gap:12px;
   }
   section > h2::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -53,30 +61,42 @@
   }
 
   .card{
-    background:var(--navy-2);border:1px solid var(--border);
+    background:var(--bg-2);border:1px solid var(--border);
     border-radius:8px;padding:20px;
   }
   .scroll-x{overflow-x:auto;overflow-y:hidden}
 
-  /* ── block 1 · KPIs ── */
-  #kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));padding:0;overflow:hidden}
-  .kpi{padding:18px 22px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  /* ── two-column row: bloques 3 + 4 lado a lado ── */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;margin-bottom:36px}
+  .two-col > section{margin-bottom:0}
+  @media (max-width:960px){ .two-col{grid-template-columns:1fr;gap:36px} }
+
+  /* ── block 1 · KPIs ──
+     Grid explícito (no auto-fit): el héroe (Cambio 2, ver abajo) necesita
+     una columna más ancha que las 4 secundarias para que "1 de cada N" nunca
+     tenga que partirse en dos líneas. */
+  #kpis{display:grid;grid-template-columns:1.7fr repeat(4,1fr);padding:0;overflow:hidden}
+  .kpi{padding:18px 22px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);position:relative;min-width:0}
   .kpi:last-child{border-right:none}
   .kpi-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
   .kpi-val{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--txt);line-height:1;display:flex;align-items:baseline;gap:8px}
   .kpi-val small{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--txt-2)}
-  .kpi-sub{margin-top:8px;font-size:11px;color:var(--txt-2)}
-  .pill{
-    display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);
-    font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;
-    border:1px solid;
-  }
-  .pill.pos{color:var(--green);border-color:rgba(63,185,80,.35);background:var(--green-dim)}
-  .pill.neg{color:var(--red);border-color:rgba(248,81,73,.35);background:var(--red-dim)}
-  .pill.neu{color:var(--txt-2);border-color:var(--border);background:transparent}
+  .kpi-sub{margin-top:8px;font-size:11px;color:var(--txt-2);display:flex;align-items:center}
+  /* El KPI héroe (Cambio 2): la tasa de quejas es el número que lidera el
+     reporte — no el sentiment neto. Exactamente un héroe por vista
+     (ver dataviz: "Hero figure ... Exactly one per view"). */
+  .kpi.hero{background:linear-gradient(180deg, var(--brand-dim), transparent 68%)}
+  .kpi.hero::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand)}
+  .kpi.hero .kpi-lbl{color:var(--brand)}
+  .kpi-val.hero-val{font-size:42px;white-space:nowrap}
   .kpi-platlist{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+  @media (max-width:820px){
+    #kpis{grid-template-columns:1fr 1fr}
+    .kpi.hero{grid-column:1 / -1}
+  }
+  @media (max-width:420px){ #kpis{grid-template-columns:1fr} }
   .kpi-platrow{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--txt-2)}
-  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
 
   /* ── chart chrome ── */
   .chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:14px}
@@ -90,14 +110,19 @@
   /* ── block 3 · drivers (la estrella) ── */
   .driver-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}
   .driver-insight{font-size:13px;color:var(--txt)}
-  .driver-insight b{color:var(--orange);font-weight:600}
+  .driver-insight b{color:var(--brand);font-weight:600}
   select, input[type=search]{
-    background:var(--navy-3);border:1px solid var(--border);color:var(--txt);
+    background:var(--bg-3);border:1px solid var(--border);color:var(--txt);
     font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:5px;
     outline:none;
   }
-  select:focus, input[type=search]:focus{border-color:var(--orange-mid)}
-  .driver-layout{display:grid;grid-template-columns:1fr 220px;gap:20px}
+  select:focus, input[type=search]:focus{border-color:var(--brand-mid)}
+  .driver-layout{display:grid;grid-template-columns:1fr 190px;gap:20px;min-width:0}
+  /* El bloque 3 ahora vive en media columna (Cambio 3) — el min-width:640px
+     genérico de .chart-box forzaría scroll horizontal y recortaría las
+     etiquetas de valor de las barras más largas fuera de la vista inicial.
+     Aquí el gráfico debe encogerse con su columna, no imponer un ancho fijo. */
+  #boxDrivers{min-width:0}
   .driver-list{display:flex;flex-direction:column;gap:2px}
   .driver-row{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -107,38 +132,50 @@
   .driver-row .d-name{color:var(--txt-2)}
   .driver-row .d-name.zero{color:var(--txt-3);font-style:italic}
   .driver-row .d-val{font-family:var(--mono);color:var(--txt);font-weight:600}
-  @media (max-width:900px){ .driver-layout{grid-template-columns:1fr} }
+  @media (max-width:640px){ .driver-layout{grid-template-columns:1fr} }
 
   /* ── block 4 · heatmap ── */
-  #heatmap table{width:100%;border-collapse:collapse;font-size:12px;min-width:620px}
-  #heatmap th, #heatmap td{padding:9px 10px;text-align:center;border:1px solid var(--border)}
+  #heatmap table{width:100%;border-collapse:collapse;font-size:12px;min-width:460px}
+  #heatmap th, #heatmap td{padding:9px 8px;text-align:center;border:1px solid var(--border)}
   #heatmap th{
     font-family:var(--mono);font-size:9.5px;color:var(--txt-2);
-    text-transform:uppercase;letter-spacing:.06em;background:var(--navy-3);
+    text-transform:uppercase;letter-spacing:.06em;background:var(--bg-3);
   }
   #heatmap td.rowhead{
     text-align:left;font-family:var(--sans);font-size:12px;color:var(--txt);
-    background:var(--navy-3);white-space:nowrap;
+    background:var(--bg-3);white-space:nowrap;
   }
   #heatmap td.cell{font-family:var(--mono);font-weight:600;color:var(--txt)}
   #heatmap td.cell.zero{color:var(--txt-3);font-weight:400}
-  #heatmap tr.total td{background:var(--navy-3);font-weight:700;border-top:2px solid var(--border)}
-  #heatmap td.total-col{font-family:var(--mono);font-weight:700;color:var(--txt);background:var(--navy-3)}
+  #heatmap tr.total td{background:var(--bg-3);font-weight:700;border-top:2px solid var(--border)}
+  #heatmap td.total-col{font-family:var(--mono);font-weight:700;color:var(--txt);background:var(--bg-3)}
+  #heatmap td.pct-col{font-family:var(--mono);font-weight:600;color:var(--brand);background:var(--brand-dim)}
 
   /* ── block 5 · sentiment + emotions ── */
   .sent-grid{display:grid;grid-template-columns:260px 1fr;gap:28px}
   .donut-wrap{position:relative;width:190px;height:190px;margin:0 auto}
   .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
-  .donut-num{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1}
+  /* El centro de la dona ya NO es el hero de sentiment neto en verde gigante
+     (Cambio 2): muestra el conteo neutral de menciones clasificadas — un
+     hecho, no un veredicto. El neto vive, secundario, en sent-legend-net. */
+  .donut-num{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1;color:var(--txt)}
   .donut-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--txt-3);margin-top:5px}
   .sent-legend{display:flex;flex-direction:column;gap:9px;margin-top:18px}
   .sent-legend-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
   .sent-legend-row .lv{margin-left:auto;font-family:var(--mono);color:var(--txt);font-weight:600}
+  .sent-legend-row .lv small{font-family:var(--sans);font-weight:400;color:var(--txt-3);margin-left:4px}
+  .sent-legend-net{
+    display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt-2);
+    margin-top:4px;padding-top:11px;border-top:1px solid var(--border);
+  }
+  .sent-legend-net .lv{margin-left:auto;font-family:var(--mono);color:var(--txt-2);font-weight:600}
   @media (max-width:760px){ .sent-grid{grid-template-columns:1fr} }
 
   /* ── block 6 · tabla explorable ── */
   #filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px}
   #filtros .fq{flex:1;min-width:180px}
+  .chk-repeat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt-2);cursor:pointer;user-select:none}
+  .chk-repeat input{accent-color:var(--brand)}
   .btn-reset{
     background:transparent;border:1px solid var(--border);color:var(--txt-2);
     font-family:var(--sans);font-size:11.5px;padding:7px 12px;border-radius:5px;cursor:pointer;
@@ -146,13 +183,13 @@
   .btn-reset:hover{color:var(--txt);border-color:var(--txt-3)}
   table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
   #tabla thead th{
-    position:sticky;top:0;background:var(--navy-3);z-index:1;
+    position:sticky;top:0;background:var(--bg-3);z-index:1;
     font-family:var(--mono);font-size:10px;color:var(--txt-2);
     text-transform:uppercase;letter-spacing:.06em;text-align:left;
     padding:9px 10px;border-bottom:1px solid var(--border);
   }
   #tabla td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--txt-2)}
-  #tabla tbody tr:hover{background:rgba(255,255,255,.02)}
+  #tabla tbody tr:hover{background:rgba(255,244,235,.025)}
   #tabla td.txt{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
   #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
   #tabla td.date.unknown{color:var(--txt-3)}
@@ -162,17 +199,27 @@
   .plat-tag{display:inline-flex;align-items:center;gap:6px;color:var(--txt-2)}
   .drv-pill{
     display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;
-    border-radius:99px;background:var(--orange-dim);color:var(--orange);
-    border:1px solid var(--orange-mid);white-space:nowrap;
+    border-radius:99px;background:var(--brand-dim);color:var(--brand);
+    border:1px solid var(--brand-mid);white-space:nowrap;
   }
   .drv-pill.none{background:transparent;border-color:var(--border);color:var(--txt-3)}
+  /* Badge de repetición (Cambio 6): deliberadamente NO usa el rojo de marca
+     ni el de sentiment — es metadato ("esta voz se repitió"), no una
+     categoría ni una polaridad, así que lleva un tono ámbar propio. */
+  .author-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .repeat-badge{
+    display:inline-flex;align-items:center;font-family:var(--mono);font-size:9.5px;
+    font-weight:700;padding:1px 6px;border-radius:99px;color:var(--gold);
+    background:rgba(227,179,65,.12);border:1px solid rgba(227,179,65,.35);
+    white-space:nowrap;
+  }
   #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
   .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
 
   /* ── block 7 · top quejas ── */
   #topQuejas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .cq-card{
-    background:var(--navy-2);border:1px solid var(--border);border-left:3px solid var(--red);
+    background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--red);
     border-radius:6px;padding:14px 16px;
   }
   .cq-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -180,7 +227,7 @@
   .cq-rank{font-family:var(--mono);color:var(--txt-3);margin-right:2px}
   .cq-eng{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--txt)}
   .cq-eng small{font-family:var(--sans);font-size:9px;font-weight:400;color:var(--txt-3);text-transform:uppercase;letter-spacing:.06em;margin-left:3px}
-  .cq-author{font-family:var(--mono);font-size:10.5px;color:var(--txt-3);margin-bottom:6px}
+  .cq-author{font-family:var(--mono);font-size:10.5px;color:var(--txt-3);margin-bottom:6px;display:flex;align-items:center;gap:6px}
   .cq-text{font-size:11.5px;color:var(--txt-2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:10px}
   .cq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .cq-date{font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
@@ -197,7 +244,7 @@
   .q-side{display:flex;flex-direction:column;gap:18px}
   .q-block-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
   .q-plat-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--txt-2);margin-bottom:6px}
-  .q-plat-row .track{flex:1;height:5px;background:var(--navy-4);border-radius:3px;overflow:hidden}
+  .q-plat-row .track{flex:1;height:5px;background:var(--bg-4);border-radius:3px;overflow:hidden}
   .q-plat-row .fill{height:100%;border-radius:3px}
   .q-plat-row .val{font-family:var(--mono);min-width:34px;text-align:right;color:var(--txt)}
   .q-missing{
@@ -208,7 +255,7 @@
   .q-months{display:flex;flex-wrap:wrap;gap:6px}
   .q-chip{
     font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:4px;
-    background:var(--navy-3);border:1px solid var(--border);color:var(--txt-2);
+    background:var(--bg-3);border:1px solid var(--border);color:var(--txt-2);
   }
   .q-chip b{color:var(--txt)}
   @media (max-width:860px){ .q-grid{grid-template-columns:1fr} }
@@ -220,7 +267,11 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Avianca <span>·</span> Social Listening</h1>
+    <div class="brand">
+      <img class="brand-logo" src="__AVIANCA_LOGO__" alt="Avianca">
+      <span class="brand-div"></span>
+      <h1>Social Listening</h1>
+    </div>
     <p id="rango" class="muted"></p>
   </header>
 
@@ -234,24 +285,26 @@
     </div>
   </section>
 
-  <section id="b3">
-    <h2>¿De qué se queja la gente? <span class="h2-sub">— el motivo por el que existe este reporte</span></h2>
-    <div class="card">
-      <div class="driver-toolbar">
-        <p class="driver-insight" id="driverInsight"></p>
-        <select id="driverMonthSel"></select>
+  <div class="two-col">
+    <section id="b3">
+      <h2>¿De qué se queja la gente? <span class="h2-sub">— el motivo por el que existe este reporte</span></h2>
+      <div class="card">
+        <div class="driver-toolbar">
+          <p class="driver-insight" id="driverInsight"></p>
+          <select id="driverMonthSel"></select>
+        </div>
+        <div class="driver-layout">
+          <div class="scroll-x"><div class="chart-box med" id="boxDrivers"><canvas id="chDrivers"></canvas></div></div>
+          <div class="driver-list" id="driverList"></div>
+        </div>
       </div>
-      <div class="driver-layout">
-        <div class="scroll-x"><div class="chart-box med" id="boxDrivers"><canvas id="chDrivers"></canvas></div></div>
-        <div class="driver-list" id="driverList"></div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section id="b4">
-    <h2>Driver por plataforma</h2>
-    <div class="card scroll-x"><div id="heatmap"></div></div>
-  </section>
+    <section id="b4">
+      <h2>Driver por plataforma</h2>
+      <div class="card scroll-x"><div id="heatmap"></div></div>
+    </section>
+  </div>
 
   <section id="b5">
     <h2>Sentimiento y emociones</h2>
@@ -260,7 +313,7 @@
         <div>
           <div class="donut-wrap">
             <canvas id="chSentiment"></canvas>
-            <div class="donut-center"><div class="donut-num" id="donutNum">—</div><div class="donut-lbl">Sentiment neto</div></div>
+            <div class="donut-center"><div class="donut-num" id="donutNum">—</div><div class="donut-lbl" id="donutLbl">clasificadas</div></div>
           </div>
           <div class="sent-legend" id="sentLegend"></div>
         </div>
@@ -309,6 +362,15 @@ const EMO_LABEL = { happiness:'Felicidad', anger:'Enojo', love:'Amor',
                     sadness:'Tristeza', neutral:'Neutral', surprise:'Sorpresa', fear:'Miedo' };
 const SOURCE_LABEL = { twitter:'Twitter/X' };
 
+// Marca (rojo Avianca) vs. estado (verde/rojo/gris de sentiment) vs. línea
+// de tendencia (ámbar) son tres roles de color distintos a propósito — ver
+// nota en :root del <style>. BRAND se usa solo en chrome/UI y en series de
+// un solo dataset (barras de drivers, heatmap); TONE_COLOR es la única
+// fuente de verdad para positivo/negativo/neutral.
+const BRAND = '#F62839';
+const TONE_COLOR = { pos:'#3FB950', neg:'#F85149', neu:'#7A7268' };
+const TREND_COLOR = '#E3B341';
+
 const FONT_MONO = "'JetBrains Mono', ui-monospace, Consolas, monospace";
 const FONT_SANS = "'Inter', system-ui, -apple-system, sans-serif";
 
@@ -334,7 +396,7 @@ function sentimentWord(v) {
 }
 
 Chart.defaults.font.family = FONT_SANS;
-Chart.defaults.color = '#8B949E';
+Chart.defaults.color = '#A9A29A';
 
 // Plugin genérico: dibuja el valor al final de cada barra (bar chart, horizontal o vertical).
 // ds.showEndLabels = true y ds.endLabels = [strings] activan el dibujo por dataset.
@@ -349,7 +411,7 @@ const endLabelPlugin = {
       meta.data.forEach((bar, i) => {
         const label = (ds.endLabels && ds.endLabels[i] != null) ? ds.endLabels[i] : String(ds.data[i]);
         ctx.save();
-        ctx.fillStyle = '#8B949E';
+        ctx.fillStyle = '#A9A29A';
         ctx.font = "600 11px " + FONT_MONO;
         ctx.textBaseline = 'middle';
         if (chart.options.indexAxis === 'y') {
@@ -367,12 +429,12 @@ const endLabelPlugin = {
 Chart.register(endLabelPlugin);
 
 const tooltipBase = {
-  backgroundColor: '#21262D', titleColor: '#8B949E', bodyColor: '#E6EDF3',
-  borderColor: '#30363D', borderWidth: 1, padding: 10,
+  backgroundColor: '#211B16', titleColor: '#A9A29A', bodyColor: '#F2ECE6',
+  borderColor: '#3A322A', borderWidth: 1, padding: 10,
   titleFont: { family: FONT_MONO, size: 10 }, bodyFont: { family: FONT_SANS, size: 11.5 },
 };
 
-// ── Bloque 1: KPIs ──────────────────────────────────────────────
+// ── Bloque 1: KPIs — la tasa de quejas es el héroe, no el sentiment ─────
 function renderKpis() {
   const k = DATA.kpis;
   const tone = sentimentTone(k.net_sentiment);
@@ -382,21 +444,23 @@ function renderKpis() {
   const platEntries = Object.entries(DATA.data_quality.by_platform)
     .sort((a, b) => b[1] - a[1]);
 
+  const ratio = k.complaints > 0 ? Math.round(k.total / k.complaints) : null;
+
   document.getElementById('kpis').innerHTML = `
+    <div class="kpi hero">
+      <div class="kpi-lbl">Tasa de quejas</div>
+      <div class="kpi-val hero-val">${ratio ? `1 de cada ${fmtInt(ratio)}` : '—'}</div>
+      <div class="kpi-sub">${fmtInt(k.complaints)} quejas de ${fmtInt(k.total)} menciones · ${fmtPct(k.complaint_rate)}</div>
+    </div>
     <div class="kpi">
       <div class="kpi-lbl">Menciones totales</div>
       <div class="kpi-val">${fmtInt(k.total)}</div>
       <div class="kpi-sub">${k.sources} fuentes activas</div>
     </div>
     <div class="kpi">
-      <div class="kpi-lbl">Quejas</div>
-      <div class="kpi-val">${fmtInt(k.complaints)} <small>${fmtPct(k.complaint_rate)}</small></div>
-      <div class="kpi-sub">del total de menciones</div>
-    </div>
-    <div class="kpi">
       <div class="kpi-lbl">Sentiment neto</div>
-      <div class="kpi-val">${fmtSigned(k.net_sentiment)}</div>
-      <div class="kpi-sub"><span class="pill ${tone}">${sentimentWord(k.net_sentiment)}</span></div>
+      <div class="kpi-val" style="font-size:19px">${fmtSigned(k.net_sentiment)}</div>
+      <div class="kpi-sub"><span class="dot" style="background:${TONE_COLOR[tone]};margin-right:6px"></span>${sentimentWord(k.net_sentiment)} · por etiqueta dominante</div>
     </div>
     <div class="kpi">
       <div class="kpi-lbl">Rango de fechas</div>
@@ -408,7 +472,7 @@ function renderKpis() {
       <div class="kpi-platlist">
         ${platEntries.map(([p, c]) => `
           <div class="kpi-platrow">
-            <span class="dot" style="background:${PLT_COLOR[p] || '#8B949E'}"></span>
+            <span class="dot" style="background:${PLT_COLOR[p] || '#A9A29A'}"></span>
             ${esc(PLT_LABEL[p] || p)} · ${fmtInt(c)}
           </div>`).join('')}
       </div>
@@ -425,7 +489,7 @@ function renderTimeline() {
 
   document.getElementById('legendTimeline').innerHTML = platforms.map(p => `
     <div class="leg-item"><span class="leg-swatch" style="background:${PLT_COLOR[p]}"></span>${PLT_LABEL[p]}</div>
-  `).join('') + `<div class="leg-item"><span class="leg-line" style="background:${'#F97316'}"></span>Sentiment neto (eje der.)</div>`;
+  `).join('') + `<div class="leg-item"><span class="leg-line" style="background:${TREND_COLOR}"></span>Sentiment neto (eje der.)</div>`;
 
   const datasets = platforms.map(p => ({
     label: PLT_LABEL[p],
@@ -440,9 +504,9 @@ function renderTimeline() {
   datasets.push({
     label: 'Sentiment neto',
     data: rows.map(r => r.net_sentiment),
-    borderColor: '#F97316', backgroundColor: '#F97316',
+    borderColor: TREND_COLOR, backgroundColor: TREND_COLOR,
     fill: false, borderWidth: 2, borderDash: [],
-    pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#F97316',
+    pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: TREND_COLOR,
     yAxisID: 'y1', order: 1, tension: 0.2, spanGaps: true,
   });
 
@@ -454,7 +518,7 @@ function renderTimeline() {
       const { ctx, chartArea } = chart;
       const yPix = y1.getPixelForValue(0);
       ctx.save();
-      ctx.strokeStyle = 'rgba(139,148,158,.35)';
+      ctx.strokeStyle = 'rgba(169,162,154,.35)';
       ctx.setLineDash([3, 4]);
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -490,20 +554,20 @@ function renderTimeline() {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(48,54,61,.4)' },
-          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, maxTicksLimit: 12 },
+          grid: { color: 'rgba(255,244,235,.05)' },
+          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, maxTicksLimit: 12 },
         },
         y: {
           stacked: true, beginAtZero: true, position: 'left',
-          grid: { color: 'rgba(48,54,61,.4)' },
-          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
-          title: { display: true, text: 'Menciones / día', color: '#484F58', font: { family: FONT_MONO, size: 9 } },
+          grid: { color: 'rgba(255,244,235,.05)' },
+          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          title: { display: true, text: 'Menciones / día', color: '#7A7268', font: { family: FONT_MONO, size: 9 } },
         },
         y1: {
           position: 'right', min: -100, max: 100,
           grid: { display: false },
-          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, callback: v => v + '%' },
-          title: { display: true, text: 'Sentiment neto', color: '#484F58', font: { family: FONT_MONO, size: 9 } },
+          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, callback: v => v + '%' },
+          title: { display: true, text: 'Sentiment neto', color: '#7A7268', font: { family: FONT_MONO, size: 9 } },
         },
       },
     },
@@ -554,7 +618,7 @@ function renderDrivers(month) {
       labels: rows.map(r => DRIVER_LABEL[r.driver]),
       datasets: [{
         data: rows.map(r => r.count),
-        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(249,115,22,.15)' : '#F97316'),
+        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(246,40,57,.15)' : BRAND),
         borderRadius: 4, borderSkipped: 'left',
         barThickness: 20, minBarLength: 3,
         showEndLabels: true,
@@ -582,12 +646,12 @@ function renderDrivers(month) {
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: 'rgba(48,54,61,.4)' },
-          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          grid: { color: 'rgba(255,244,235,.05)' },
+          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
         },
         y: {
           grid: { display: false },
-          ticks: { color: '#8B949E', font: { family: FONT_SANS, size: 11.5 } },
+          ticks: { color: '#A9A29A', font: { family: FONT_SANS, size: 11.5 } },
         },
       },
     },
@@ -603,11 +667,15 @@ function initDriverSelect() {
   sel.addEventListener('change', () => renderDrivers(sel.value));
 }
 
-// ── Bloque 4: heatmap driver × plataforma ────────────────────────
+// ── Bloque 4: heatmap driver × plataforma (+ % Total, Cambio 4) ─────────
 function renderHeatmap() {
   const platforms = ['web', 'instagram', 'tiktok'];
   const grid = {};
   DATA.driver_by_platform.forEach(r => { grid[r.driver + '|' + r.platform] = r.count; });
+
+  // % que cada driver pesa sobre el total de quejas — viene calculado desde
+  // aggregate.py (DATA.drivers[].pct), no se recalcula a mano aquí.
+  const pctByDriver = Object.fromEntries(DATA.drivers.map(d => [d.driver, d.pct]));
 
   const driverTotals = DRIVER_ORDER.map(d => ({
     driver: d,
@@ -623,7 +691,7 @@ function renderHeatmap() {
   const cell = (v) => {
     if (!v) return `<td class="cell zero">0</td>`;
     const alpha = 0.14 + 0.72 * (v / max);
-    return `<td class="cell" style="background:rgba(249,115,22,${alpha.toFixed(2)})">${fmtInt(v)}</td>`;
+    return `<td class="cell" style="background:rgba(246,40,57,${alpha.toFixed(2)})">${fmtInt(v)}</td>`;
   };
 
   const html = `
@@ -632,6 +700,7 @@ function renderHeatmap() {
         <th style="text-align:left">Driver</th>
         ${platforms.map(p => `<th>${esc(PLT_LABEL[p])}</th>`).join('')}
         <th>Total</th>
+        <th>% Total</th>
       </tr></thead>
       <tbody>
         ${driverTotals.map(({ driver, total }) => `
@@ -639,12 +708,14 @@ function renderHeatmap() {
             <td class="rowhead">${esc(DRIVER_LABEL[driver])}</td>
             ${platforms.map(p => cell(grid[driver + '|' + p] || 0)).join('')}
             <td class="total-col">${fmtInt(total)}</td>
+            <td class="pct-col">${fmtPct(pctByDriver[driver] || 0)}</td>
           </tr>
         `).join('')}
         <tr class="total">
           <td class="rowhead">Total</td>
           ${platTotals.map(v => `<td class="cell">${fmtInt(v)}</td>`).join('')}
           <td class="total-col">${fmtInt(grandTotal)}</td>
+          <td class="total-col">100%</td>
         </tr>
       </tbody>
     </table>
@@ -657,31 +728,34 @@ let sentChart = null, emoChart = null;
 function renderSentiment() {
   const s = DATA.sentiment;
   const k = DATA.kpis;
-  // Con 0 menciones clasificadas, aggregate.py devuelve neutral=100.0 como
-  // valor por defecto matemático (no hay con qué promediar). Mostrarlo tal
-  // cual leería como "100% neutral" cuando en realidad es "sin datos" —
-  // s.classified_count es la señal que distingue ambos casos.
   const hasData = s.classified_count > 0;
 
-  document.getElementById('donutNum').textContent = hasData ? fmtSigned(k.net_sentiment) : '—';
-  document.getElementById('donutNum').style.color = hasData
-    ? { pos: 'var(--green)', neg: 'var(--red)', neu: 'var(--txt-2)' }[sentimentTone(k.net_sentiment)]
-    : 'var(--txt-3)';
+  // El centro de la dona ya no es un número gigante en verde "triunfal"
+  // (Cambio 2): es el conteo neutral de menciones clasificadas. El neto va
+  // como línea secundaria dentro de la leyenda, sin celebrar ni alarmar.
+  document.getElementById('donutNum').textContent = hasData ? fmtInt(s.classified_count) : '—';
+  document.getElementById('donutLbl').textContent = hasData ? 'clasificadas' : 'sin datos';
 
+  const tone = sentimentTone(k.net_sentiment);
   const rows = [
-    { key: 'positive', label: 'Positivo', color: '#3FB950', v: s.positive },
-    { key: 'negative', label: 'Negativo', color: '#F85149', v: s.negative },
-    { key: 'neutral', label: 'Neutral', color: '#8B949E', v: s.neutral },
+    { key: 'positive', label: 'Positivo', color: TONE_COLOR.pos, count: s.counts.positive, pct: s.pct.positive },
+    { key: 'negative', label: 'Negativo', color: TONE_COLOR.neg, count: s.counts.negative, pct: s.pct.negative },
+    { key: 'neutral', label: 'Neutral', color: TONE_COLOR.neu, count: s.counts.neutral, pct: s.pct.neutral },
   ];
 
   document.getElementById('sentLegend').innerHTML = hasData
     ? rows.map(r => `
         <div class="sent-legend-row">
           <span class="dot" style="background:${r.color}"></span>${r.label}
-          <span class="lv">${fmtPct(r.v)}</span>
+          <span class="lv">${fmtPct(r.pct)}<small>${fmtInt(r.count)}</small></span>
         </div>
-      `).join('') + `<div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
-          ${fmtInt(s.classified_count)} menciones clasificadas
+      `).join('') + `
+        <div class="sent-legend-net">
+          <span class="dot" style="background:${TONE_COLOR[tone]}"></span>Sentiment neto (pos − neg)
+          <span class="lv">${fmtSigned(k.net_sentiment)}</span>
+        </div>
+        <div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
+          ${fmtInt(s.classified_count)} menciones clasificadas, por etiqueta dominante
         </div>`
     : `<div class="sent-legend-row" style="color:var(--txt-3)">Sin menciones clasificadas todavía — no hay datos de sentiment que mostrar.</div>`;
 
@@ -691,9 +765,9 @@ function renderSentiment() {
     data: {
       labels: hasData ? rows.map(r => r.label) : ['Sin datos'],
       datasets: [{
-        data: hasData ? rows.map(r => r.v) : [1],
-        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#30363D'],
-        borderColor: '#161B22', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
+        data: hasData ? rows.map(r => r.count) : [1],
+        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#2B241D'],
+        borderColor: '#17130F', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
       }],
     },
     options: {
@@ -702,7 +776,7 @@ function renderSentiment() {
         legend: { display: false },
         tooltip: {
           ...tooltipBase,
-          callbacks: { label: c => hasData ? ` ${c.label}: ${fmtPct(c.raw)}` : ' Sin menciones clasificadas' },
+          callbacks: { label: c => hasData ? ` ${c.label}: ${fmtInt(rows[c.dataIndex].count)} (${fmtPct(rows[c.dataIndex].pct)})` : ' Sin menciones clasificadas' },
         },
       },
       animation: { animateRotate: true, duration: 600 },
@@ -742,23 +816,24 @@ function renderSentiment() {
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: 'rgba(48,54,61,.4)' },
-          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          grid: { color: 'rgba(255,244,235,.05)' },
+          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
         },
-        y: { grid: { display: false }, ticks: { color: '#8B949E', font: { family: FONT_SANS, size: 11.5 } } },
+        y: { grid: { display: false }, ticks: { color: '#A9A29A', font: { family: FONT_SANS, size: 11.5 } } },
       },
     },
   });
 }
 
 // ── Bloque 6: tabla con filtros en JS puro sobre DATA.mentions ───
-let filtros = { platform: '', driver: '', sentiment: '', q: '' };
+let filtros = { platform: '', driver: '', sentiment: '', q: '', repetidas: false };
 
 function filtradas() {
   return DATA.mentions.filter(m =>
     (!filtros.platform || m.platform === filtros.platform) &&
     (!filtros.driver || m.complaint_driver === filtros.driver) &&
     (!filtros.sentiment || (filtros.sentiment === 'queja' ? m.is_complaint : !m.is_complaint)) &&
+    (!filtros.repetidas || m.repeat_count > 1) &&
     (!filtros.q || (m.text || '').toLowerCase().includes(filtros.q.toLowerCase()))
   );
 }
@@ -777,6 +852,7 @@ function initFiltros() {
       <option value="queja">Solo quejas</option>
       <option value="no-queja">Solo no-quejas</option>
     </select>
+    <label class="chk-repeat"><input type="checkbox" id="fRepeat"> Solo voces repetidas</label>
     <input type="search" id="fQ" class="fq" placeholder="Buscar texto…">
     <button type="button" class="btn-reset" id="fReset">Limpiar filtros</button>
   `;
@@ -786,11 +862,13 @@ function initFiltros() {
     filtros.sentiment = e.target.value === 'queja' ? 'queja' : (e.target.value === 'no-queja' ? 'no' : '');
     renderTabla();
   });
+  document.getElementById('fRepeat').addEventListener('change', e => { filtros.repetidas = e.target.checked; renderTabla(); });
   document.getElementById('fQ').addEventListener('input', e => { filtros.q = e.target.value; renderTabla(); });
   document.getElementById('fReset').addEventListener('click', () => {
-    filtros = { platform: '', driver: '', sentiment: '', q: '' };
+    filtros = { platform: '', driver: '', sentiment: '', q: '', repetidas: false };
     el.querySelectorAll('select').forEach(s => s.value = '');
     el.querySelector('#fQ').value = '';
+    el.querySelector('#fRepeat').checked = false;
     renderTabla();
   });
 }
@@ -805,10 +883,13 @@ function renderTabla() {
     tbody.innerHTML = rows.map(m => {
       const unknown = m.date_confidence === 'unknown';
       const drv = m.complaint_driver ? DRIVER_LABEL[m.complaint_driver] || m.complaint_driver : null;
+      const repeatBadge = m.repeat_count > 1
+        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — el engagement ya está sumado">×${m.repeat_count}</span>`
+        : '';
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
-        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B949E'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
-        <td>${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}</td>
+        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#A9A29A'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
+        <td><span class="author-cell">${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}${repeatBadge}</span></td>
         <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
         <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
         <td class="eng">${fmtInt(m.engagement)}</td>
@@ -818,7 +899,7 @@ function renderTabla() {
   }
 
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · * fecha no confiable`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto`;
 }
 
 // ── Bloque 7: cards ordenadas por engagement ─────────────────────
@@ -831,10 +912,10 @@ function renderTopQuejas() {
   el.innerHTML = DATA.top_complaints.map((m, i) => `
     <div class="cq-card">
       <div class="cq-top">
-        <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B949E'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
+        <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#A9A29A'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
         <span class="cq-eng">${fmtInt(m.engagement)}<small>alcance</small></span>
       </div>
-      ${m.author ? `<div class="cq-author">@${esc(m.author)}</div>` : ''}
+      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — alcance sumado">×${m.repeat_count}</span>` : ''}</div>` : ''}
       <div class="cq-text">${esc(m.text)}</div>
       <div class="cq-foot">
         <span class="cq-date">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: 'numeric' })}${m.complaint_driver ? ' · ' + esc(DRIVER_LABEL[m.complaint_driver] || m.complaint_driver) : ''}</span>
@@ -852,13 +933,17 @@ function renderCalidad() {
   const months = Object.entries(q.by_month);
 
   const notes = [
+    q.collapsed_repeats > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
+      <span>filas crudas eran repeticiones del mismo autor diciendo el mismo texto (spam o re-posteo) y se colapsaron en <b style="color:var(--txt)">${fmtInt(q.unique_voices)} voces únicas</b> — cada una cuenta una sola vez en todo este reporte, con su alcance sumado y la cantidad de repeticiones visible como <b style="color:var(--txt)">×N</b> en la tabla (bloque 6).</span></div>`
+      : '',
     `<div class="q-note"><span class="q-num">${fmtInt(q.unknown_date)}</span>
       <span>menciones no tienen una fecha confiable y quedaron <b style="color:var(--txt)">excluidas del gráfico de tendencia</b> (bloque 2) — sí se cuentan en el total y en la tabla explorable.</span></div>`,
     q.unclassified > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.unclassified)}</span>
       <span>menciones aún no han sido clasificadas por el modelo de sentimiento y <b style="color:var(--txt)">se excluyen de los promedios de sentimiento</b>.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--green)">0</span>
-      <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} menciones recolectadas tiene sentiment y emoción asignados.</span></div>`,
+      <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
     q.last_run_at
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
       <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
