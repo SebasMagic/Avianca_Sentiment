@@ -48,6 +48,16 @@ def test_render_produce_json_valido(tmp_path):
     assert json.loads(html)["kpis"]["total"] == 2
 
 
+def test_render_embebe_el_logo_como_data_uri(tmp_path):
+    """El logo se inyecta como data URI base64, mismo patrón que __CHARTJS__,
+    para que el archivo siga siendo autocontenido y funcione sin internet."""
+    plantilla = tmp_path / "t.html"
+    plantilla.write_text('<img src="__AVIANCA_LOGO__" alt="Avianca">', encoding="utf-8")
+    html = build.render(PAYLOAD, str(plantilla))
+    assert "__AVIANCA_LOGO__" not in html
+    assert "data:image/png;base64," in html
+
+
 def test_build_escribe_archivo_con_fecha(tmp_path, tmp_db):
     out = build.build(conn=tmp_db, out_dir=str(tmp_path))
     assert out.endswith(".html")

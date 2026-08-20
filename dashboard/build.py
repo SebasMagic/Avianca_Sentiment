@@ -4,6 +4,7 @@ Genera el dashboard HTML autocontenido.
 Un solo archivo: Chart.js inline y la data inyectada como JSON.
 Abre con doble clic, funciona sin internet, se manda por correo.
 """
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +14,11 @@ from store import db
 
 TEMPLATE = Path(__file__).parent / "template.html"
 VENDOR = Path(__file__).parent / "vendor" / "chart.umd.min.js"
+LOGO = Path(__file__).parent.parent / "Logo_wordmark_Avianca_(Colombia).png"
 
 DATA_MARKER = "__DASHBOARD_DATA__"
 VENDOR_MARKER = "__CHARTJS__"
+LOGO_MARKER = "__AVIANCA_LOGO__"
 
 
 def render(payload: dict, template_path: str = str(TEMPLATE)) -> str:
@@ -27,6 +30,12 @@ def render(payload: dict, template_path: str = str(TEMPLATE)) -> str:
 
     if VENDOR_MARKER in html:
         html = html.replace(VENDOR_MARKER, VENDOR.read_text(encoding="utf-8"))
+
+    if LOGO_MARKER in html and LOGO.exists():
+        # Data URI base64 — el logo vive dentro del HTML, igual que Chart.js,
+        # para que el archivo siga siendo autocontenido y funcione offline.
+        logo_b64 = base64.b64encode(LOGO.read_bytes()).decode("ascii")
+        html = html.replace(LOGO_MARKER, f"data:image/png;base64,{logo_b64}")
 
     return html
 
