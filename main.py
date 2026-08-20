@@ -9,6 +9,7 @@ main.py — Entry point del pipeline Avianca Sentiment Monitor v2.
   python main.py --classify                     # solo reclasifica lo pendiente
   python main.py --export-excel                 # vuelca la DB a .xlsx
   python main.py --enriquecer-engagement         # puebla saves/views desde el raw ya guardado
+  python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
   python main.py --schedule                     # semanal, lunes 8am
 
 Twitter/X queda fuera de v2: el actor de Apify con búsqueda histórica
@@ -33,7 +34,7 @@ from datetime import datetime, timedelta, timezone
 import schedule
 
 from config import BACKFILL_SINCE
-from pipeline import classify_pending, engagement_enrichment
+from pipeline import classify_pending, engagement_enrichment, instagram_reach_backfill
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
 from pipeline.relevance import is_relevant
@@ -158,6 +159,9 @@ def main():
                         help="vuelca la DB completa a un .xlsx")
     parser.add_argument("--enriquecer-engagement", action="store_true",
                         help="puebla saves/views/reach_source desde el raw ya guardado (sin llamar APIs)")
+    parser.add_argument("--enriquecer-instagram-reach", action="store_true",
+                        help="backfill de alcance (views) de los posts de Instagram ya en la DB "
+                             "(1 llamada de Fase 1 a Apify — gasta unos centavos)")
     parser.add_argument("--schedule", action="store_true",
                         help="corre cada lunes a las 8am")
     args = parser.parse_args()
@@ -184,6 +188,12 @@ def main():
     if args.enriquecer_engagement:
         conn = db.connect()
         print(f"[Engagement] {engagement_enrichment.run(conn)}")
+        conn.close()
+        return
+
+    if args.enriquecer_instagram_reach:
+        conn = db.connect()
+        print(f"[InstagramReach] {instagram_reach_backfill.run(conn)}")
         conn.close()
         return
 

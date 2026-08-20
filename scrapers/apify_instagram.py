@@ -3,6 +3,19 @@ Apify Instagram scraper.
 Fase 1: obtiene posts recientes de @avianca.
 Fase 2: extrae comentarios de esos posts — son usuarios reales quejándose o elogiando.
 Sentiment se procesa después en pipeline/classifier.py.
+
+Tarea 2 del desglose de engagement: la Fase 1 trae, por post, likesCount,
+commentsCount y (solo para posts de tipo Video) videoPlayCount — verificado
+contra items reales del actor. Antes se descartaba todo salvo la URL. Ahora
+se construye un mapa {post_url: {views, likes, comments}} y cada comentario
+que sale de ese post se anota con las views del post, marcadas
+reach_source='post' para dejar explícito que ese alcance es del CONTENEDOR,
+no del comentario — decirlo de otra forma sería atribuirle a un comentario
+un alcance que no le pertenece.
+
+videoPlayCount NO existe en posts Sidecar (carrusel de imágenes) — Instagram
+no expone reproducciones para contenido sin video. Para esos posts, views
+queda None: no hay dato, no se inventa un cero.
 """
 import uuid
 from datetime import datetime, timezone
@@ -13,13 +26,67 @@ from config import (
 )
 
 
+def _post_url_from_item(item: dict) -> str:
+    """URL canónica de un ítem de post de Fase 1: 'url' si viene completa,
+    si no se reconstruye desde 'shortCode'. Devuelve '' si no hay ninguno."""
+    url = item.get("url", "") or ""
+    if url.startswith("http"):
+        return url
+    shortcode = item.get("shortCode", "")
+    return f"https://www.instagram.com/p/{shortcode}/" if shortcode else ""
+
+
+def _post_reach_map(posts: list[dict]) -> dict[str, dict]:
+    """
+    {post_url: {views, likes, comments}} a partir de items de Fase 1.
+
+    views = videoPlayCount, que solo existe en posts type='Video' —
+    verificado con datos reales (2026-08-20): un post Sidecar (carrusel de
+    imágenes) no trae esa clave en absoluto, no la trae en 0. Para esos
+    posts 'views' queda None.
+    """
+    reach = {}
+    for p in posts:
+        if "error" in p:
+            continue
+        url = _post_url_from_item(p)
+        if not url:
+            continue
+        reach[url] = {
+            "views": p.get("videoPlayCount"),
+            "likes": p.get("likesCount"),
+            "comments": p.get("commentsCount"),
+        }
+    return reach
+
+
+def fetch_post_reach(post_urls: list[str]) -> dict[str, dict]:
+    """
+    Llama la Fase 1 del actor (resultsType='posts') para URLs de POST
+    específicas (no perfiles). Usado por el backfill retroactivo de alcance
+    (pipeline/instagram_reach_backfill.py, Tarea 2): una sola llamada de
+    Fase 1 sobre posts que ya originaron comentarios guardados, sin volver
+    a pedir comentarios (Fase 2), que ya están pagados.
+    """
+    if not post_urls:
+        return {}
+    client = ApifyClient(APIFY_API_TOKEN)
+    run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
+        "directUrls": post_urls,
+        "resultsType": "posts",
+        "resultsLimit": len(post_urls),
+    })
+    posts = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    return _post_reach_map(posts)
+
+
 def scrape(since: str | None = None) -> list[dict]:
     client = ApifyClient(APIFY_API_TOKEN)
     fetched_at = datetime.now(timezone.utc).isoformat()
 
     profiles = INSTAGRAM_PROFILES.get(BRAND_KEYWORD, INSTAGRAM_PROFILES["Avianca"])
 
-    # ── FASE 1: obtener URLs de posts recientes ──────────────────
+    # ── FASE 1: obtener URLs de posts recientes + su alcance ──────
     print(f"[Instagram] Fase 1 — obteniendo posts de {BRAND_KEYWORD}...")
     posts_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
         "directUrls": profiles,
@@ -28,16 +95,8 @@ def scrape(since: str | None = None) -> list[dict]:
     })
     posts = list(client.dataset(posts_run["defaultDatasetId"]).iterate_items())
 
-    post_urls = []
-    for p in posts:
-        if "error" in p:
-            continue
-        url = p.get("url", "")
-        shortcode = p.get("shortCode", "")
-        if url.startswith("http"):
-            post_urls.append(url)
-        elif shortcode:
-            post_urls.append(f"https://www.instagram.com/p/{shortcode}/")
+    post_reach = _post_reach_map(posts)
+    post_urls = list(post_reach.keys())
 
     if not post_urls:
         print("[Instagram] Sin posts para extraer comentarios")
@@ -95,6 +154,19 @@ def scrape(since: str | None = None) -> list[dict]:
         # Apify donde el 100% de 189 comentarios colisionaban en una sola
         # URL.
         #
+        # post_url se calcula ANTES de la rama commentUrl/fallback porque
+        # ahora también se usa para buscar el alcance del post contenedor
+        # en post_reach (Tarea 2) — no solo para construir el fallback de
+        # source_url.
+        post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
+        reach = post_reach.get(post_url)
+        views = reach.get("views") if reach else None
+        # reach_source solo se marca 'post' cuando SÍ hay un número real de
+        # views que atribuirle — si el post es un Sidecar sin video, no hay
+        # dato, y NULL (no 'post' con views=None) es lo honesto: 'post' sin
+        # views implicaría que sabemos el alcance y es cero, y no es así.
+        reach_source = "post" if views is not None else None
+        #
         # Preferir "commentUrl": el actor lo entrega como un permalink real
         # y navegable (".../p/<shortcode>/c/<comment_id>"), que Instagram sí
         # interpreta como ancla al comentario. Verificado con datos reales:
@@ -107,7 +179,6 @@ def scrape(since: str | None = None) -> list[dict]:
         if comment_url:
             source_url = comment_url
         else:
-            post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
             comment_id = item.get("id")
             source_url = f"{post_url}#comment-{comment_id}" if comment_id else post_url
 
@@ -122,6 +193,12 @@ def scrape(since: str | None = None) -> list[dict]:
             "likes": item.get("likesCount", 0) or 0,
             "shares": 0,
             "comments_count": 0,
+            # Un comentario no tiene saves propios — no es límite del
+            # actor, es qué ES un comentario (ver Tarea 1). views/
+            # reach_source sí pueden venir del post contenedor (Tarea 2).
+            "saves": None,
+            "views": views,
+            "reach_source": reach_source,
             "sentiment_positive": 0.0,
             "sentiment_negative": 0.0,
             "sentiment_neutral": 1.0,
