@@ -2,8 +2,10 @@
 scrapers/apify_instagram.py no golpea la API real en tests: se
 monkeypatchea ApifyClient por un doble de prueba que sirve datasets fijos.
 """
+import config
 from config import get_brand
 from scrapers import apify_instagram
+from store import db
 
 AVIANCA = get_brand("Avianca")
 LATAM = get_brand("LATAM")
@@ -194,21 +196,34 @@ def test_comentario_sin_post_correspondiente_en_el_mapa_no_falla(monkeypatch):
 
 
 def test_post_reach_map_usa_campos_reales_de_fase_1():
-    """_post_reach_map extrae exactamente views/likes/comments de un item
-    de post — fixture con los mismos nombres de clave verificados contra
-    la API real (2026-08-20)."""
+    """_post_reach_map extrae exactamente views/likes/comments/owner_username
+    de un item de post — fixture con los mismos nombres de clave verificados
+    contra la API real (2026-08-20, perfil @avianca)."""
     posts = [
         {"url": "https://www.instagram.com/p/V1/", "type": "Video",
-         "videoPlayCount": 100, "likesCount": 10, "commentsCount": 2},
+         "videoPlayCount": 100, "likesCount": 10, "commentsCount": 2,
+         "ownerUsername": "avianca"},
         {"url": "https://www.instagram.com/p/S1/", "type": "Sidecar",
-         "likesCount": 20, "commentsCount": 4},
+         "likesCount": 20, "commentsCount": 4, "ownerUsername": "avianca"},
         {"error": "no encontrado"},  # ítem de error del actor: se ignora
     ]
     reach = apify_instagram._post_reach_map(posts)
 
-    assert reach["https://www.instagram.com/p/V1/"] == {"views": 100, "likes": 10, "comments": 2}
-    assert reach["https://www.instagram.com/p/S1/"] == {"views": None, "likes": 20, "comments": 4}
+    assert reach["https://www.instagram.com/p/V1/"] == {
+        "views": 100, "likes": 10, "comments": 2, "owner_username": "avianca"}
+    assert reach["https://www.instagram.com/p/S1/"] == {
+        "views": None, "likes": 20, "comments": 4, "owner_username": "avianca"}
     assert len(reach) == 2
+
+
+def test_post_reach_map_sin_ownerUsername_deja_owner_username_none():
+    """Un item de post que no trae 'ownerUsername' (caso borde) no debe
+    reventar — owner_username queda None, no se inventa."""
+    posts = [{"url": "https://www.instagram.com/p/V1/", "type": "Video",
+              "videoPlayCount": 100, "likesCount": 10, "commentsCount": 2}]
+    reach = apify_instagram._post_reach_map(posts)
+
+    assert reach["https://www.instagram.com/p/V1/"]["owner_username"] is None
 
 
 def test_fetch_post_reach_llama_fase_1_con_directUrls_de_posts(monkeypatch):
@@ -216,13 +231,15 @@ def test_fetch_post_reach_llama_fase_1_con_directUrls_de_posts(monkeypatch):
     resultsType='posts' con directUrls=post_urls específicos — no perfiles,
     no re-pide comentarios."""
     posts = [{"url": "https://www.instagram.com/p/V1/", "type": "Video",
-              "videoPlayCount": 999, "likesCount": 5, "commentsCount": 1}]
+              "videoPlayCount": 999, "likesCount": 5, "commentsCount": 1,
+              "ownerUsername": "avianca"}]
     fake_client = FakeApifyClient(None, posts=posts, comments=[])
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
     reach = apify_instagram.fetch_post_reach(["https://www.instagram.com/p/V1/"])
 
-    assert reach == {"https://www.instagram.com/p/V1/": {"views": 999, "likes": 5, "comments": 1}}
+    assert reach == {"https://www.instagram.com/p/V1/": {
+        "views": 999, "likes": 5, "comments": 1, "owner_username": "avianca"}}
     assert fake_client.calls[0]["resultsType"] == "posts"
     assert fake_client.calls[0]["directUrls"] == ["https://www.instagram.com/p/V1/"]
 
@@ -251,3 +268,114 @@ def test_scrape_usa_los_perfiles_de_instagram_de_la_marca_pasada(monkeypatch):
     assert fase_1["resultsType"] == "posts"
     assert fase_1["directUrls"] == LATAM["instagram_profiles"]
     assert fase_1["directUrls"] != AVIANCA["instagram_profiles"]
+
+
+# ── Registro de cuenta de origen (Tarea 1: muestras comparables) ─────────
+
+def test_comentario_hereda_source_account_del_owner_username_del_post(monkeypatch):
+    """Cada comentario debe llevar 'source_account' = la cuenta que
+    publicó el post contenedor (ownerUsername de Fase 1) — no el autor
+    del comentario. Es lo que permite separar después, para LATAM, los
+    comentarios de @latamairlines (global) de los de
+    @latamairlines_colombia (local)."""
+    posts = [{
+        "url": "https://www.instagram.com/p/ABC123/", "shortCode": "ABC123",
+        "type": "Sidecar", "likesCount": 5, "commentsCount": 1,
+        "ownerUsername": "latamairlines_colombia",
+    }]
+    comments = [{
+        "id": "1", "text": "Perdieron mi maleta otra vez",
+        "ownerUsername": "usuario_quejoso",  # autor del COMENTARIO, distinto del dueño del post
+        "timestamp": "2026-06-01T10:00:00.000Z",
+        "postUrl": "https://www.instagram.com/p/ABC123/",
+        "commentUrl": "https://www.instagram.com/p/ABC123/c/1",
+        "likesCount": 0,
+    }]
+    fake_client = FakeApifyClient(None, posts=posts, comments=comments)
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    results = apify_instagram.scrape(LATAM)
+
+    assert len(results) == 1
+    assert results[0]["author"] == "usuario_quejoso"
+    assert results[0]["source_account"] == "latamairlines_colombia"
+
+
+def test_comentario_sin_post_correspondiente_deja_source_account_none(monkeypatch):
+    """Mismo caso borde que views/reach_source: si el postUrl del
+    comentario no está en post_reach, source_account queda None en vez de
+    reventar o heredar cualquier otra cosa."""
+    comments = [{
+        "id": "3", "text": "comentario huérfano",
+        "ownerUsername": "usuario3",
+        "timestamp": "2026-06-01T10:00:00.000Z",
+        "postUrl": "https://www.instagram.com/p/NOEXISTE/",
+        "commentUrl": "https://www.instagram.com/p/NOEXISTE/c/3",
+        "likesCount": 0,
+    }]
+    fake_client = FakeApifyClient(None, posts=POSTS, comments=comments)
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    results = apify_instagram.scrape(AVIANCA)
+
+    assert len(results) == 1
+    assert results[0]["source_account"] is None
+
+
+# ── Tarea 2 (muestras comparables): el tope de posts subido se respeta ───
+
+def test_fase_1_pide_resultsLimit_igual_a_config_instagram_posts_limit(monkeypatch):
+    """La Fase 1 debe pedir exactamente config.INSTAGRAM_POSTS_LIMIT posts
+    — no un valor fijo hardcodeado — así que subir el tope en config.py
+    (80 -> 200) se refleja sin tocar el scraper."""
+    fake_client = FakeApifyClient(None, posts=POSTS, comments=[])
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    apify_instagram.scrape(AVIANCA)
+
+    fase_1 = fake_client.calls[0]
+    assert fase_1["resultsType"] == "posts"
+    assert fase_1["resultsLimit"] == config.INSTAGRAM_POSTS_LIMIT
+
+
+def test_correr_instagram_dos_veces_no_duplica(monkeypatch, tmp_db):
+    """scrape() + upsert_mentions() dos veces seguidas con el mismo dataset
+    (re-correr la misma ventana, p.ej. tras subir INSTAGRAM_POSTS_LIMIT)
+    no debe duplicar filas — el dedup por fingerprint debe ignorar la
+    segunda vez por completo."""
+    from pipeline.normalizer import normalize
+
+    posts = [{
+        "url": "https://www.instagram.com/p/ABC123/", "shortCode": "ABC123",
+        "type": "Sidecar", "likesCount": 5, "commentsCount": 1,
+        "ownerUsername": "avianca",
+    }]
+    comments = [{
+        "id": "1", "text": "Vuelo cancelado, pésimo servicio",
+        "ownerUsername": "usuario1",
+        "timestamp": "2026-06-01T10:00:00.000Z",
+        "postUrl": "https://www.instagram.com/p/ABC123/",
+        "commentUrl": "https://www.instagram.com/p/ABC123/c/1",
+        "likesCount": 3,
+    }]
+    fake_client = FakeApifyClient(None, posts=posts, comments=comments)
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    raw = apify_instagram.scrape(AVIANCA)
+    for m in raw:
+        m["brand"] = "Avianca"
+    mentions = normalize(raw)
+
+    run_id_1 = db.start_run(tmp_db, "weekly", None, brand="Avianca")
+    inserted_1, duplicates_1 = db.upsert_mentions(tmp_db, mentions, run_id_1)
+
+    run_id_2 = db.start_run(tmp_db, "weekly", None, brand="Avianca")
+    inserted_2, duplicates_2 = db.upsert_mentions(tmp_db, mentions, run_id_2)
+
+    assert inserted_1 == 1
+    assert duplicates_1 == 0
+    assert inserted_2 == 0
+    assert duplicates_2 == 1
+
+    total = tmp_db.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
+    assert total == 1

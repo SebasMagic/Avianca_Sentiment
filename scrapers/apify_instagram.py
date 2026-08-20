@@ -17,6 +17,17 @@ un alcance que no le pertenece.
 videoPlayCount NO existe en posts Sidecar (carrusel de imágenes) — Instagram
 no expone reproducciones para contenido sin video. Para esos posts, views
 queda None: no hay dato, no se inventa un cero.
+
+Cuenta de origen del post (registro de procedencia): la Fase 1 también trae
+"ownerUsername" — verificado contra un ítem real de la API (2026-08-20,
+perfil @avianca): el mismo nombre de campo que usa la Fase 2 para el AUTOR
+del comentario, pero a nivel de POST es la cuenta que lo publicó, no quien
+comenta. Cuando una marca tiene varios perfiles configurados (p.ej. LATAM:
+@latamairlines global vs. @latamairlines_colombia local), este es el único
+dato que permite separar después qué cuenta originó cada comentario — se
+guarda en post_reach junto a views/likes/comments y se adjunta a cada
+comentario como "source_account". Si el post no está en el mapa (caso
+borde), source_account queda None: no se inventa de qué cuenta salió.
 """
 import uuid
 from datetime import datetime, timezone
@@ -39,12 +50,18 @@ def _post_url_from_item(item: dict) -> str:
 
 def _post_reach_map(posts: list[dict]) -> dict[str, dict]:
     """
-    {post_url: {views, likes, comments}} a partir de items de Fase 1.
+    {post_url: {views, likes, comments, owner_username}} a partir de items
+    de Fase 1.
 
     views = videoPlayCount, que solo existe en posts type='Video' —
     verificado con datos reales (2026-08-20): un post Sidecar (carrusel de
     imágenes) no trae esa clave en absoluto, no la trae en 0. Para esos
     posts 'views' queda None.
+
+    owner_username = "ownerUsername" del item de POST (verificado contra la
+    API real, no confundir con el mismo nombre de campo en un item de
+    COMENTARIO, que es el autor del comentario) — la cuenta que publicó
+    el post. None si el item no lo trae.
     """
     reach = {}
     for p in posts:
@@ -57,6 +74,7 @@ def _post_reach_map(posts: list[dict]) -> dict[str, dict]:
             "views": p.get("videoPlayCount"),
             "likes": p.get("likesCount"),
             "comments": p.get("commentsCount"),
+            "owner_username": p.get("ownerUsername"),
         }
     return reach
 
@@ -162,6 +180,10 @@ def scrape(brand: dict, since: str | None = None) -> list[dict]:
         post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
         reach = post_reach.get(post_url)
         views = reach.get("views") if reach else None
+        # Cuenta que publicó el post contenedor (ver docstring del módulo y
+        # de _post_reach_map) — None si el post no está en el mapa, nunca
+        # inventado a partir del autor del comentario.
+        source_account = reach.get("owner_username") if reach else None
         # reach_source solo se marca 'post' cuando SÍ hay un número real de
         # views que atribuirle — si el post es un Sidecar sin video, no hay
         # dato, y NULL (no 'post' con views=None) es lo honesto: 'post' sin
@@ -189,6 +211,10 @@ def scrape(brand: dict, since: str | None = None) -> list[dict]:
             "source_url": source_url,
             "text": text,
             "author": item.get("ownerUsername", None),
+            # Cuenta de Instagram que publicó el POST del que salió este
+            # comentario (ver docstring del módulo) — no confundir con
+            # "author" (quien escribió el comentario).
+            "source_account": source_account,
             "published_at": timestamp or None,
             "country": "CO",
             "likes": item.get("likesCount", 0) or 0,

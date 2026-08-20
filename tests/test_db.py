@@ -398,6 +398,90 @@ def test_migracion_agrega_columnas_de_engagement_sin_perder_filas():
     conn.close()
 
 
+def test_migracion_agrega_source_account_sin_perder_filas():
+    """
+    Migración aditiva del registro de cuenta de origen (Tarea 1 — muestras
+    comparables): una DB con el schema viejo de `mentions` (sin
+    source_account) debe ganar esa columna al pasar por init_db, sin
+    perder ninguna fila existente. Las filas viejas quedan NULL — no se
+    inventa de qué cuenta salió un post ya scrapeado antes de que este
+    campo existiera.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            brand                 TEXT NOT NULL DEFAULT 'Avianca',
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            saves                 INTEGER,
+            views                 INTEGER,
+            reach_source          TEXT,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, text, "
+        "date_confidence, classification_status, author) "
+        "VALUES ('m1', 'fp1', 'instagram', 'hola', 'exact', 'classified', 'usuario1')"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar la columna sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert "source_account" in cols
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila["id"] == "m1"
+    assert fila["author"] == "usuario1"  # dato viejo intacto
+    assert fila["source_account"] is None  # fila vieja: no se inventa
+
+    # Idempotente: correrlo dos veces no falla ni duplica la columna.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("source_account") == 1
+    conn.close()
+
+
+def test_source_account_se_puebla_en_filas_nuevas(tmp_db):
+    """En una DB nueva (schema ya con source_account desde el inicio), una
+    fila insertada con ese campo lo conserva; sin el campo, queda NULL —
+    nunca se inventa un valor por defecto."""
+    run_id = db.start_run(tmp_db, "weekly", None, brand="Avianca")
+    con_cuenta = _mention(mid="m-con-cuenta", url="https://ig.com/1")
+    con_cuenta["platform"] = "instagram"
+    con_cuenta["source_account"] = "avianca"
+    sin_cuenta = _mention(mid="m-sin-cuenta", url="https://ig.com/2")
+    db.upsert_mentions(tmp_db, [con_cuenta, sin_cuenta], run_id)
+
+    fila_con = tmp_db.execute(
+        "SELECT source_account FROM mentions WHERE id = 'm-con-cuenta'").fetchone()
+    fila_sin = tmp_db.execute(
+        "SELECT source_account FROM mentions WHERE id = 'm-sin-cuenta'").fetchone()
+    assert fila_con["source_account"] == "avianca"
+    assert fila_sin["source_account"] is None
+
+
 def test_update_engagement_actualiza_solo_columnas_permitidas(tmp_db):
     run_id = db.start_run(tmp_db, "seed", None)
     db.upsert_mentions(tmp_db, [_mention(mid="m-1")], run_id)

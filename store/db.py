@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS mentions (
     source_url            TEXT,
     text                  TEXT NOT NULL,
     author                TEXT,
+    source_account        TEXT,
     published_at          TEXT,
     date_confidence       TEXT NOT NULL,
     country               TEXT,
@@ -74,7 +75,7 @@ CREATE TABLE IF NOT EXISTS runs (
 
 _FIELDS = [
     "id", "fingerprint", "brand", "platform", "source_url", "text", "author",
-    "published_at", "date_confidence", "country", "likes", "shares",
+    "source_account", "published_at", "date_confidence", "country", "likes", "shares",
     "comments_count", "saves", "views", "reach_source",
     "sentiment_positive", "sentiment_negative",
     "sentiment_neutral", "emotion", "is_complaint", "complaint_driver",
@@ -121,6 +122,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
     if "brand" not in mention_cols:
         _add_brand_column_and_refingerprint(conn)
+
+    # source_account: cuenta/perfil de Instagram (u otra plataforma, si
+    # algún día aplica) que PUBLICÓ EL POST del que salió la mención — no
+    # confundir con `author`, que es quien escribió el comentario. Sin
+    # DEFAULT, queda NULL en filas viejas: no se inventa de qué cuenta
+    # salió un post ya scrapeado antes de que este campo existiera: la
+    # única fuente honesta es el dato real de Fase 1 del scraper
+    # (ver scrapers/apify_instagram.py), no una suposición retroactiva.
+    if "source_account" not in mention_cols:
+        conn.execute("ALTER TABLE mentions ADD COLUMN source_account TEXT")
+        conn.commit()
 
     # Índice sobre brand — se crea acá y no dentro de SCHEMA porque en una
     # DB vieja la columna todavía no existe cuando SCHEMA corre (SCHEMA se
