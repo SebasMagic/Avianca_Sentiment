@@ -87,7 +87,7 @@ Cada unidad tiene una responsabilidad y una interfaz clara:
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | TEXT PK | uuid4 |
-| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + text)` — texto completo |
+| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + author + '\|' + text)` — texto completo |
 | `platform` | TEXT NOT NULL | `web` / `instagram` / `tiktok` |
 | `source_url` | TEXT | |
 | `text` | TEXT NOT NULL | |
@@ -121,6 +121,19 @@ plantilla ("Avianca canceló mi vuelo y no me han dado respuesta desde hace…")
 dos comentarios distintos en la misma URL podían colisionar y perderse en
 silencio. La asimetría decide: un duplicado falso es una fila de más, visible y
 auditable; una fusión falsa es pérdida de datos irrecuperable.
+
+El `author` entra en el hash por una razón medida en datos reales: en el v1, el
+`source_url` de **todos** los comentarios de Instagram resolvía a la misma URL
+(`apify_instagram.py` cae a `post_urls[0]` cuando el ítem no trae `url` propia).
+Con `source_url` constante, dos personas distintas que escriban el mismo texto
+producían el mismo fingerprint y una se perdía sin rastro — caso confirmado en el
+Excel v1: `catherine_zik_oppenheimer` y `valentina_ahumada977` fusionadas.
+Incluir el autor discrimina personas distintas; un mismo autor repitiendo texto
+idéntico sí se deduplica, que es el comportamiento deseado ante re-scrapes.
+
+**Pendiente asociado:** `scrapers/apify_instagram.py` debe construir una URL
+distinta por comentario en vez de caer a `post_urls[0]`. El fingerprint con autor
+mitiga el síntoma; la URL degenerada es la causa.
 
 **Semántica del `run_id`:** guarda la corrida que **insertó** la mención por
 primera vez. Un upsert que encuentra el fingerprint existente no lo sobrescribe
