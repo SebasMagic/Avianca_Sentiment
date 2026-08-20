@@ -34,7 +34,18 @@ MAX_RETRIES = 1
 
 VALID_EMOTIONS = {"happiness", "anger", "love", "sadness", "neutral"}
 
-SYSTEM_PROMPT = f"""Eres un analizador de menciones de marca en español latinoamericano, especializado en la aerolínea Avianca en Colombia.
+
+def build_system_prompt(brand: dict) -> str:
+    """
+    Arma el system prompt de DeepSeek con la marca y su programa de
+    fidelidad inyectados desde el perfil (config.BRANDS) — antes decía
+    "Avianca" y describía el driver "lifemiles" a secas, fijos en el
+    código. Con dos marcas en la misma base, un prompt fijo hacía que el
+    modelo analizara menciones de LATAM como si fueran de Avianca.
+    """
+    keyword = brand["keyword"]
+    loyalty_program = brand["loyalty_program"]
+    return f"""Eres un analizador de menciones de marca en español latinoamericano, especializado en la aerolínea {keyword} en Colombia.
 
 Para cada texto retorna ÚNICAMENTE un JSON con este formato exacto:
 {{
@@ -53,15 +64,15 @@ Reglas:
   Es false para contenido promocional, noticias, opinión neutral o contenido positivo.
 - complaint_driver es null cuando is_complaint es false.
   Cuando is_complaint es true, es OBLIGATORIO y debe ser exactamente uno de:
-    "equipaje"          — maletas perdidas, dañadas o demoradas (manejo físico del equipaje)
-    "cancelacion"       — vuelos cancelados, reprogramados sin aviso
-    "demora"            — retrasos, conexiones perdidas por retraso
-    "atencion_cliente"  — mal trato, call center, falta de respuesta, personal
-    "cobros_tarifas"    — cobros indebidos, precios, cargos ocultos, penalidades, cobros de equipaje
-    "lifemiles"         — millas, programa de fidelidad, redenciones
-    "asientos_comida"   — asientos, espacio, comida a bordo, entretenimiento
-    "reembolsos"        — devoluciones de dinero que no llegan o se demoran
-    "otro"              — queja real que no encaja en ninguna de las anteriores
+    "equipaje"           — maletas perdidas, dañadas o demoradas (manejo físico del equipaje)
+    "cancelacion"        — vuelos cancelados, reprogramados sin aviso
+    "demora"             — retrasos, conexiones perdidas por retraso
+    "atencion_cliente"   — mal trato, call center, falta de respuesta, personal
+    "cobros_tarifas"     — cobros indebidos, precios, cargos ocultos, penalidades, cobros de equipaje
+    "programa_fidelidad" — millas, programa de fidelidad ({loyalty_program}), redenciones
+    "asientos_comida"    — asientos, espacio, comida a bordo, entretenimiento
+    "reembolsos"         — devoluciones de dinero que no llegan o se demoran
+    "otro"               — queja real que no encaja en ninguna de las anteriores
 - Ante duda sobre la categoría de una queja real, usa "otro".
 - Muchas quejas encajan literalmente en más de un driver a la vez (la maleta
   no llegó porque cancelaron el vuelo; cobraron de más y nunca devolvieron
@@ -69,7 +80,7 @@ Reglas:
   Para esos casos, elige el PRIMERO que aplique en este orden de precedencia,
   no el que te parezca más específico:
     cancelacion > demora > equipaje > reembolsos > cobros_tarifas
-    > lifemiles > asientos_comida > atencion_cliente > otro
+    > programa_fidelidad > asientos_comida > atencion_cliente > otro
   Esta prioridad no es arbitraria:
   (a) las disrupciones de vuelo (cancelacion, demora) van primero porque son
       la causa raíz accionable — si la maleta no llegó porque cancelaron el
@@ -149,7 +160,7 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
-def _call_api(texts: list[str]) -> list[dict | None]:
+def _call_api(texts: list[str], brand: dict) -> list[dict | None]:
     """
     Un llamado a DeepSeek. Lanza si la respuesta no es una lista del
     mismo largo que la entrada — nunca hace zip a ciegas.
@@ -160,7 +171,7 @@ def _call_api(texts: list[str]) -> list[dict | None]:
     contener ítems que el modelo no logró estructurar.
     """
     prompt = (
-        f"Analiza cada uno de los siguientes {len(texts)} textos sobre Avianca.\n"
+        f"Analiza cada uno de los siguientes {len(texts)} textos sobre {brand['keyword']}.\n"
         f"Retorna un array JSON con exactamente {len(texts)} objetos, en el mismo orden.\n"
         "No incluyas texto antes ni después del JSON.\n\n"
         f"Textos:\n{json.dumps(texts, ensure_ascii=False, indent=2)}\n\n"
@@ -176,7 +187,7 @@ def _call_api(texts: list[str]) -> list[dict | None]:
         json={
             "model": DEEPSEEK_MODEL,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": build_system_prompt(brand)},
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": 2000,
@@ -199,7 +210,7 @@ def _call_api(texts: list[str]) -> list[dict | None]:
     return [normalize_result(p) for p in parsed]
 
 
-def _attempt(texts: list[str]) -> list[dict | None] | None:
+def _attempt(texts: list[str], brand: dict) -> list[dict | None] | None:
     """
     Intenta un batch con reintentos. Devuelve None (todo el intento) si
     nunca funcionó; si funcionó, devuelve una lista del mismo largo que
@@ -208,7 +219,7 @@ def _attempt(texts: list[str]) -> list[dict | None] | None:
     """
     for intento in range(MAX_RETRIES + 1):
         try:
-            return _call_api(texts)
+            return _call_api(texts, brand)
         except Exception as e:
             print(f"[Classifier] intento {intento + 1} falló: {e}")
             if intento < MAX_RETRIES:
@@ -216,10 +227,11 @@ def _attempt(texts: list[str]) -> list[dict | None] | None:
     return None
 
 
-def classify_texts(texts: list[str]) -> list[dict | None]:
+def classify_texts(texts: list[str], brand: dict) -> list[dict | None]:
     """
-    Clasifica una lista de textos. Devuelve una lista del mismo largo:
-    un dict por texto clasificado, o None por texto que no se pudo clasificar.
+    Clasifica una lista de textos sobre `brand`. Devuelve una lista del
+    mismo largo: un dict por texto clasificado, o None por texto que no
+    se pudo clasificar.
 
     Estrategia: batch completo → reintentos → item por item.
     """
@@ -231,7 +243,7 @@ def classify_texts(texts: list[str]) -> list[dict | None]:
     for start in range(0, len(texts), BATCH_SIZE):
         batch = texts[start:start + BATCH_SIZE]
 
-        batch_result = _attempt(batch)
+        batch_result = _attempt(batch, brand)
         if batch_result is not None:
             results.extend(batch_result)
             continue
@@ -239,7 +251,7 @@ def classify_texts(texts: list[str]) -> list[dict | None]:
         # El batch no salió ni con reintentos: uno por uno.
         print(f"[Classifier] batch de {len(batch)} falló; cayendo a item por item")
         for text in batch:
-            single = _attempt([text])
+            single = _attempt([text], brand)
             results.append(single[0] if single else None)
 
     return results

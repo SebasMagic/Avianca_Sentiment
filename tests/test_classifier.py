@@ -1,7 +1,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from config import get_brand
 from pipeline import classifier
+
+AVIANCA = get_brand("Avianca")
+LATAM = get_brand("LATAM")
 
 
 def _api_response(payload):
@@ -75,10 +79,38 @@ def test_raw_no_dict_devuelve_none_no_neutral():
     assert classifier.normalize_result("basura") is None
 
 
+def test_driver_lifemiles_ya_no_existe_se_mapea_a_otro():
+    """lifemiles se renombró a programa_fidelidad (Tarea 3) — el nombre
+    viejo ya no es un driver válido y debe caer a 'otro' como cualquier
+    otro valor fuera de COMPLAINT_DRIVERS."""
+    out = classifier.normalize_result({**OK, "complaint_driver": "lifemiles"})
+    assert out["complaint_driver"] == "otro"
+
+
+def test_driver_programa_fidelidad_es_valido():
+    out = classifier.normalize_result({**OK, "complaint_driver": "programa_fidelidad"})
+    assert out["complaint_driver"] == "programa_fidelidad"
+
+
+def test_system_prompt_incluye_marca_y_programa_de_fidelidad_correctos():
+    """El prompt ya no dice 'Avianca'/'LifeMiles' fijos — sale del perfil
+    de la marca que se le pase (Tarea 3)."""
+    prompt_avianca = classifier.build_system_prompt(AVIANCA)
+    prompt_latam = classifier.build_system_prompt(LATAM)
+
+    assert "aerolínea Avianca en Colombia" in prompt_avianca
+    assert "LifeMiles" in prompt_avianca
+    assert "LATAM Pass" not in prompt_avianca
+
+    assert "aerolínea LATAM en Colombia" in prompt_latam
+    assert "LATAM Pass" in prompt_latam
+    assert "LifeMiles" not in prompt_latam
+
+
 @patch("pipeline.classifier.requests.post")
 def test_batch_feliz(mock_post):
     mock_post.return_value = _api_response([OK, OK])
-    out = classifier.classify_texts(["texto uno", "texto dos"])
+    out = classifier.classify_texts(["texto uno", "texto dos"], AVIANCA)
     assert len(out) == 2
     assert all(o["complaint_driver"] == "equipaje" for o in out)
     assert mock_post.call_count == 1
@@ -96,7 +128,7 @@ def test_longitud_desigual_no_hace_zip_y_cae_a_item_por_item(mock_post, mock_sle
         _api_response([OK]),
         _api_response([OK]),
     ]
-    out = classifier.classify_texts(["texto uno", "texto dos"])
+    out = classifier.classify_texts(["texto uno", "texto dos"], AVIANCA)
     assert len(out) == 2
     assert all(o is not None for o in out)
     assert mock_post.call_count == 4
@@ -111,7 +143,7 @@ def test_elemento_no_dict_en_batch_valido_no_se_cuela_como_neutral(mock_post):
     mock_post.return_value = _api_response([OK, None])
     out = classifier.classify_texts([
         "queja real sobre maleta perdida", "otra queja seria",
-    ])
+    ], AVIANCA)
     assert mock_post.call_count == 1
     assert out[0]["complaint_driver"] == "equipaje"
     assert out[1] is None
@@ -125,7 +157,7 @@ def test_parsea_respuesta_envuelta_en_fences(mock_post):
         "content": "```json\n" + json.dumps([OK]) + "\n```"
     }}]}
     mock_post.return_value = resp
-    out = classifier.classify_texts(["texto uno"])
+    out = classifier.classify_texts(["texto uno"], AVIANCA)
     assert out[0]["complaint_driver"] == "equipaje"
 
 
@@ -133,5 +165,19 @@ def test_parsea_respuesta_envuelta_en_fences(mock_post):
 @patch("pipeline.classifier.requests.post")
 def test_fallo_total_devuelve_none_no_neutral(mock_post, mock_sleep):
     mock_post.side_effect = Exception("boom")
-    out = classifier.classify_texts(["texto uno"])
+    out = classifier.classify_texts(["texto uno"], AVIANCA)
     assert out == [None]
+
+
+@patch("pipeline.classifier.requests.post")
+def test_classify_texts_envia_el_prompt_de_la_marca_correcta(mock_post):
+    """Extremo a extremo: classify_texts(texts, LATAM) debe mandar a
+    DeepSeek un system prompt que nombra LATAM y LATAM Pass, no Avianca."""
+    mock_post.return_value = _api_response([OK])
+    classifier.classify_texts(["texto sobre LATAM"], LATAM)
+
+    sent = mock_post.call_args.kwargs["json"]
+    system_msg = sent["messages"][0]["content"]
+    assert "aerolínea LATAM en Colombia" in system_msg
+    assert "LATAM Pass" in system_msg
+    assert "Avianca" not in system_msg
