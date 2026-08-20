@@ -6,3 +6,7 @@ data/*.db
 dashboard/avianca_dashboard_*.html
 .pytest_cache/
 .superpowers/
+
+# El dashboard publicado lleva nombres de usuario y textos de personas reales:
+# la configuracion de deploy se versiona, el contenido no.
+deploy/index.html

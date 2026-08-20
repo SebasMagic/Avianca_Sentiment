@@ -62,5 +62,27 @@ def build(db_path: str | None = None, out_dir: str = "dashboard", conn=None) -> 
     return str(out_path)
 
 
+DEPLOY_DIR = Path(__file__).parent.parent / "deploy"
+
+
+def stage_for_deploy(html_path: str) -> str:
+    """
+    Copia el dashboard a deploy/index.html para publicarlo en Vercel.
+
+    El index.html queda fuera de git a propósito: contiene los nombres de
+    usuario y los textos de cientos de personas reales. La configuración de
+    deploy/ (vercel.json, robots.txt) sí se versiona; el contenido no.
+    """
+    DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
+    destino = DEPLOY_DIR / "index.html"
+    destino.write_text(Path(html_path).read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"[Deploy] listo en {destino} — publicar con:  vercel deploy --prod deploy")
+    return str(destino)
+
+
 if __name__ == "__main__":
-    build()
+    import sys
+
+    generado = build()
+    if "--deploy" in sys.argv:
+        stage_for_deploy(generado)
