@@ -147,6 +147,7 @@ def build_payload(conn) -> dict:
         "unclassified": sum(1 for m in mentions
                             if m["classification_status"] == "unclassified"),
         "filtered_last_run": (last_run["filtered_count"] or 0) if last_run else 0,
+        "short_text_last_run": (last_run["short_text_count"] or 0) if last_run else 0,
         "last_run_mode": last_run["mode"] if last_run else None,
         "last_run_at": last_run["finished_at"] if last_run else None,
         "by_platform": dict(por_plataforma),

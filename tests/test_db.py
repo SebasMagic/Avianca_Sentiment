@@ -1,3 +1,5 @@
+import sqlite3
+
 from store import db
 
 
@@ -194,3 +196,66 @@ def test_finish_run_guarda_contadores(tmp_db):
     assert fila["notes"] == "ok - backfill complete"
     assert fila["since"] == "2026-04-19"
     assert fila["finished_at"] is not None
+
+
+def test_finish_run_guarda_short_text_count(tmp_db):
+    run_id = db.start_run(tmp_db, "backfill", "2026-04-19")
+    db.finish_run(tmp_db, run_id, raw_count=1310, filtered_count=71,
+                  inserted_count=1000, duplicate_count=38, short_text_count=201)
+    fila = tmp_db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert fila["short_text_count"] == 201
+
+
+def test_finish_run_short_text_count_default_es_cero(tmp_db):
+    """Llamadas existentes sin el parámetro nuevo no deben romperse."""
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.finish_run(tmp_db, run_id, raw_count=5, filtered_count=1,
+                  inserted_count=4, duplicate_count=0)
+    fila = tmp_db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert fila["short_text_count"] == 0
+
+
+def test_migracion_agrega_short_text_count_sin_perder_filas():
+    """
+    Migración aditiva: una DB con el schema viejo de `runs` (sin
+    short_text_count) debe ganar la columna al pasar por init_db, sin
+    perder ninguna fila existente. data/avianca.db tiene datos reales
+    de scraping pagado — esto es lo que protege ese archivo.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE runs (
+            id              TEXT PRIMARY KEY,
+            started_at      TEXT NOT NULL,
+            finished_at     TEXT,
+            mode            TEXT NOT NULL,
+            since           TEXT,
+            raw_count       INTEGER DEFAULT 0,
+            filtered_count  INTEGER DEFAULT 0,
+            inserted_count  INTEGER DEFAULT 0,
+            duplicate_count INTEGER DEFAULT 0,
+            notes           TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO runs (id, started_at, mode, raw_count) "
+        "VALUES ('r1', '2026-01-01T00:00:00+00:00', 'seed', 42)"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar la columna sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    assert "short_text_count" in cols
+
+    fila = conn.execute("SELECT * FROM runs WHERE id = 'r1'").fetchone()
+    assert fila["id"] == "r1"
+    assert fila["raw_count"] == 42
+    assert fila["short_text_count"] == 0  # ADD COLUMN ... DEFAULT 0 rellena filas viejas
+
+    # Idempotente: correrlo dos veces no falla ni duplica columnas.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()]
+    assert cols_2.count("short_text_count") == 1
+    conn.close()

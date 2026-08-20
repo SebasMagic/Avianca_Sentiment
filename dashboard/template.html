@@ -864,6 +864,10 @@ function renderCalidad() {
       <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">—</span>
       <span>no hay registro de una corrida de recolección completada; no se puede reportar cuánto se descartó.</span></div>`,
+    q.last_run_at
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.short_text_last_run)}</span>
+      <span>comentarios se descartaron <b style="color:var(--txt)">en la última corrida</b> por ser demasiado cortos para analizar (típicamente solo emoji) — se filtran antes del paso de relevancia, así que no están incluidos en el número de arriba. Tampoco es un acumulado histórico, por la misma razón.</span></div>`
+      : '',
   ];
 
   const platRows = platforms.map(p => `

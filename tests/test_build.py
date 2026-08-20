@@ -13,7 +13,8 @@ PAYLOAD = {
                   "classified_count": 2},
     "emotions": {"anger": 2}, "mentions": [], "top_complaints": [],
     "data_quality": {"total": 2, "unknown_date": 0, "unclassified": 0,
-                     "filtered_total": 0, "by_platform": {"tiktok": 2},
+                     "filtered_total": 0, "short_text_last_run": 0,
+                     "by_platform": {"tiktok": 2},
                      "by_month": {"2026-05": 2}, "missing_sources": ["twitter"]},
 }
 

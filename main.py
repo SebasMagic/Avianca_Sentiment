@@ -93,6 +93,12 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
     print(f"\n[Pipeline] Total crudo: {len(raw)} menciones")
 
     normalizadas = normalize(raw)
+    # normalize() descarta silenciosamente los textos de menos de
+    # MIN_TEXT_LENGTH caracteres (comentarios de solo emoji) antes de que
+    # corra el filtro de relevance — por eso no aparecen en filtered_count.
+    # Sin este contador, esas menciones desaparecían sin dejar rastro en
+    # ningún campo de `runs` (Important #2 de la revisión).
+    short_text_count = len(raw) - len(normalizadas)
 
     razones = collections.Counter()
     keep = []
@@ -117,6 +123,7 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
         filtered_count=len(normalizadas) - len(keep),
         inserted_count=inserted,
         duplicate_count=duplicates,
+        short_text_count=short_text_count,
         notes="; ".join(errores),
     )
 

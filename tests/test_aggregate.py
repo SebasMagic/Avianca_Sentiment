@@ -133,6 +133,28 @@ def test_filtered_last_run_no_duplica_entre_corridas(tmp_db):
     assert p["data_quality"]["last_run_at"] is not None
 
 
+def test_short_text_last_run_llega_de_punta_a_punta_al_payload(tmp_db):
+    """
+    normalize() descarta comentarios de solo emoji antes de que corra
+    relevance, así que no aparecen en filtered_count (Important #2). El
+    contador debe viajar de finish_run() hasta el payload del dashboard,
+    con el mismo criterio de 'última corrida' que filtered_last_run.
+    """
+    run_id = db.start_run(tmp_db, "backfill", "2026-04-19")
+    db.upsert_mentions(tmp_db, [_m(1)], run_id)
+    db.finish_run(tmp_db, run_id, raw_count=1310, filtered_count=71,
+                  inserted_count=1, duplicate_count=0, short_text_count=201)
+
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["short_text_last_run"] == 201
+
+
+def test_short_text_last_run_es_cero_sin_corridas(tmp_db):
+    _seed(tmp_db, [_m(1)])
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["short_text_last_run"] == 0
+
+
 def test_mentions_incluye_todo_para_la_tabla(tmp_db):
     _seed(tmp_db, [_m(1), _m(2)])
     p = aggregate.build_payload(tmp_db)

@@ -47,16 +47,17 @@ CREATE INDEX IF NOT EXISTS idx_mentions_driver    ON mentions(complaint_driver);
 CREATE INDEX IF NOT EXISTS idx_mentions_status    ON mentions(classification_status);
 
 CREATE TABLE IF NOT EXISTS runs (
-    id              TEXT PRIMARY KEY,
-    started_at      TEXT NOT NULL,
-    finished_at     TEXT,
-    mode            TEXT NOT NULL,
-    since           TEXT,
-    raw_count       INTEGER DEFAULT 0,
-    filtered_count  INTEGER DEFAULT 0,
-    inserted_count  INTEGER DEFAULT 0,
-    duplicate_count INTEGER DEFAULT 0,
-    notes           TEXT
+    id                TEXT PRIMARY KEY,
+    started_at        TEXT NOT NULL,
+    finished_at       TEXT,
+    mode              TEXT NOT NULL,
+    since             TEXT,
+    raw_count         INTEGER DEFAULT 0,
+    filtered_count    INTEGER DEFAULT 0,
+    inserted_count    INTEGER DEFAULT 0,
+    duplicate_count   INTEGER DEFAULT 0,
+    short_text_count  INTEGER DEFAULT 0,
+    notes             TEXT
 );
 """
 
@@ -73,9 +74,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """
+    Migraciones aditivas sobre bases YA existentes. Nunca destructivo:
+    solo agrega columnas que falten (ALTER TABLE ... ADD COLUMN), nunca
+    borra ni recrea tablas. Idempotente: si la columna ya existe, no hace
+    nada. data/avianca.db tiene datos reales de scraping pagado — una
+    migración destructiva no es aceptable.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    if "short_text_count" not in cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN short_text_count INTEGER DEFAULT 0")
+        conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate(conn)
 
 
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
@@ -119,13 +135,15 @@ def start_run(conn: sqlite3.Connection, mode: str, since: str | None) -> str:
 
 
 def finish_run(conn, run_id, raw_count, filtered_count,
-               inserted_count, duplicate_count, notes="") -> None:
+               inserted_count, duplicate_count, notes="",
+               short_text_count=0) -> None:
     conn.execute(
         """UPDATE runs SET finished_at = ?, raw_count = ?, filtered_count = ?,
-                           inserted_count = ?, duplicate_count = ?, notes = ?
+                           inserted_count = ?, duplicate_count = ?,
+                           short_text_count = ?, notes = ?
            WHERE id = ?""",
         (_now(), raw_count, filtered_count, inserted_count,
-         duplicate_count, notes, run_id),
+         duplicate_count, short_text_count, notes, run_id),
     )
     conn.commit()
 
