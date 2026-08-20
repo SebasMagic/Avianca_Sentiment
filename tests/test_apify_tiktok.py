@@ -108,4 +108,8 @@ def test_hashtags_salen_del_perfil_de_la_marca_pasada(monkeypatch):
     apify_tiktok.scrape(LATAM)
 
     assert fake_client.calls[0]["hashtags"] == LATAM["tiktok_hashtags"]
-    assert fake_client.calls[0]["hashtags"] == ["latam", "latamairlines", "latamcolombia"]
+    assert fake_client.calls[0]["hashtags"] == ["latamairlines", "latamcolombia"]
+    # "latam" a secas quedó fuera del perfil por ser la abreviatura de
+    # Latinoamérica: en el backfill trajo 1 video relevante de 29. Se afirma
+    # su ausencia para que nadie lo reponga sin volver a medir el ruido.
+    assert "latam" not in fake_client.calls[0]["hashtags"]
