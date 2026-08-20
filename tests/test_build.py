@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from dashboard import build
 
@@ -65,3 +68,89 @@ def test_build_escribe_archivo_con_fecha(tmp_path, tmp_db):
     contenido = open(out, encoding="utf-8").read()
     assert "__DASHBOARD_DATA__" not in contenido
     assert "Chart" in contenido  # chart.js quedó inline
+
+
+# ── Multi-marca (Tarea 2/3): build por marca, título/color/logo del perfil ─
+
+def test_build_nombre_de_archivo_sale_de_la_marca(tmp_path, tmp_db):
+    out = build.build(conn=tmp_db, out_dir=str(tmp_path), brand="LATAM")
+    assert "latam_dashboard_" in out
+    assert "avianca" not in Path(out).name
+
+
+def test_build_marca_desconocida_falla_temprano(tmp_path, tmp_db):
+    with pytest.raises(ValueError):
+        build.build(conn=tmp_db, out_dir=str(tmp_path), brand="Delta")
+
+
+def test_render_titulo_y_color_avianca_salen_del_perfil():
+    """Sin --brand (default), el look de Avianca se conserva exactamente:
+    su rojo de marca y su logo PNG embebido — no un wordmark."""
+    html = build.render(PAYLOAD)
+    assert "<title>Avianca — Social Listening</title>" in html
+    assert "--brand:#F62839;" in html
+    assert "--brand-ink:#C81030;" in html
+    assert "data:image/png;base64," in html
+    assert '<span class="brand-wordmark"' not in html  # ningún wordmark USADO — sigue siendo el <img>
+    assert "__BRAND_" not in html  # ningún marcador de marca sin sustituir
+
+
+def test_render_titulo_y_color_latam_salen_del_perfil():
+    html = build.render(PAYLOAD, brand_name="LATAM")
+    assert "<title>LATAM — Social Listening</title>" in html
+    assert "--brand:#1B0088;" in html
+    assert "__BRAND_" not in html
+
+
+def test_render_latam_usa_wordmark_no_placeholder(tmp_path):
+    """LATAM no tiene archivo de logo (config.BRANDS['LATAM']['logo'] es
+    None): el encabezado debe resolverse con un wordmark tipográfico
+    propio, nunca con un <img> roto ni un cuadro vacío."""
+    html = build.render(PAYLOAD, brand_name="LATAM")
+    assert 'class="brand-wordmark"' in html
+    assert "LATAM" in html
+    # Nada de <img> apuntando a un archivo que no existe.
+    assert '<img class="brand-logo"' not in html
+
+
+def test_render_footer_y_encabezado_usan_el_nombre_de_marca():
+    html_avianca = build.render(PAYLOAD)
+    assert "Avianca · Social Listening" in html_avianca
+
+    html_latam = build.render(PAYLOAD, brand_name="LATAM")
+    assert "LATAM · Social Listening" in html_latam
+
+
+def test_render_web_platform_color_no_cambia_por_marca():
+    """El azul de la plataforma "web" en los gráficos es un identificador
+    de plataforma, no de marca — debe quedar igual para las dos marcas,
+    incluida LATAM (cuyo color de marca también es azul)."""
+    html_avianca = build.render(PAYLOAD)
+    html_latam = build.render(PAYLOAD, brand_name="LATAM")
+    assert "web:'#2A78D6'" in html_avianca
+    assert "web:'#2A78D6'" in html_latam
+
+
+
+# ── Derivación de --brand-ink (contraste WCAG AA, criterio del skill dataviz) ─
+
+def test_derive_ink_preserva_el_valor_calibrado_de_avianca():
+    """El rojo de Avianca (#F62839) no llega a 4.5:1 como texto — su ink ya
+    fue calibrado a mano en producción (#C81030, ~5.9:1) y debe
+    preservarse tal cual, no recalcularse con un resultado distinto."""
+    assert build._derive_ink("#F62839") == "#C81030"
+
+
+def test_derive_ink_reutiliza_el_color_si_ya_sirve_como_texto():
+    """El azul de LATAM (#1B0088) ya tiene ~15:1 de contraste sobre blanco
+    — no necesita una variante oscurecida, se reutiliza tal cual."""
+    assert build._derive_ink("#1B0088") == "#1B0088"
+
+
+def test_derive_ink_oscurece_un_color_generico_que_no_sirve_como_texto():
+    """Cualquier color de marca futuro que no alcance 4.5:1 debe
+    oscurecerse hasta cumplirlo — no queda hardcodeado a Avianca/LATAM."""
+    claro = "#FFAA00"
+    assert build._contrast_ratio(claro, "#FFFFFF") < 4.5
+    ink = build._derive_ink(claro)
+    assert build._contrast_ratio(ink, "#FFFFFF") >= 4.5

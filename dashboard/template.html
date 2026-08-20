@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Avianca — Social Listening</title>
+<title>__BRAND_TITLE__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -13,17 +13,24 @@
        avianca.com. bg-3/bg-4 son capas intermedias (cabecera pegajosa, chips,
        tracks) que se distinguen de la tarjeta blanca sin recurrir a un borde. */
     --bg:#FAF7F2; --bg-2:#FFFFFF; --bg-3:#F4F0EA; --bg-4:#ECE4D6;
-    /* Rojo Avianca — SOLO para chrome/marca no textual (logo, barra del KPI
-       héroe, fondo del heatmap, barras de un solo driver): es el rojo puro
-       del logo y sobre blanco no llega a 4.5:1 como texto. --brand-ink es la
-       misma familia de color oscurecida para usarse como texto (5.9:1 sobre
-       blanco). El sentiment negativo usa --red, un terracota/ladrillo (hue
-       ~11°) deliberadamente alejado del rojo-crimson de marca (hue ~355°)
-       para que "esto es de Avianca" y "esto es negativo" nunca se lean como
-       la misma señal — ver nota en el bloque 5. Contraste validado con la
-       fórmula WCAG del skill dataviz (scripts/validate_palette.js).
+    /* Multi-marca: --brand/--brand-ink/--brand-dim/--brand-mid llegan
+       inyectados por dashboard/build.py desde config.BRANDS[marca]["color"]
+       — nunca hardcodeados aquí (ver Tarea 3). --brand es SOLO para
+       chrome/marca no textual (logo, barra del KPI héroe, fondo del
+       heatmap, barras de un solo driver); --brand-ink es una variante apta
+       como texto (>= 4.5:1 sobre blanco, criterio WCAG del skill dataviz).
+       Avianca (#F62839) no llega a 4.5:1 tal cual como texto, por eso
+       --brand-ink es un rojo oscurecido calibrado a 5.9:1 (build.py,
+       _KNOWN_BRAND_INK); LATAM (#1B0088) sí sirve directo como texto
+       (~15:1) y --brand-ink cae igual al color de marca — ver
+       build._derive_ink(). El sentiment negativo usa --red, un
+       terracota/ladrillo (hue ~11°) deliberadamente alejado del
+       rojo-crimson de Avianca (hue ~355°) para que "esto es de la marca" y
+       "esto es negativo" nunca se lean como la misma señal — ver nota en
+       el bloque 5. Contraste validado con la fórmula WCAG del skill
+       dataviz (scripts/validate_palette.js).
        */
-    --brand:#F62839; --brand-ink:#C81030; --brand-dim:rgba(246,40,57,.07); --brand-mid:rgba(246,40,57,.45);
+    --brand:__BRAND_COLOR__; --brand-ink:__BRAND_INK__; --brand-dim:__BRAND_DIM__; --brand-mid:__BRAND_MID__;
     --green:#1E8E3E; --green-dim:rgba(30,142,62,.08);
     --red:#B03D24;   --red-dim:rgba(176,61,36,.08);
     --blue:#1863BD;  --blue-dim:rgba(24,99,189,.08);
@@ -52,6 +59,21 @@
   }
   .brand{display:flex;align-items:center;gap:14px}
   .brand-logo{height:30px;width:auto;display:block}
+  /* Wordmark tipográfico — usado cuando la marca no tiene archivo de logo
+     (hoy: LATAM). Compuesto a propósito, no un placeholder: nombre de
+     marca en negrita + una barra de acento en degradé del color de marca.
+     La barra es rectangular (no un punto circular) deliberadamente — para
+     que nunca se lea como un swatch más de plataforma (ver leyendas de
+     bloque 2/6/7, que sí usan puntos circulares para web/instagram/tiktok). */
+  .brand-wordmark{
+    display:inline-flex;align-items:center;gap:9px;height:30px;
+    font-family:var(--sans);font-weight:800;font-size:20px;letter-spacing:-.01em;
+    color:var(--brand-ink);line-height:1;
+  }
+  .brand-wordmark .wm-mark{
+    width:7px;height:24px;border-radius:2px;flex-shrink:0;
+    background:linear-gradient(180deg, var(--brand), var(--brand-ink));
+  }
   .brand-div{width:1px;height:18px;background:var(--border)}
   header h1{
     font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;
@@ -264,6 +286,15 @@
   #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
   .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
 
+  /* Estado vacío compartido — cuando un bloque no tiene datos que mostrar
+     (caso LATAM al arrancar: cero menciones) se reemplaza el gráfico/tabla
+     por este mensaje en vez de dejar ceros, NaN o un gráfico en blanco. */
+  .block-empty{
+    text-align:center;color:var(--txt-3);padding:34px 14px;
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;line-height:1.7;
+  }
+  #kpis.empty{display:block;padding:0}
+
   /* ── block 7 · top quejas ──
      Dos grupos, con distinto criterio de orden (revisión 2026-08-20):
      with_own_reach (rankeado por alcance PROPIO — hoy solo TikTok) lleva
@@ -352,7 +383,7 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <img class="brand-logo" src="__AVIANCA_LOGO__" alt="Avianca">
+      __BRAND_LOGO_HTML__
       <span class="brand-div"></span>
       <h1>Social Listening</h1>
     </div>
@@ -438,14 +469,19 @@
     <div id="calidad" class="card"></div>
   </section>
 
-  <footer>Avianca · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
+  <footer>__BRAND_NAME__ · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
 </div>
 
 <script>__CHARTJS__</script>
 <script>
 const DATA = __DASHBOARD_DATA__;
 
-const PLT_COLOR = { web:'#2A78D6', instagram:'#C13584', tiktok:'#0E8C96' };
+// "web" es un identificador de PLATAFORMA, estable entre marcas — nunca
+// sale del perfil. Verificado con el validador del skill dataviz (ver
+// build.py, _WEB_PLATFORM_COLOR): este azul y el azul de marca de LATAM
+// separan por ΔE 24–28 (muy por encima del piso CVD de 8), así que no
+// colisionan pese a que ambos son "azules" — no se recolorea por marca.
+const PLT_COLOR = { web:'__BRAND_WEB_COLOR__', instagram:'#C13584', tiktok:'#0E8C96' };
 const PLT_LABEL = { web:'Web', instagram:'Instagram', tiktok:'TikTok' };
 const DRIVER_LABEL = {
   equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
@@ -458,21 +494,41 @@ const EMO_LABEL = { happiness:'Felicidad', anger:'Enojo', love:'Amor',
                     sadness:'Tristeza', neutral:'Neutral', surprise:'Sorpresa', fear:'Miedo' };
 const SOURCE_LABEL = { twitter:'Twitter/X' };
 
-// Marca (rojo Avianca) vs. estado (verde/rojo/gris de sentiment) vs. línea
-// de tendencia (ámbar) son tres roles de color distintos a propósito — ver
-// nota en :root del <style>. BRAND se usa solo en chrome/UI y en series de
-// un solo dataset (barras de drivers, heatmap); TONE_COLOR es la única
-// fuente de verdad para positivo/negativo/neutral. El rojo de TONE_COLOR.neg
-// es un terracota (hue ~11°) deliberadamente distinto del crimson de marca
-// (hue ~355°) — con marca y "negativo" ambos en rojo, sobre blanco la
-// colisión visual es más fácil que sobre negro, así que la separación de
-// tono tiene que ser mayor, no igual.
-const BRAND = '#F62839';
+// Marca (color de marca) vs. estado (verde/rojo/gris de sentiment) vs.
+// línea de tendencia (ámbar) son tres roles de color distintos a propósito
+// — ver nota en :root del <style>. BRAND se usa solo en chrome/UI y en
+// series de un solo dataset (barras de drivers, heatmap); TONE_COLOR es la
+// única fuente de verdad para positivo/negativo/neutral. El rojo de
+// TONE_COLOR.neg es un terracota (hue ~11°) deliberadamente distinto del
+// crimson de Avianca (hue ~355°) — con marca y "negativo" ambos en rojo,
+// sobre blanco la colisión visual es más fácil que sobre negro, así que la
+// separación de tono tiene que ser mayor, no igual. BRAND llega inyectado
+// desde el perfil (build.py) — nunca hardcodeado por marca aquí.
+const BRAND = '__BRAND_COLOR__';
 const TONE_COLOR = { pos:'#1E8E3E', neg:'#B03D24', neu:'#8B8378' };
 const TREND_COLOR = '#8A6300';
 
 const FONT_MONO = "'JetBrains Mono', ui-monospace, Consolas, monospace";
 const FONT_SANS = "'Inter', system-ui, -apple-system, sans-serif";
+
+// Nombre de marca para mensajes de "sin datos todavía" — sale del payload
+// (DATA.brand, Tarea 1), nunca hardcodeado. Con brand.filter (build por
+// una sola marca, el caso de hoy) se usa ese nombre aunque el dataset esté
+// vacío — ver aggregate.build_payload. Fallback genérico solo por si algún
+// día se sirve un payload combinado (brand.filter=None) sin `names`.
+const BRAND_LABEL = (DATA.brand && (DATA.brand.filter || (DATA.brand.names || [])[0])) || 'esta marca';
+
+// Convierte un hex de marca a rgba(...) con la alpha pedida — reemplaza
+// los rgba(246,40,57,...) que antes estaban hardcodeados al rojo de
+// Avianca (heatmap, barra de driver en cero): con LATAM esos mismos
+// pixeles deben salir en azul de marca, no quedarse rojos.
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -543,6 +599,19 @@ const tooltipBase = {
 // ── Bloque 1: KPIs — la tasa de quejas es el héroe, no el sentiment ─────
 function renderKpis() {
   const k = DATA.kpis;
+  const kpisEl = document.getElementById('kpis');
+
+  // Degradado: sin menciones (caso LATAM recién arrancado) no hay tasa,
+  // sentiment ni rango de fechas que enseñar — un solo mensaje explícito
+  // en vez de "1 de cada 0", "+0.0%" o un "— → —" que parecería un bug.
+  if (k.total === 0) {
+    document.getElementById('rango').textContent = `Sin menciones registradas todavía · ${BRAND_LABEL}`;
+    kpisEl.classList.add('empty');
+    kpisEl.innerHTML = `<p class="block-empty">Todavía no hay menciones recolectadas para ${esc(BRAND_LABEL)} — este bloque se llena solo en cuanto arranque la recolección.</p>`;
+    return;
+  }
+  kpisEl.classList.remove('empty');
+
   const tone = sentimentTone(k.net_sentiment);
   document.getElementById('rango').textContent =
     `${fmtDate(k.date_from)} → ${fmtDate(k.date_to)} · ${fmtInt(k.total)} menciones · ${k.sources} fuentes`;
@@ -552,7 +621,7 @@ function renderKpis() {
 
   const ratio = k.complaints > 0 ? Math.round(k.total / k.complaints) : null;
 
-  document.getElementById('kpis').innerHTML = `
+  kpisEl.innerHTML = `
     <div class="kpi hero">
       <div class="kpi-lbl">Tasa de quejas</div>
       <div class="kpi-val hero-val">${ratio ? `1 de cada ${fmtInt(ratio)}` : '—'}</div>
@@ -590,6 +659,16 @@ function renderKpis() {
 let tlChart = null;
 function renderTimeline() {
   const rows = DATA.timeline;
+  const card = document.querySelector('#b2 .card');
+
+  // Degradado: sin ningún día con fecha confiable (dataset vacío, o solo
+  // menciones sin fecha) no hay serie que dibujar — un chart con ejes y
+  // cero puntos se leería como roto, no como "sin datos todavía".
+  if (!rows.length) {
+    card.innerHTML = `<p class="block-empty">Sin menciones con fecha confiable todavía para ${esc(BRAND_LABEL)} — este gráfico se activa en cuanto haya menciones fechadas.</p>`;
+    return;
+  }
+
   const labels = rows.map(r => r.date);
   const platforms = ['web', 'instagram', 'tiktok'];
 
@@ -700,6 +779,20 @@ function driverRowsFor(month) {
 }
 
 function renderDrivers(month) {
+  // Degradado: sin ninguna mención (DATA.kpis.total === 0) no hay drivers
+  // que graficar — mostrar los 9 drivers en cero, con etiqueta "0" al lado
+  // de cada barra, se leería como "ya sabemos que nadie se queja de nada",
+  // que no es lo mismo que "todavía no hay datos". Solo esta rama toca el
+  // layout de gráfico+lista; el selector de mes (#driverMonthSel) se deja
+  // intacto — con driver_trend vacío ya no tiene más opción que "Todo el
+  // periodo", así que nunca vuelve a disparar esta función.
+  if (DATA.kpis.total === 0) {
+    document.getElementById('driverInsight').textContent = `Sin quejas registradas todavía para ${BRAND_LABEL}.`;
+    document.querySelector('#b3 .driver-layout').innerHTML =
+      `<p class="block-empty" style="grid-column:1/-1">Este bloque se llena en cuanto haya menciones clasificadas para ${esc(BRAND_LABEL)}.</p>`;
+    return;
+  }
+
   const rows = driverRowsFor(month || '');
   const top = rows[0];
 
@@ -724,7 +817,7 @@ function renderDrivers(month) {
       labels: rows.map(r => DRIVER_LABEL[r.driver]),
       datasets: [{
         data: rows.map(r => r.count),
-        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(246,40,57,.18)' : BRAND),
+        backgroundColor: rows.map(r => r.count === 0 ? hexToRgba(BRAND, .18) : BRAND),
         borderRadius: 4, borderSkipped: 'left',
         barThickness: 20, minBarLength: 3,
         showEndLabels: true,
@@ -775,6 +868,15 @@ function initDriverSelect() {
 
 // ── Bloque 4: heatmap driver × plataforma (+ % Total, Cambio 4) ─────────
 function renderHeatmap() {
+  const el = document.getElementById('heatmap');
+
+  // Degradado: sin quejas con driver asignado, la tabla sería puro "0" en
+  // cada celda — nada que cruzar todavía.
+  if (!DATA.driver_by_platform.length) {
+    el.innerHTML = `<p class="block-empty">Sin quejas clasificadas todavía para ${esc(BRAND_LABEL)} — el cruce driver × plataforma aparece en cuanto haya datos.</p>`;
+    return;
+  }
+
   const platforms = ['web', 'instagram', 'tiktok'];
   const grid = {};
   DATA.driver_by_platform.forEach(r => { grid[r.driver + '|' + r.platform] = r.count; });
@@ -797,7 +899,7 @@ function renderHeatmap() {
   const cell = (v) => {
     if (!v) return `<td class="cell zero">0</td>`;
     const alpha = 0.14 + 0.72 * (v / max);
-    return `<td class="cell" style="background:rgba(246,40,57,${alpha.toFixed(2)})">${fmtInt(v)}</td>`;
+    return `<td class="cell" style="background:${hexToRgba(BRAND, alpha.toFixed(2))}">${fmtInt(v)}</td>`;
   };
 
   const html = `
@@ -826,7 +928,7 @@ function renderHeatmap() {
       </tbody>
     </table>
   `;
-  document.getElementById('heatmap').innerHTML = html;
+  el.innerHTML = html;
 }
 
 // ── Bloque 5: dona de sentiment + barras de emociones ────────────
@@ -891,10 +993,21 @@ function renderSentiment() {
 
   // ── emociones ──
   const emoEntries = Object.entries(DATA.emotions).sort((a, b) => b[1] - a[1]);
+  const box = document.getElementById('boxEmotions');
+
+  // Degradado: sin ninguna emoción clasificada, un chart de barras vacío
+  // (solo ejes, cero barras) se leería como roto, no como "sin datos".
+  if (!emoEntries.length) {
+    document.getElementById('legendEmotions').innerHTML = '';
+    box.style.height = '';
+    box.innerHTML = `<p class="block-empty">Sin emociones clasificadas todavía.</p>`;
+    if (emoChart) { emoChart.destroy(); emoChart = null; }
+    return;
+  }
+
   document.getElementById('legendEmotions').innerHTML =
     `<div class="leg-item"><span class="leg-swatch" style="background:#2A78D6"></span>Menciones por emoción dominante</div>`;
 
-  const box = document.getElementById('boxEmotions');
   box.style.height = Math.max(180, emoEntries.length * 30 + 30) + 'px';
 
   if (emoChart) emoChart.destroy();
@@ -1146,7 +1259,7 @@ function renderTopQuejas() {
   const sinAlcancePropio = DATA.top_complaints.without_own_reach || [];
 
   if (!conAlcancePropio.length && !sinAlcancePropio.length) {
-    el.innerHTML = `<p style="color:var(--txt-3);font-family:var(--mono);font-size:11px">Sin quejas registradas.</p>`;
+    el.innerHTML = `<p class="block-empty">Sin quejas registradas todavía para ${esc(BRAND_LABEL)}.</p>`;
     return;
   }
 
@@ -1166,6 +1279,16 @@ function renderTopQuejas() {
 // ── Bloque 8: calidad de datos — texto explícito, no solo números ─
 function renderCalidad() {
   const q = DATA.data_quality;
+  const calidadEl = document.getElementById('calidad');
+
+  // Degradado: sin ninguna mención, cada nota de este bloque terminaría
+  // hablando de "0 de 0" o "el 100% de las 0 voces" — cierto, pero lee
+  // como un bug. Un solo mensaje explícito en su lugar.
+  if (q.total === 0) {
+    calidadEl.innerHTML = `<p class="block-empty">Sin menciones recolectadas todavía para ${esc(BRAND_LABEL)} — este bloque reportará cobertura y calidad de datos en cuanto arranque la recolección.</p>`;
+    return;
+  }
+
   const platforms = ['web', 'instagram', 'tiktok'];
   const maxPlat = Math.max(...Object.values(q.by_platform), 1);
   const months = Object.entries(q.by_month);
@@ -1188,7 +1311,7 @@ function renderCalidad() {
       <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
     q.last_run_at
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
-      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
+      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con ${esc(BRAND_LABEL)}. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">—</span>
       <span>no hay registro de una corrida de recolección completada; no se puede reportar cuánto se descartó.</span></div>`,
     q.last_run_at

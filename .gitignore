@@ -4,6 +4,7 @@ __pycache__/
 data/*.db
 *.xlsx
 dashboard/avianca_dashboard_*.html
+dashboard/latam_dashboard_*.html
 .pytest_cache/
 .superpowers/
 
