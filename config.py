@@ -63,9 +63,17 @@ BRANDS = {
     "LATAM": {
         "name": "LATAM",
         "keyword": "LATAM",
+        # Handles verificados contra la API real de Apify el 2026-08-20:
+        # "latam_airlines" y "latamcolombia" (los que había antes) no
+        # existen — el actor los devuelve como {"error": "not_found"} en
+        # la Fase 1, así que scrape() caía en "Sin posts para extraer
+        # comentarios" sin ningún error visible (0 menciones de Instagram,
+        # corrida "exitosa"). Los handles reales, verificados con cuenta
+        # verificada y posts recientes: @latamairlines (global, 3.2M
+        # seguidores) y @latamairlines_colombia (Colombia, 68K seguidores).
         "instagram_profiles": [
-            "https://www.instagram.com/latam_airlines/",
-            "https://www.instagram.com/latamcolombia/",
+            "https://www.instagram.com/latamairlines/",
+            "https://www.instagram.com/latamairlines_colombia/",
         ],
         "domains": {
             "latamairlines.com", "www.latamairlines.com",
