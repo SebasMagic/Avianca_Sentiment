@@ -188,6 +188,12 @@
     text-transform:uppercase;letter-spacing:.06em;text-align:left;
     padding:9px 10px;border-bottom:1px solid var(--border);
   }
+  #tabla thead th.sortable{cursor:pointer;user-select:none;white-space:nowrap;transition:color .12s}
+  #tabla thead th.sortable:hover{color:var(--txt)}
+  #tabla thead th.sorted{color:var(--brand)}
+  #tabla thead th .sort-ind{display:inline-block;width:.9em;margin-left:4px;font-size:8px;vertical-align:middle}
+  /* Reserva el espacio de la flecha en todas las cabeceras ordenables para que
+     las columnas no salten de ancho al cambiar el orden. */
   #tabla td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--txt-2)}
   #tabla tbody tr:hover{background:rgba(255,244,235,.025)}
   #tabla td.txt{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
@@ -330,8 +336,14 @@
     <div class="card">
       <div id="filtros"></div>
       <div class="scroll-x"><table id="tabla">
-        <thead><tr><th>Fecha</th><th>Plataforma</th><th>Autor</th>
-          <th>Texto</th><th>Driver</th><th>Engagement</th><th>Link</th></tr></thead>
+        <thead><tr>
+          <th class="sortable" data-sort="published_at">Fecha<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="platform">Plataforma<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="author">Autor<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="text">Texto<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="complaint_driver">Driver<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="engagement">Engagement<span class="sort-ind"></span></th>
+          <th>Link</th></tr></thead>
         <tbody id="tbody"></tbody></table></div>
       <p id="conteoTabla" class="muted"></p></div></section>
 
@@ -834,14 +846,65 @@ function renderSentiment() {
 // ── Bloque 6: tabla con filtros en JS puro sobre DATA.mentions ───
 let filtros = { platform: '', driver: '', sentiment: '', q: '', repetidas: false };
 
+// Arranca por alcance descendente: la pregunta más frecuente sobre esta tabla
+// es "cuáles pegaron más", y de paso hunde el ruido web sin engagement.
+let orden = { col: 'engagement', dir: 'desc' };
+
+// Columnas numéricas y de fecha arrancan en descendente al hacer clic; las de
+// texto en ascendente, que es como se espera leer un listado alfabético.
+const SORT_DESC_FIRST = new Set(['engagement', 'published_at']);
+
+function valorOrden(m, col) {
+  if (col === 'engagement') return m.engagement || 0;
+  if (col === 'published_at') return m.published_at || '';
+  return (m[col] || '').toString().toLowerCase();
+}
+
+function ordenadas(rows) {
+  const { col, dir } = orden;
+  const signo = dir === 'asc' ? 1 : -1;
+  return rows.slice().sort((a, b) => {
+    const va = valorOrden(a, col), vb = valorOrden(b, col);
+    // Las menciones sin fecha o sin driver van siempre al final, ordene como ordene:
+    // son ausencia de dato, no un valor que compita en el ranking.
+    const fa = va === '', fb = vb === '';
+    if (fa !== fb) return fa ? 1 : -1;
+    if (typeof va === 'number') return (va - vb) * signo;
+    return va.localeCompare(vb, 'es') * signo;
+  });
+}
+
 function filtradas() {
-  return DATA.mentions.filter(m =>
+  return ordenadas(DATA.mentions.filter(m =>
     (!filtros.platform || m.platform === filtros.platform) &&
     (!filtros.driver || m.complaint_driver === filtros.driver) &&
     (!filtros.sentiment || (filtros.sentiment === 'queja' ? m.is_complaint : !m.is_complaint)) &&
     (!filtros.repetidas || m.repeat_count > 1) &&
     (!filtros.q || (m.text || '').toLowerCase().includes(filtros.q.toLowerCase()))
-  );
+  ));
+}
+
+function initOrden() {
+  document.querySelectorAll('#tabla th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (orden.col === col) {
+        orden.dir = orden.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        orden = { col, dir: SORT_DESC_FIRST.has(col) ? 'desc' : 'asc' };
+      }
+      renderTabla();
+    });
+  });
+}
+
+function pintaIndicadores() {
+  document.querySelectorAll('#tabla th.sortable').forEach(th => {
+    const activa = th.dataset.sort === orden.col;
+    th.classList.toggle('sorted', activa);
+    th.querySelector('.sort-ind').textContent = activa ? (orden.dir === 'asc' ? '▲' : '▼') : '';
+    th.setAttribute('aria-sort', activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
 }
 
 function initFiltros() {
@@ -904,8 +967,10 @@ function renderTabla() {
     }).join('');
   }
 
+  pintaIndicadores();
+
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto`;
 }
 
 // ── Bloque 7: cards ordenadas por engagement ─────────────────────
@@ -999,7 +1064,7 @@ function renderCalidad() {
   renderKpis, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
-  () => { initFiltros(); renderTabla(); },
+  () => { initFiltros(); initOrden(); renderTabla(); },
   renderTopQuejas, renderCalidad,
 ].forEach(fn => fn());
 </script>
