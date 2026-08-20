@@ -56,6 +56,23 @@ def test_sentiment_se_renormaliza_a_uno():
     total = (out["sentiment_positive"] + out["sentiment_negative"]
              + out["sentiment_neutral"])
     assert abs(total - 1.0) < 0.01
+    # No solo debe sumar 1.0: las proporciones originales (1:1:0) deben
+    # preservarse, no colapsar a cualquier combinación que sume 1.
+    assert out["sentiment_positive"] == out["sentiment_negative"] == 0.5
+    assert out["sentiment_neutral"] == 0.0
+
+
+def test_emotion_no_hasheable_no_lanza_y_cae_a_neutral():
+    out_list = classifier.normalize_result({**OK, "emotion": ["a", "b"]})
+    assert out_list["emotion"] == "neutral"
+
+    out_dict = classifier.normalize_result({**OK, "emotion": {"x": 1}})
+    assert out_dict["emotion"] == "neutral"
+
+
+def test_raw_no_dict_devuelve_none_no_neutral():
+    assert classifier.normalize_result(None) is None
+    assert classifier.normalize_result("basura") is None
 
 
 @patch("pipeline.classifier.requests.post")
@@ -67,8 +84,9 @@ def test_batch_feliz(mock_post):
     assert mock_post.call_count == 1
 
 
+@patch("pipeline.classifier.time.sleep")
 @patch("pipeline.classifier.requests.post")
-def test_longitud_desigual_no_hace_zip_y_cae_a_item_por_item(mock_post):
+def test_longitud_desigual_no_hace_zip_y_cae_a_item_por_item(mock_post, mock_sleep):
     # 1º llamado (batch de 2) devuelve 1 objeto → inválido
     # 2º llamado (reintento del batch) devuelve 1 objeto → inválido otra vez
     # 3º y 4º llamados (item por item) devuelven 1 objeto cada uno → válidos
@@ -85,6 +103,21 @@ def test_longitud_desigual_no_hace_zip_y_cae_a_item_por_item(mock_post):
 
 
 @patch("pipeline.classifier.requests.post")
+def test_elemento_no_dict_en_batch_valido_no_se_cuela_como_neutral(mock_post):
+    # El array JSON tiene la longitud correcta (2), así que _call_api NO
+    # lanza y no hay reintento — pero el segundo elemento es null, no un
+    # objeto. Antes del fix esto se colaba como {"is_complaint": False, ...}
+    # (un neutral falso); ahora debe quedar None, sin disfrazarse.
+    mock_post.return_value = _api_response([OK, None])
+    out = classifier.classify_texts([
+        "queja real sobre maleta perdida", "otra queja seria",
+    ])
+    assert mock_post.call_count == 1
+    assert out[0]["complaint_driver"] == "equipaje"
+    assert out[1] is None
+
+
+@patch("pipeline.classifier.requests.post")
 def test_parsea_respuesta_envuelta_en_fences(mock_post):
     resp = MagicMock()
     resp.raise_for_status.return_value = None
@@ -96,8 +129,9 @@ def test_parsea_respuesta_envuelta_en_fences(mock_post):
     assert out[0]["complaint_driver"] == "equipaje"
 
 
+@patch("pipeline.classifier.time.sleep")
 @patch("pipeline.classifier.requests.post")
-def test_fallo_total_devuelve_none_no_neutral(mock_post):
+def test_fallo_total_devuelve_none_no_neutral(mock_post, mock_sleep):
     mock_post.side_effect = Exception("boom")
     out = classifier.classify_texts(["texto uno"])
     assert out == [None]

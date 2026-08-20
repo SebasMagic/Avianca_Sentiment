@@ -12,6 +12,12 @@ Diferencias clave con el sentiment_engine del v1:
     zip (eso truncaba en silencio). Se reintenta y luego se cae a
     item por item.
   - Lo que no se logra clasificar devuelve None, no un neutral falso.
+    Esto incluye el caso ítem por ítem: si el array JSON tiene la
+    longitud correcta pero un elemento puntual no es un objeto (el LLM
+    a veces devuelve null para un ítem que no logró estructurar),
+    normalize_result devuelve None para ESE elemento en vez de colarlo
+    como neutral. No existe ningún camino en este módulo que produzca
+    un neutral sintético.
 """
 import json
 import time
@@ -27,15 +33,6 @@ BATCH_SIZE = 10
 MAX_RETRIES = 1
 
 VALID_EMOTIONS = {"happiness", "anger", "love", "sadness", "neutral"}
-
-NEUTRAL = {
-    "sentiment_positive": 0.0,
-    "sentiment_negative": 0.0,
-    "sentiment_neutral": 1.0,
-    "emotion": "neutral",
-    "is_complaint": False,
-    "complaint_driver": None,
-}
 
 SYSTEM_PROMPT = f"""Eres un analizador de menciones de marca en español latinoamericano, especializado en la aerolínea Avianca en Colombia.
 
@@ -56,16 +53,30 @@ Reglas:
   Es false para contenido promocional, noticias, opinión neutral o contenido positivo.
 - complaint_driver es null cuando is_complaint es false.
   Cuando is_complaint es true, es OBLIGATORIO y debe ser exactamente uno de:
-    "equipaje"          — maletas perdidas, dañadas, demoradas, cobros de equipaje
+    "equipaje"          — maletas perdidas, dañadas o demoradas (manejo físico del equipaje)
     "cancelacion"       — vuelos cancelados, reprogramados sin aviso
     "demora"            — retrasos, conexiones perdidas por retraso
     "atencion_cliente"  — mal trato, call center, falta de respuesta, personal
-    "cobros_tarifas"    — cobros indebidos, precios, cargos ocultos, penalidades
+    "cobros_tarifas"    — cobros indebidos, precios, cargos ocultos, penalidades, cobros de equipaje
     "lifemiles"         — millas, programa de fidelidad, redenciones
     "asientos_comida"   — asientos, espacio, comida a bordo, entretenimiento
     "reembolsos"        — devoluciones de dinero que no llegan o se demoran
     "otro"              — queja real que no encaja en ninguna de las anteriores
 - Ante duda sobre la categoría de una queja real, usa "otro".
+- Muchas quejas encajan literalmente en más de un driver a la vez (la maleta
+  no llegó porque cancelaron el vuelo; cobraron de más y nunca devolvieron
+  el dinero; "cobros de equipaje" suena a la vez a equipaje y a tarifas).
+  Para esos casos, elige el PRIMERO que aplique en este orden de precedencia,
+  no el que te parezca más específico:
+    cancelacion > demora > equipaje > reembolsos > cobros_tarifas
+    > lifemiles > asientos_comida > atencion_cliente > otro
+  Esta prioridad no es arbitraria:
+  (a) las disrupciones de vuelo (cancelacion, demora) van primero porque son
+      la causa raíz accionable — si la maleta no llegó porque cancelaron el
+      vuelo, lo que hay que arreglar es la cancelación, no el equipaje;
+  (b) atencion_cliente va casi al final a propósito, porque casi toda queja
+      incluye "y nadie me ayudó" — si fuera prioritario se tragaría el resto
+      de las categorías y perderíamos la causa real del problema.
 - Sé preciso con el español coloquial colombiano."""
 
 
@@ -76,10 +87,26 @@ def _clamp(value, default=0.0):
         return default
 
 
-def normalize_result(raw: dict) -> dict:
-    """Sanea la respuesta del modelo al contrato. Nunca lanza."""
+def _to_bool(value) -> bool:
+    """bool() normal, salvo por strings tipo 'false'/'no'/'0' que no deben
+    contar como verdaderos (algunos LLM devuelven booleanos como texto)."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "no", "0", "")
+    return bool(value)
+
+
+def normalize_result(raw: dict) -> dict | None:
+    """
+    Sanea la respuesta del modelo al contrato. Nunca lanza.
+
+    Devuelve None (no un neutral sintético) cuando `raw` no es un dict
+    clasificable — p. ej. el LLM devolvió null, un string o un número
+    para ese ítem puntual dentro de un array por lo demás válido. Un
+    None aquí se propaga tal cual hasta classify_texts, para que quien
+    llame lo trate como "no clasificado", nunca como "neutral real".
+    """
     if not isinstance(raw, dict):
-        return dict(NEUTRAL)
+        return None
 
     pos = _clamp(raw.get("sentiment_positive"))
     neg = _clamp(raw.get("sentiment_negative"))
@@ -91,10 +118,10 @@ def normalize_result(raw: dict) -> dict:
         pos, neg, neu = pos / total, neg / total, neu / total
 
     emotion = raw.get("emotion")
-    if emotion not in VALID_EMOTIONS:
+    if not isinstance(emotion, str) or emotion not in VALID_EMOTIONS:
         emotion = "neutral"
 
-    is_complaint = bool(raw.get("is_complaint", False))
+    is_complaint = _to_bool(raw.get("is_complaint", False))
 
     driver = raw.get("complaint_driver")
     if not is_complaint:
@@ -122,10 +149,15 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
-def _call_api(texts: list[str]) -> list[dict]:
+def _call_api(texts: list[str]) -> list[dict | None]:
     """
     Un llamado a DeepSeek. Lanza si la respuesta no es una lista del
     mismo largo que la entrada — nunca hace zip a ciegas.
+
+    Un elemento individual que no sea un objeto clasificable (null,
+    string, número) se convierte en None vía normalize_result, no en
+    un neutral — la longitud del batch puede ser correcta y aun así
+    contener ítems que el modelo no logró estructurar.
     """
     prompt = (
         f"Analiza cada uno de los siguientes {len(texts)} textos sobre Avianca.\n"
@@ -167,8 +199,13 @@ def _call_api(texts: list[str]) -> list[dict]:
     return [normalize_result(p) for p in parsed]
 
 
-def _attempt(texts: list[str]) -> list[dict] | None:
-    """Intenta un batch con reintentos. Devuelve None si nunca funcionó."""
+def _attempt(texts: list[str]) -> list[dict | None] | None:
+    """
+    Intenta un batch con reintentos. Devuelve None (todo el intento) si
+    nunca funcionó; si funcionó, devuelve una lista del mismo largo que
+    `texts`, que puede a su vez contener None por ítem individual sin
+    estructurar (ver _call_api).
+    """
     for intento in range(MAX_RETRIES + 1):
         try:
             return _call_api(texts)
