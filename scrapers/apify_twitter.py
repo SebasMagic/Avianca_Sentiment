@@ -49,7 +49,7 @@ def scrape() -> list[dict]:
             "source_url": item.get("url", ""),
             "text": text,
             "author": author.get("userName", item.get("userName", None)),
-            "published_at": item.get("createdAt", fetched_at),
+            "published_at": item.get("createdAt") or None,
             "country": "CO",
             "likes": item.get("likeCount", 0) or 0,
             "shares": item.get("retweetCount", 0) or 0,
