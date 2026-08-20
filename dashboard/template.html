@@ -213,7 +213,7 @@
     font-family:var(--sans);font-size:11.5px;padding:7px 12px;border-radius:5px;cursor:pointer;
   }
   .btn-reset:hover{color:var(--txt);border-color:var(--txt-3)}
-  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:1320px}
   #tabla thead th{
     position:sticky;top:0;background:var(--bg-3);z-index:1;
     font-family:var(--mono);font-size:10px;color:var(--txt-2);
@@ -232,6 +232,14 @@
   #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
   #tabla td.date.unknown{color:var(--txt-3)}
   #tabla td.eng{font-family:var(--mono);text-align:right;color:var(--txt)}
+  /* Las tres capas (Cambio Tarea 3): columnas de métrica separadas, cada
+     una ordenable por su cuenta. .metric agrupa los cinco números crudos
+     (likes/comentarios/shares/saves/alcance); .metric.reach lleva un
+     acento sutil porque es la capa que manda ahora, no engagement. */
+  #tabla td.metric{font-family:var(--mono);text-align:right;color:var(--txt-2);white-space:nowrap}
+  #tabla td.metric.reach{color:var(--txt);font-weight:600}
+  #tabla td.metric .dash{color:var(--txt-3);font-weight:400}
+  #tabla th.sortable.reach{color:var(--brand-ink)}
   #tabla td.link a{color:var(--blue);text-decoration:none;font-size:11px}
   #tabla td.link a:hover{text-decoration:underline}
   .plat-tag{display:inline-flex;align-items:center;gap:6px;color:var(--txt-2)}
@@ -254,12 +262,24 @@
   #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
   .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
 
-  /* ── block 7 · top quejas ── */
-  #topQuejas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  /* ── block 7 · top quejas ──
+     Cambio Tarea 3: ya no hay un solo grid — hay dos grupos. with_reach
+     (rankeado por alcance real) lleva el borde rojo de "esto es lo que
+     manda"; without_reach (sin alcance medido, rankeado por interacciones)
+     usa un borde neutro para no impostar una jerarquía que no se puede
+     sostener con el dato que hay. */
+  .cq-group-title{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--txt-3);margin:22px 0 10px;display:flex;align-items:center;gap:10px;
+  }
+  .cq-group-title:first-child{margin-top:0}
+  .cq-group-title::after{content:'';flex:1;height:1px;background:var(--border)}
+  .cq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .cq-card{
     background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--red);
     border-radius:6px;padding:14px 16px;
   }
+  .cq-card.no-reach{border-left-color:var(--border)}
   .cq-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
   .cq-plat{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-2)}
   .cq-rank{font-family:var(--mono);color:var(--txt-3);margin-right:2px}
@@ -267,6 +287,10 @@
   .cq-eng small{font-family:var(--sans);font-size:9px;font-weight:400;color:var(--txt-3);text-transform:uppercase;letter-spacing:.06em;margin-left:3px}
   .cq-author{font-family:var(--mono);font-size:10.5px;color:var(--txt-3);margin-bottom:6px;display:flex;align-items:center;gap:6px}
   .cq-text{font-size:11.5px;color:var(--txt-2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:10px}
+  /* Interacciones + tasa como CONTEXTO junto al alcance — nunca sumadas
+     en el número principal (Tarea 3). */
+  .cq-context{font-family:var(--mono);font-size:10.5px;color:var(--txt-3);margin-bottom:10px}
+  .cq-context b{color:var(--txt-2);font-weight:600}
   .cq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .cq-date{font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
   .cq-link{font-size:10.5px;color:var(--blue);text-decoration:none}
@@ -297,6 +321,25 @@
   }
   .q-chip b{color:var(--txt)}
   @media (max-width:860px){ .q-grid{grid-template-columns:1fr} }
+
+  /* Tarea 4: cobertura por métrica y plataforma — tabla propia, ancho
+     completo, debajo del grid de dos columnas. Mismo lenguaje visual que
+     #heatmap (bloque 4): valor real en mono, "no aplica" en tinta apagada
+     en vez de un 0 que confundiría "nunca se mide" con "se midió cero". */
+  .q-coverage{margin-top:26px}
+  .q-coverage table{width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px}
+  .q-coverage th, .q-coverage td{padding:8px 10px;text-align:right;border:1px solid var(--border)}
+  .q-coverage th{
+    font-family:var(--mono);font-size:9.5px;color:var(--txt-2);text-transform:uppercase;
+    letter-spacing:.06em;background:var(--bg-3);
+  }
+  .q-coverage th:first-child, .q-coverage td.rowhead{text-align:left}
+  .q-coverage td.rowhead{
+    font-family:var(--sans);font-weight:600;color:var(--txt);background:var(--bg-3);white-space:nowrap;
+  }
+  .q-coverage td{font-family:var(--mono);color:var(--txt)}
+  .q-coverage td .frac-total{color:var(--txt-3);font-weight:400}
+  .q-coverage td.na{color:var(--txt-3);font-family:var(--sans);font-style:italic;font-weight:400}
 
   footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
     font-family:var(--mono);font-size:10px;color:var(--txt-3);letter-spacing:.04em}
@@ -374,6 +417,11 @@
           <th class="sortable" data-sort="author">Autor<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="text">Texto<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="complaint_driver">Driver<span class="sort-ind"></span></th>
+          <th class="sortable reach" data-sort="views">Alcance<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="likes">Likes<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="comments_count">Coment.<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="shares">Shares<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="saves">Saves<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="engagement">Engagement<span class="sort-ind"></span></th>
           <th>Link</th></tr></thead>
         <tbody id="tbody"></tbody></table></div>
@@ -882,17 +930,28 @@ function renderSentiment() {
 // ── Bloque 6: tabla con filtros en JS puro sobre DATA.mentions ───
 let filtros = { platform: '', driver: '', sentiment: '', q: '', repetidas: false };
 
-// Arranca por alcance descendente: la pregunta más frecuente sobre esta tabla
-// es "cuáles pegaron más", y de paso hunde el ruido web sin engagement.
-let orden = { col: 'engagement', dir: 'desc' };
+// Arranca por ALCANCE descendente (Tarea 3): views es la métrica que manda
+// ahora, no engagement — la suma vieja subestimaba. Las voces sin alcance
+// medido caen al final por la regla de "sin dato" de ordenadas(), no se
+// pierden.
+let orden = { col: 'views', dir: 'desc' };
 
 // Columnas numéricas y de fecha arrancan en descendente al hacer clic; las de
 // texto en ascendente, que es como se espera leer un listado alfabético.
-const SORT_DESC_FIRST = new Set(['engagement', 'published_at']);
+const SORT_DESC_FIRST = new Set([
+  'engagement', 'published_at', 'likes', 'comments_count', 'shares', 'saves', 'views',
+]);
+const NUMERIC_COLS = new Set(['engagement', 'likes', 'comments_count', 'shares', 'saves', 'views']);
 
 function valorOrden(m, col) {
-  if (col === 'engagement') return m.engagement || 0;
   if (col === 'published_at') return m.published_at || '';
+  if (NUMERIC_COLS.has(col)) {
+    // null/undefined -> '' para que caiga en la misma regla de "sin dato
+    // va al final" que ya aplica a fechas y drivers vacíos, en vez de
+    // ordenar como si fuera un cero real.
+    const v = m[col];
+    return (v === null || v === undefined) ? '' : v;
+  }
   return (m[col] || '').toString().toLowerCase();
 }
 
@@ -983,20 +1042,35 @@ function renderTabla() {
   const tbody = document.getElementById('tbody');
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Sin menciones que coincidan con los filtros</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">Sin menciones que coincidan con los filtros</td></tr>`;
   } else {
     tbody.innerHTML = rows.map(m => {
       const unknown = m.date_confidence === 'unknown';
       const drv = m.complaint_driver ? DRIVER_LABEL[m.complaint_driver] || m.complaint_driver : null;
       const repeatBadge = m.repeat_count > 1
-        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — el engagement ya está sumado">×${m.repeat_count}</span>`
+        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — engagement, interacciones y alcance ya están sumados">×${m.repeat_count}</span>`
         : '';
+      // Las tres capas (Tarea 3): metricCell() pinta guion cuando la
+      // métrica no aplica a la plataforma o no se midió (null) — nunca un
+      // 0 que sugiera "se midió y dio cero".
+      const metricCell = (val, extraClass = '') =>
+        `<td class="metric ${extraClass}">${val == null ? '<span class="dash">—</span>' : fmtInt(val)}</td>`;
+      const reachTitle = m.views == null ? '' : (
+        m.reach_source === 'propio' ? 'Alcance propio del contenido'
+        : m.reach_source === 'post' ? 'Alcance del post que contiene este comentario, no del comentario mismo'
+        : ''
+      );
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
         <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
         <td><span class="author-cell">${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}${repeatBadge}</span></td>
         <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
         <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
+        <td class="metric reach" title="${reachTitle}">${m.views == null ? '<span class="dash">—</span>' : fmtInt(m.views)}</td>
+        ${metricCell(m.likes)}
+        ${metricCell(m.comments_count)}
+        ${metricCell(m.shares)}
+        ${metricCell(m.saves)}
         <td class="eng">${fmtInt(m.engagement)}</td>
         <td class="link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : '—'}</td>
       </tr>`;
@@ -1006,30 +1080,61 @@ function renderTabla() {
   pintaIndicadores();
 
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8)`;
 }
 
-// ── Bloque 7: cards ordenadas por engagement ─────────────────────
-function renderTopQuejas() {
-  const el = document.getElementById('topQuejas');
-  if (!DATA.top_complaints.length) {
-    el.innerHTML = `<p style="color:var(--txt-3);font-family:var(--mono);font-size:11px">Sin quejas registradas.</p>`;
-    return;
-  }
-  el.innerHTML = DATA.top_complaints.map((m, i) => `
-    <div class="cq-card">
+// ── Bloque 7: cards, en dos grupos (Tarea 3) ──────────────────────
+// Rankear por engagement (la suma vieja) subestimaba: un video con 61.500
+// views y 2.216 de engagement quedaba por debajo de contenido con menos
+// alcance real. Ahora with_reach manda por views; without_reach (sin
+// alcance medido) NO se mezcla en el mismo orden — se muestra aparte, por
+// interacciones, y se dice explícitamente que no tiene alcance medido.
+function cqCard(m, i, { reachGroup }) {
+  const reachLabel = m.reach_source === 'propio' ? 'alcance propio'
+    : m.reach_source === 'post' ? 'alcance del post' : 'alcance';
+  const heroValue = reachGroup ? fmtInt(m.views) : fmtInt(m.interactions ?? 0);
+  const heroLabel = reachGroup ? reachLabel : 'interacciones';
+  const contexto = reachGroup
+    ? `${fmtInt(m.interactions ?? 0)} interacciones${m.interaction_rate != null ? ` · ${fmtPct(m.interaction_rate)} tasa` : ''}`
+    : `sin alcance medido para esta plataforma o esta fila`;
+  return `
+    <div class="cq-card ${reachGroup ? '' : 'no-reach'}">
       <div class="cq-top">
         <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
-        <span class="cq-eng">${fmtInt(m.engagement)}<small>alcance</small></span>
+        <span class="cq-eng">${heroValue}<small>${esc(heroLabel)}</small></span>
       </div>
-      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — alcance sumado">×${m.repeat_count}</span>` : ''}</div>` : ''}
+      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — sumado">×${m.repeat_count}</span>` : ''}</div>` : ''}
       <div class="cq-text">${esc(m.text)}</div>
+      <div class="cq-context">${esc(contexto)}</div>
       <div class="cq-foot">
         <span class="cq-date">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: 'numeric' })}${m.complaint_driver ? ' · ' + esc(DRIVER_LABEL[m.complaint_driver] || m.complaint_driver) : ''}</span>
         ${m.source_url ? `<a class="cq-link" href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver original ↗</a>` : ''}
       </div>
     </div>
-  `).join('');
+  `;
+}
+
+function renderTopQuejas() {
+  const el = document.getElementById('topQuejas');
+  const conReach = DATA.top_complaints.with_reach || [];
+  const sinReach = DATA.top_complaints.without_reach || [];
+
+  if (!conReach.length && !sinReach.length) {
+    el.innerHTML = `<p style="color:var(--txt-3);font-family:var(--mono);font-size:11px">Sin quejas registradas.</p>`;
+    return;
+  }
+
+  const bloqueConReach = conReach.length ? `
+    <div class="cq-group-title">Por alcance real (${fmtInt(conReach.length)})</div>
+    <div class="cq-grid">${conReach.map((m, i) => cqCard(m, i, { reachGroup: true })).join('')}</div>
+  ` : '';
+
+  const bloqueSinReach = sinReach.length ? `
+    <div class="cq-group-title">Sin alcance medido — por interacciones (${fmtInt(sinReach.length)})</div>
+    <div class="cq-grid">${sinReach.map((m, i) => cqCard(m, i, { reachGroup: false })).join('')}</div>
+  ` : '';
+
+  el.innerHTML = bloqueConReach + bloqueSinReach;
 }
 
 // ── Bloque 8: calidad de datos — texto explícito, no solo números ─
@@ -1092,6 +1197,59 @@ function renderCalidad() {
         </div>
         ${missing ? `<div class="q-missing">⚠ ${esc(missing)} no ${q.missing_sources.length > 1 ? 'están cubiertos' : 'está cubierto'} en esta versión del monitor.</div>` : ''}
       </div>
+    </div>
+    ${renderMetricCoverage(q.metric_coverage, q.metric_applies)}
+  `;
+}
+
+// Tarea 4: por plataforma, qué métricas de engagement hay y cuáles no, con
+// conteo de filas — antes de leer la tabla del bloque 6 o el top de
+// quejas, un lector tiene que poder ver que p.ej. "saves" solo cubre un
+// subconjunto de tiktok, y que instagram nunca tiene shares.
+const METRIC_COLS = [
+  ['likes', 'Likes'], ['comments_count', 'Comentarios'], ['shares', 'Shares'],
+  ['saves', 'Saves'], ['views', 'Alcance'],
+];
+
+function renderMetricCoverage(coverage, applies) {
+  if (!coverage || !Object.keys(coverage).length) return '';
+  const platforms = ['tiktok', 'instagram', 'web'].filter(p => coverage[p]);
+
+  const cell = (p, metric) => {
+    const c = coverage[p];
+    const covered = c[metric] || 0;
+    // "no aplica" = la plataforma NUNCA va a tener este dato (declarado en
+    // METRIC_APPLIES / aggregate.py) — distinto de "0 de N", que sería
+    // "aplica en teoría pero hoy ninguna fila lo tiene medido".
+    const aplica = applies && applies[p] && applies[p][metric];
+    if (!aplica) return `<td class="na">no aplica</td>`;
+    return `<td>${fmtInt(covered)}<span class="frac-total"> / ${fmtInt(c.total)}</span></td>`;
+  };
+
+  return `
+    <div class="q-coverage">
+      <div class="q-block-title">Cobertura de métricas de engagement, por plataforma</div>
+      <div class="scroll-x">
+        <table>
+          <thead><tr>
+            <th>Plataforma</th>
+            ${METRIC_COLS.map(([, label]) => `<th>${esc(label)}</th>`).join('')}
+            <th>Voces</th>
+          </tr></thead>
+          <tbody>
+            ${platforms.map(p => `
+              <tr>
+                <td class="rowhead">${esc(PLT_LABEL[p] || p)}</td>
+                ${METRIC_COLS.map(([key]) => cell(p, key)).join('')}
+                <td>${fmtInt(coverage[p].total)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3)">
+        "no aplica" = ninguna voz de esa plataforma tiene ese dato — ver bloque 6 (columnas con guion) y el detalle de cobertura en el reporte del proyecto.
+      </p>
     </div>
   `;
 }

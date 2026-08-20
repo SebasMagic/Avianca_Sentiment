@@ -189,14 +189,49 @@ def test_driver_por_plataforma(tmp_db):
     assert celda[0]["count"] == 1
 
 
-def test_top_complaints_ordenadas_por_engagement(tmp_db):
+def test_top_complaints_sin_alcance_van_al_grupo_without_reach_por_interacciones(tmp_db):
+    """
+    Ninguna de estas dos quejas tiene `views` (no se corrió el
+    enriquecimiento de alcance) — deben caer en el grupo without_reach,
+    ordenadas por interactions (likes+shares+comments_count+saves), no
+    inventarse un puesto en with_reach.
+    """
     _seed(tmp_db, [
         _m(1, likes=5, shares=0, comments_count=0),
         _m(2, likes=500, shares=100, comments_count=50),
     ])
     p = aggregate.build_payload(tmp_db)
-    assert p["top_complaints"][0]["engagement"] == 650
-    assert p["top_complaints"][0]["id"] == "m-2"
+    assert p["top_complaints"]["with_reach"] == []
+    sin_alcance = p["top_complaints"]["without_reach"]
+    assert sin_alcance[0]["id"] == "m-2"
+    assert sin_alcance[0]["interactions"] == 650
+    assert sin_alcance[0]["engagement"] == 650  # se conserva, no se rompe
+
+
+def test_top_complaints_con_alcance_se_rankean_por_views_no_por_engagement(tmp_db):
+    """
+    Regresión del hallazgo central de la Tarea 3: engagement subestima el
+    alcance real. Una queja con pocas views pero mucho engagement sumado NO
+    debe ganarle a una con más alcance real — el ranking usa views.
+    """
+    _seed(tmp_db, [
+        _m(1, likes=2000, shares=200, comments_count=16, views=2000),   # engagement alto, alcance chico
+        _m(2, likes=1961, shares=200, comments_count=55, views=61500),  # engagement menor, alcance real mayor
+    ])
+    p = aggregate.build_payload(tmp_db)
+    con_alcance = p["top_complaints"]["with_reach"]
+    assert [f["id"] for f in con_alcance] == ["m-2", "m-1"]
+    assert con_alcance[0]["views"] == 61500
+
+
+def test_top_complaints_mezcla_con_y_sin_alcance_no_se_mezclan_en_un_solo_orden(tmp_db):
+    _seed(tmp_db, [
+        _m(1, views=100, likes=10, shares=0, comments_count=0),
+        _m(2, views=None, likes=99999, shares=0, comments_count=0),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert [f["id"] for f in p["top_complaints"]["with_reach"]] == ["m-1"]
+    assert [f["id"] for f in p["top_complaints"]["without_reach"]] == ["m-2"]
 
 
 def test_data_quality_reporta_huecos(tmp_db):
@@ -261,7 +296,192 @@ def test_mentions_incluye_todo_para_la_tabla(tmp_db):
         "id", "platform", "text", "author", "published_at",
         "source_url", "complaint_driver", "is_complaint", "engagement",
         "repeat_count",
+        # Tarea 3: las tres capas — nunca sumadas en un compuesto.
+        "likes", "shares", "comments_count", "saves", "views",
+        "reach_source", "interactions", "interaction_rate",
     }
+
+
+# ── Tarea 3: las tres capas de engagement (alcance / interacciones / tasa) ─
+
+def test_metricas_que_no_aplican_a_la_plataforma_quedan_none_no_cero(tmp_db):
+    """
+    web no tiene NINGUNA métrica de engagement — DataForSEO nunca la
+    entrega. Deben quedar None (guion en el dashboard), no 0, aunque el
+    schema por defecto guarde 0 en likes/shares/comments_count.
+    """
+    _seed(tmp_db, [_m(1, platform="web", likes=0, shares=0, comments_count=0)])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    assert voz["likes"] is None
+    assert voz["shares"] is None
+    assert voz["comments_count"] is None
+    assert voz["saves"] is None
+    assert voz["views"] is None
+    assert voz["interactions"] is None
+    assert voz["interaction_rate"] is None
+
+
+def test_instagram_solo_likes_y_views_aplican(tmp_db):
+    """Instagram: likes (propio del comentario) y views (prestado del post)
+    aplican; shares/comments_count/saves no — un comentario no los tiene."""
+    _seed(tmp_db, [_m(1, platform="instagram", likes=7, shares=0, comments_count=0,
+                       views=32600, reach_source="post")])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    assert voz["likes"] == 7
+    assert voz["shares"] is None
+    assert voz["comments_count"] is None
+    assert voz["saves"] is None
+    assert voz["views"] == 32600
+    assert voz["reach_source"] == "post"
+
+
+def test_tiktok_las_cinco_metricas_aplican(tmp_db):
+    _seed(tmp_db, [_m(1, platform="tiktok", likes=1961, shares=200, comments_count=55,
+                       saves=249, views=61500, reach_source="propio")])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    assert voz["likes"] == 1961
+    assert voz["shares"] == 200
+    assert voz["comments_count"] == 55
+    assert voz["saves"] == 249
+    assert voz["views"] == 61500
+    assert voz["reach_source"] == "propio"
+
+
+def test_interactions_suma_las_cuatro_capas_de_interaccion(tmp_db):
+    _seed(tmp_db, [_m(1, platform="tiktok", likes=1961, shares=200, comments_count=55,
+                       saves=249, views=61500)])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    assert voz["interactions"] == 1961 + 200 + 55 + 249
+
+
+def test_interaction_rate_nunca_divide_por_cero(tmp_db):
+    """views=0 (o ausente) no debe reventar con ZeroDivisionError — la
+    tasa queda None, no infinito ni una excepción."""
+    _seed(tmp_db, [
+        _m(1, platform="tiktok", likes=10, shares=0, comments_count=0, saves=0, views=0),
+        _m(2, platform="tiktok", author="autor_sin_views", likes=10, shares=0,
+           comments_count=0, saves=0, views=None),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert all(v["interaction_rate"] is None for v in p["mentions"])
+
+
+def test_interaction_rate_calcula_bien_cuando_hay_alcance(tmp_db):
+    _seed(tmp_db, [_m(1, platform="tiktok", likes=200, shares=100, comments_count=100,
+                       saves=0, views=2000)])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    # interactions = 400, views = 2000 -> 20.0%
+    assert voz["interaction_rate"] == 20.0
+
+
+def test_saves_ausente_en_una_repeticion_no_convierte_el_total_en_cero(tmp_db):
+    """
+    Dos repeticiones de la misma voz: una con saves medido, otra sin
+    (fila legacy sin raw completo). El total debe sumar lo que SÍ se
+    conoce, no tratar la ausencia como 0 y no perder el dato conocido.
+    """
+    _seed(tmp_db, [
+        _m(1, platform="tiktok", author="spammer", text="mismo texto repetido",
+           source_url="https://x.com/c/1", saves=249, views=61500),
+        _m(2, platform="tiktok", author="spammer", text="mismo texto repetido",
+           source_url="https://x.com/c/2", saves=None, views=None),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert len(p["mentions"]) == 1
+    voz = p["mentions"][0]
+    assert voz["saves"] == 249
+    assert voz["views"] == 61500
+
+
+def test_reach_source_no_se_pierde_si_la_repeticion_mas_antigua_no_lo_trae(tmp_db):
+    """
+    Regresión verificada visualmente en el dashboard real: una voz
+    repetida donde la ocurrencia MÁS ANTIGUA no tiene views (comentario de
+    un post sin backfill de alcance) pero una repetición más reciente sí
+    las tiene (post con backfill) — reach_source debe reflejar de dónde
+    viene el número sumado, no perderse por mirar solo la más antigua.
+    """
+    _seed(tmp_db, [
+        _m(1, platform="instagram", author="spammer3", text="mismo texto repetido otra vez",
+           source_url="https://x.com/e/1", likes=0, shares=0, comments_count=0,
+           published_at="2026-05-01T10:00:00+00:00",  # más antigua: SIN views/reach_source
+           views=None, reach_source=None),
+        _m(2, platform="instagram", author="spammer3", text="mismo texto repetido otra vez",
+           source_url="https://x.com/e/2", likes=0, shares=0, comments_count=0,
+           published_at="2026-06-01T10:00:00+00:00",  # más reciente: CON views/reach_source
+           views=32600, reach_source="post"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert len(p["mentions"]) == 1
+    voz = p["mentions"][0]
+    assert voz["views"] == 32600
+    assert voz["reach_source"] == "post"
+
+
+def test_saves_todas_las_repeticiones_sin_dato_queda_none(tmp_db):
+    """Si NINGUNA repetición trae saves/views, el total es None, no 0 —
+    la ausencia no se convierte en un cero al sumar."""
+    _seed(tmp_db, [
+        _m(1, platform="tiktok", author="spammer2", text="otro texto repetido",
+           source_url="https://x.com/d/1", saves=None, views=None),
+        _m(2, platform="tiktok", author="spammer2", text="otro texto repetido",
+           source_url="https://x.com/d/2", saves=None, views=None),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    voz = p["mentions"][0]
+    assert voz["saves"] is None
+    assert voz["views"] is None
+
+
+# ── Tarea 4: cobertura por métrica y plataforma (bloque 8) ────────────────
+
+def test_metric_coverage_cuenta_filas_reales_por_plataforma(tmp_db):
+    _seed(tmp_db, [
+        _m(1, platform="tiktok", author="a", saves=249, views=61500),
+        _m(2, platform="tiktok", author="b", saves=None, views=None),  # legacy sin raw
+        _m(3, platform="instagram", author="c", likes=7, views=32600),
+        _m(4, platform="web", author="d"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    cov = p["data_quality"]["metric_coverage"]
+
+    assert cov["tiktok"]["total"] == 2
+    assert cov["tiktok"]["saves"] == 1   # solo una de las dos voces tiktok tiene saves
+    assert cov["tiktok"]["views"] == 1
+
+    assert cov["instagram"]["total"] == 1
+    assert cov["instagram"]["likes"] == 1
+    assert cov["instagram"]["shares"] == 0   # nunca aplica a instagram
+    assert cov["instagram"]["views"] == 1
+
+    assert cov["web"]["total"] == 1
+    assert cov["web"]["likes"] == 0
+    assert cov["web"]["views"] == 0
+
+
+def test_metric_applies_declara_que_metricas_existen_por_plataforma(tmp_db):
+    """
+    metric_applies distingue "nunca aplica" de "aplica pero hoy no hay
+    dato" — el dashboard lo usa para no confundir "0 de N" con "no aplica".
+    """
+    _seed(tmp_db, [_m(1)])
+    p = aggregate.build_payload(tmp_db)
+    applies = p["data_quality"]["metric_applies"]
+
+    assert applies["web"]["likes"] is False
+    assert applies["web"]["views"] is False
+    assert applies["tiktok"]["saves"] is True
+    assert applies["tiktok"]["views"] is True
+    assert applies["instagram"]["likes"] is True
+    assert applies["instagram"]["shares"] is False
+    assert applies["instagram"]["comments_count"] is False
+    assert applies["instagram"]["saves"] is False
+    assert applies["instagram"]["views"] is True
 
 
 # ── Ventana de reporte (REPORT_WINDOW_START) ──────────────────────────
@@ -289,7 +509,8 @@ def test_mencion_anterior_a_la_ventana_no_aparece_en_ningun_bloque(tmp_db):
     # Tabla y top quejas.
     assert len(p["mentions"]) == 1
     assert p["mentions"][0]["author"] == "autor_2026"
-    assert all(f["author"] == "autor_2026" for f in p["top_complaints"])
+    todas_las_quejas = p["top_complaints"]["with_reach"] + p["top_complaints"]["without_reach"]
+    assert all(f["author"] == "autor_2026" for f in todas_las_quejas)
 
     # Drivers, timeline, sentiment y calidad de datos.
     assert [d["driver"] for d in p["drivers"]] == ["demora"]

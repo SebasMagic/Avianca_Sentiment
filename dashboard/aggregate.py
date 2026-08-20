@@ -43,9 +43,65 @@ from store import db
 
 PLATFORMS = ["web", "instagram", "tiktok"]
 
+# Qué métricas de engagement tiene sentido mostrar por plataforma —
+# diagnóstico verificado sobre datos reales (2026-08-20, ver
+# docs/superpowers/specs/2026-08-19-avianca-sentiment-4meses-design.md y
+# pipeline/engagement_enrichment.py):
+#
+#   web:       DataForSEO nunca entrega ninguna métrica de engagement.
+#   tiktok:    diggCount/commentCount/shareCount/collectCount/playCount son
+#              del video mismo — las cinco métricas aplican, alcance
+#              reach_source='propio'.
+#   instagram: cada mención ES un comentario. likesCount es el like propio
+#              del comentario; comments_count y shares NO aplican — un
+#              comentario no tiene comentarios propios ni se comparte
+#              (repliesCount viene NULL en el 100% de los items reales) —
+#              tampoco tiene saves. views SÍ aplica pero es prestado del
+#              post contenedor (reach_source='post'), nunca del comentario.
+#
+# Esto declara qué CONCEPTO existe por plataforma, no si el valor guardado
+# es cero: una métrica que no aplica se fuerza a None (guion en el
+# dashboard) aunque la columna tenga un 0 heredado del schema — "las que
+# no aplican van con guion, no con cero".
+METRIC_APPLIES = {
+    "web":       {"likes": False, "shares": False, "comments_count": False, "saves": False, "views": False},
+    "tiktok":    {"likes": True,  "shares": True,  "comments_count": True,  "saves": True,  "views": True},
+    "instagram": {"likes": True,  "shares": False, "comments_count": False, "saves": False, "views": True},
+}
+
+ENGAGEMENT_METRICS = ("likes", "shares", "comments_count", "saves", "views")
+
 
 def _engagement(m: dict) -> int:
     return (m.get("likes") or 0) + (m.get("shares") or 0) + (m.get("comments_count") or 0)
+
+
+def _sum_maybe(values) -> int | None:
+    """
+    Suma ignorando None; si TODOS los valores son None, el resultado es
+    None, no 0 — la ausencia de dato (nunca medido) no es lo mismo que
+    medir un cero real. Usado para saves/views, que sí pueden ser NULL.
+    """
+    vals = [v for v in values if v is not None]
+    return sum(vals) if vals else None
+
+
+def _apply_metric(platform: str, metric: str, value):
+    """None si `metric` no aplica a `platform` (ver METRIC_APPLIES) — el
+    valor tal cual si aplica, que a su vez puede ser None si simplemente
+    no se midió para estas filas."""
+    return value if METRIC_APPLIES.get(platform, {}).get(metric, False) else None
+
+
+def _interaction_rate(interactions, views) -> float | None:
+    """
+    interacciones ÷ alcance, en %. None si no hay alcance medido (views
+    None o 0) o no hay interacciones que dividir — nunca ZeroDivisionError,
+    y un alcance de 0 no produce una tasa (dividir por cero no es "0%").
+    """
+    if not views or interactions is None:
+        return None
+    return round(interactions / views * 100, 1)
 
 
 def _pct(part: int, whole: int) -> float:
@@ -78,7 +134,29 @@ def _collapse_voices(mentions: list[dict]) -> list[dict]:
       - repeat_count: tamaño del grupo (1 si no se repitió).
       - engagement:   suma de likes+shares+comments_count de TODAS las
                        repeticiones — una queja spammeada sí acumula
-                       alcance real, aunque el texto sea el mismo.
+                       alcance real, aunque el texto sea el mismo. Se
+                       conserva tal cual para no romper nada; ya NO se
+                       presenta como la medida de impacto (ver las tres
+                       capas más abajo: likes/shares/comments_count/saves/
+                       views, interactions e interaction_rate).
+      - likes/shares/comments_count/saves/views: suma por metrica de TODAS
+        las repeticiones, forzada a None cuando la metrica no aplica a la
+        plataforma (METRIC_APPLIES) — "las que no aplican van con guion,
+        no con cero". saves/views usan _sum_maybe: si NINGUNA repeticion
+        tiene el dato, el total es None, no 0.
+      - reach_source: el primer reach_source no-nulo que aparezca en el
+        grupo — NO el de la ocurrencia más antigua. Con voces repetidas es
+        real que unas repeticiones tengan views medidas y otras no (p.ej.
+        909 comentarios de Instagram, solo 537 con backfill de alcance de
+        su post — Tarea 2): si la más antigua es justo una sin dato pero
+        otra repetición sí aportó views al total sumado, reach_source debe
+        seguir contando de dónde viene ese número, no perderlo por mirar
+        solo la primera repetición.
+      - interactions: likes+comments_count+shares+saves ya sumados y
+        filtrados por plataforma — None si ninguna métrica aplica (caso
+        web) o ninguna tiene dato.
+      - interaction_rate: interactions ÷ views en %, None si no hay views
+        medidas (nunca división por cero).
 
     Autores distintos con el mismo texto NO se colapsan: el fingerprint de
     la DB ya incluye el autor exactamente para poder distinguir a dos
@@ -101,6 +179,27 @@ def _collapse_voices(mentions: list[dict]) -> list[dict]:
         voice = dict(oldest)
         voice["repeat_count"] = len(group)
         voice["engagement"] = sum(_engagement(m) for m in group)
+
+        platform = voice["platform"]
+        likes = _apply_metric(platform, "likes", sum(m.get("likes") or 0 for m in group))
+        shares = _apply_metric(platform, "shares", sum(m.get("shares") or 0 for m in group))
+        comments_count = _apply_metric(
+            platform, "comments_count", sum(m.get("comments_count") or 0 for m in group))
+        saves = _apply_metric(platform, "saves", _sum_maybe(m.get("saves") for m in group))
+        views = _apply_metric(platform, "views", _sum_maybe(m.get("views") for m in group))
+
+        voice["likes"] = likes
+        voice["shares"] = shares
+        voice["comments_count"] = comments_count
+        voice["saves"] = saves
+        voice["views"] = views
+        voice["reach_source"] = next(
+            (m.get("reach_source") for m in group if m.get("reach_source")), None)
+
+        interactions = _sum_maybe([likes, comments_count, shares, saves])
+        voice["interactions"] = interactions
+        voice["interaction_rate"] = _interaction_rate(interactions, views)
+
         voices.append(voice)
 
     # Mismo orden que store.db.all_mentions(): más reciente primero.
@@ -255,19 +354,66 @@ def build_payload(conn) -> dict:
         # repeticiones de la voz); NO recalcular con _engagement(m) aquí,
         # porque eso volvería a leer solo likes/shares/comments de la
         # ocurrencia más antigua y perdería el alcance de las repeticiones.
+        # Se conserva tal cual — ya NO es la medida de impacto que se
+        # presenta (ver las tres capas: alcance/interacciones/tasa abajo).
         "engagement": m["engagement"],
         "repeat_count": m["repeat_count"],
+        # ── Las tres capas (Tarea 3): alcance (views), interacciones
+        # (likes+comments+shares+saves) y tasa de interacción — nunca
+        # sumadas entre sí en un número compuesto. None = la métrica no
+        # aplica a esta plataforma o no se midió; el dashboard lo pinta
+        # como guion, no como 0.
+        "likes": m["likes"],
+        "shares": m["shares"],
+        "comments_count": m["comments_count"],
+        "saves": m["saves"],
+        "views": m["views"],
+        "reach_source": m["reach_source"],
+        "interactions": m["interactions"],
+        "interaction_rate": m["interaction_rate"],
     } for m in mentions]
 
-    top_complaints = sorted(
-        [f for f in filas if f["is_complaint"]],
-        key=lambda f: f["engagement"],
-        reverse=True,
-    )[:20]
+    quejas = [f for f in filas if f["is_complaint"]]
+    # Bloque 7: rankear por ALCANCE (views) cuando existe — hoy se rankeaba
+    # por engagement (la suma vieja), que subestima: un video con 61.500
+    # views y 2.216 de engagement quedaba detrás de contenido con menos
+    # alcance real pero más "engagement" sumado. Una queja SIN alcance
+    # medido no se inventa un valor ni se mezcla en el mismo ranking — va a
+    # un grupo aparte, ordenado por interacciones, y el dashboard lo dice.
+    top_complaints = {
+        "with_reach": sorted(
+            [f for f in quejas if f["views"] is not None],
+            key=lambda f: (f["views"], f["interactions"] or 0),
+            reverse=True,
+        )[:20],
+        "without_reach": sorted(
+            [f for f in quejas if f["views"] is None],
+            key=lambda f: f["interactions"] or 0,
+            reverse=True,
+        )[:20],
+    }
 
     # ── Calidad de datos
     por_plataforma = collections.Counter(m["platform"] for m in mentions)
     cobertura_mes = collections.Counter(m["published_at"][:7] for m in dated)
+
+    # Cobertura por métrica y plataforma (Tarea 4, bloque 8): cuántas voces
+    # de CADA plataforma tienen dato real (no None) en cada métrica. Mismo
+    # universo que el resto del reporte (voces colapsadas, dentro de la
+    # ventana) para que el número reconcilie con lo que ve el lector en los
+    # demás bloques — no el conteo crudo de filas antes de colapsar.
+    metric_coverage = {}
+    for platform in PLATFORMS:
+        voces_plat = [m for m in mentions if m["platform"] == platform]
+        if not voces_plat:
+            continue
+        metric_coverage[platform] = {
+            "total": len(voces_plat),
+            **{
+                metric: sum(1 for m in voces_plat if m[metric] is not None)
+                for metric in ENGAGEMENT_METRICS
+            },
+        }
 
     # filtered_count se recalcula sobre el archivo/lote completo en cada corrida
     # de seed/scraping, aunque upsert_mentions deduplique lo ya visto. No hay
@@ -299,6 +445,16 @@ def build_payload(conn) -> dict:
         # pero fuera del análisis.
         "outside_window": outside_window,
         "window_start": REPORT_WINDOW_START,
+        # Tarea 4: qué métricas de engagement hay y cuáles no, por
+        # plataforma, con conteo de filas — para que nadie saque
+        # conclusiones de "shares" sin saber cuántas filas lo cubren.
+        "metric_coverage": metric_coverage,
+        # Declaración aparte de si la métrica APLICA conceptualmente a la
+        # plataforma (ver METRIC_APPLIES) — el dashboard la usa para decir
+        # "no aplica" (nunca va a tener el dato) en vez de "0 de N" (aplica
+        # pero, hoy, cero filas lo tienen medido). Sin esto, metric_coverage
+        # por sí solo no puede distinguir esos dos casos honestamente.
+        "metric_applies": METRIC_APPLIES,
     }
 
     return {
