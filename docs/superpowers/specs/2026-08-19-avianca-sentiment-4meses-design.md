@@ -87,7 +87,7 @@ Cada unidad tiene una responsabilidad y una interfaz clara:
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | TEXT PK | uuid4 |
-| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + text[:80])` |
+| `fingerprint` | TEXT UNIQUE NOT NULL | `sha256(platform + '\|' + source_url + '\|' + author + '\|' + text)` — texto completo |
 | `platform` | TEXT NOT NULL | `web` / `instagram` / `tiktok` |
 | `source_url` | TEXT | |
 | `text` | TEXT NOT NULL | |
@@ -114,6 +114,30 @@ Cada unidad tiene una responsabilidad y una interfaz clara:
 **Semántica del `fingerprint`:** se calcula **después** de normalizar (sobre el
 texto ya limpiado y recortado), nunca sobre el texto crudo. De lo contrario un
 espacio en blanco distinto generaría un duplicado.
+
+Se hashea el **texto completo**, no un prefijo. Un diseño anterior truncaba a 80
+caracteres; se descartó porque las quejas de aerolínea tienen aperturas de
+plantilla ("Avianca canceló mi vuelo y no me han dado respuesta desde hace…") y
+dos comentarios distintos en la misma URL podían colisionar y perderse en
+silencio. La asimetría decide: un duplicado falso es una fila de más, visible y
+auditable; una fusión falsa es pérdida de datos irrecuperable.
+
+Consecuencia asumida: si un autor edita su comentario entre dos scrapes, el
+fingerprint cambia y se guarda una fila nueva en vez de actualizar la anterior.
+Infla el conteo en vez de perder datos, que es el lado correcto del error.
+
+El `author` entra en el hash por una razón medida en datos reales: en el v1, el
+`source_url` de **todos** los comentarios de Instagram resolvía a la misma URL
+(`apify_instagram.py` cae a `post_urls[0]` cuando el ítem no trae `url` propia).
+Con `source_url` constante, dos personas distintas que escriban el mismo texto
+producían el mismo fingerprint y una se perdía sin rastro — caso confirmado en el
+Excel v1: `catherine_zik_oppenheimer` y `valentina_ahumada977` fusionadas.
+Incluir el autor discrimina personas distintas; un mismo autor repitiendo texto
+idéntico sí se deduplica, que es el comportamiento deseado ante re-scrapes.
+
+**Pendiente asociado:** `scrapers/apify_instagram.py` debe construir una URL
+distinta por comentario en vez de caer a `post_urls[0]`. El fingerprint con autor
+mitiga el síntoma; la URL degenerada es la causa.
 
 **Semántica del `run_id`:** guarda la corrida que **insertó** la mención por
 primera vez. Un upsert que encuentra el fingerprint existente no lo sobrescribe
@@ -205,6 +229,33 @@ respecto al v1.
 `complaint_driver` es `null` cuando `is_complaint` es `false`. Si `is_complaint`
 es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 
+Alcance de "obligatorio": la precedencia se impone por prompt, no por código.
+`normalize_result` valida que el driver pertenezca a la lista, pero no re-deriva
+el driver del texto para comprobar que el modelo aplicó el orden. Es auditable
+estadísticamente, no ítem por ítem.
+
+**Orden de precedencia (desempate obligatorio).** Muchas quejas encajan en dos
+drivers a la vez: una maleta perdida por un vuelo cancelado, un cobro que además
+no fue reembolsado. Sin una regla, el mismo tipo de queja se reparte de forma no
+determinista y el reporte agregado deja de significar algo. El modelo elige el
+**primero que aplique** en este orden:
+
+`cancelacion` → `demora` → `equipaje` → `reembolsos` → `cobros_tarifas` →
+`lifemiles` → `asientos_comida` → `atencion_cliente` → `otro`
+
+Dos consecuencias deliberadas del orden:
+
+- Las disrupciones de vuelo (cancelación, demora) ganan porque son la causa raíz
+  accionable: si la maleta no llegó porque cancelaron el vuelo, el problema a
+  arreglar es la cancelación.
+- `atencion_cliente` va casi al final **a propósito**. Casi toda queja incluye
+  "y nadie me ayudó"; si compitiera de igual a igual se tragaría el resto de
+  categorías y el driver dejaría de informar. Solo gana cuando el mal servicio
+  **es** la queja, no su acompañamiento.
+
+Además, los cobros de equipaje pertenecen a `cobros_tarifas`, no a `equipaje`:
+`equipaje` cubre el manejo físico (maletas perdidas, dañadas, demoradas).
+
 ### Robustez (corrige hallazgos #4 y #8)
 
 - **Todas las plataformas pasan por el clasificador**, incluida `web`. Se elimina
@@ -214,7 +265,12 @@ es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 - **Validación de longitud:** si el array devuelto no tiene el mismo largo que el
   batch, no se hace `zip`. Se reintenta el batch completo una vez; si vuelve a
   fallar, se procesa item por item.
-- **Reintentos:** 2 reintentos con backoff exponencial ante error de red o JSON inválido.
+- **Reintentos:** 1 reintento con backoff exponencial ante error de red o JSON
+  inválido (dos intentos en total por lote). No más: ante un desajuste de longitud,
+  repetir el mismo lote rara vez ayuda — el mecanismo real de recuperación es la
+  caída a item por item. Reintentos extra de lote solo queman dinero en la ruta de
+  fallo: con un lote de 10 que falla de forma persistente, 1 reintento cuesta 22
+  llamados y 2 reintentos cuestan 33.
 - **Fallo explícito:** lo que no se logre clasificar se guarda con
   `classification_status = 'unclassified'`, no como neutral silencioso. El
   dashboard los excluye de los promedios de sentiment y los reporta en calidad de datos.
@@ -228,7 +284,7 @@ es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 ### CLI (`main.py`)
 
 ```
-python main.py                                   # corrida normal (últimos 7 días)
+python main.py                                   # corrida normal (incremental)
 python main.py --backfill --since 2026-04-19     # backfill histórico
 python main.py --seed-excel <archivo.xlsx>       # importa Excel existente
 python main.py --schedule                        # semanal, lunes 8am
@@ -241,6 +297,16 @@ python main.py --schedule                        # semanal, lunes 8am
 | DataForSEO | `date_from` en el payload (ya soportado) | Completa |
 | TikTok | `oldestPostDate` del actor `clockworks/tiktok-scraper` | Completa |
 | Instagram | Subir `resultsLimit` de posts de 20 a 80; filtrar comentarios por fecha del post | Parcial — limitada por cuántos posts publicó la marca |
+
+**La corrida `weekly` calcula su propio `since`.** No puede pasar `None`: con
+`since=None`, DataForSEO cae a `BACKFILL_SINCE` (fijo) y el filtro de fecha de
+Instagram se desactiva por completo, de modo que cada corrida "semanal" repetiría
+el volumen de un backfill indefinidamente — rompiendo el estimado de costo de §11.
+
+Regla: `since` = fecha de inicio de la última corrida terminada, menos un día de
+margen para no perder nada en el borde. Si no hay corrida previa, 7 días atrás.
+Usar la última corrida y no un rolling fijo evita abrir huecos cuando una semana
+se salta.
 
 Twitter/X queda fuera de v2. `scrapers/apify_twitter.py` se conserva en el repo
 pero se retira del arreglo de scrapers activos en `main.py`, con un comentario
@@ -293,10 +359,25 @@ naranja `#F97316`, JetBrains Mono + Inter. Se corrige el `overflow: hidden` del
 | 5 | Sentiment y emociones | Distribución agregada (dona + barras) |
 | 6 | Tabla explorable | Todas las menciones. Filtros por plataforma, driver, sentimiento y rango de fechas; búsqueda de texto libre; link al post original |
 | 7 | Top quejas por engagement | Ordenadas por `likes + shares + comments_count` |
-| 8 | Calidad de datos | Menciones sin fecha · descartadas por relevancia (con razón) · `unclassified` · cobertura por fuente y por mes |
+| 8 | Calidad de datos | Menciones sin fecha · descartadas por relevancia **en la última corrida** · `unclassified` · cobertura por fuente y por mes |
 
 El bloque 8 es deliberado y no negociable: el reporte debe declarar los límites
 de su propia cobertura.
+
+**Los descartes por texto corto se cuentan aparte.** `normalize()` descarta los
+textos de menos de 10 caracteres (comentarios de solo emoji) antes de que corra el
+filtro de relevancia, de modo que no aparecen en `filtered_count`. En el backfill
+real fueron 201 de 1.310 (15%). Se registran en `runs.short_text_count` y se
+muestran en el bloque 8: un 15% que desaparece sin rastro contradice la promesa
+central del rediseño.
+
+**Las descartadas por ruido se reportan por corrida, no como acumulado.** El
+pipeline no persiste las menciones que descarta, de modo que no hay forma de
+deduplicarlas entre corridas: volver a correr el seed sobre el mismo Excel vuelve
+a contar las mismas 96, y sumarlas daría 192. Un acumulado histórico veraz es
+imposible sin guardar los descartes, y guardarlos no vale la pena. Se reporta
+entonces el número de la última corrida, etiquetado como tal — coherente con el
+resto del proyecto: no se publica una cifra que no se pueda sostener.
 
 **Nota de implementación:** cargar el skill `dataviz` antes de escribir código de
 gráficos, y el skill `frontend-design` para la maquetación.

@@ -1,7 +1,7 @@
 """
 DataForSEO Content Analysis scraper.
 Retorna menciones web/blogs/Reddit con sentiment nativo incluido.
-Excluye dominios oficiales de Avianca y filtra por año actual.
+Excluye dominios oficiales de Avianca y filtra por fecha (`since`).
 """
 import uuid
 import requests
@@ -9,13 +9,11 @@ from base64 import b64encode
 from datetime import datetime, timezone
 from config import (
     DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD,
-    BRAND_KEYWORD, LANGUAGE_CODE, LIMIT_DATAFORSEO,
+    BRAND_KEYWORD, LANGUAGE_CODE, LIMIT_DATAFORSEO, BACKFILL_SINCE,
     BRAND_DOMAINS as BRAND_DOMAINS_MAP,
 )
 
 BRAND_DOMAINS = BRAND_DOMAINS_MAP.get(BRAND_KEYWORD, set())
-
-DATE_FROM = "2026-01-01"
 
 
 def _get_headers():
@@ -28,16 +26,16 @@ def _get_headers():
     }
 
 
-def scrape() -> list[dict]:
+def scrape(since: str | None = None) -> list[dict]:
     """
-    Consulta DataForSEO y retorna menciones de usuarios (excluye páginas oficiales).
-    El sentiment viene nativo del API.
+    Consulta DataForSEO y retorna menciones de usuarios.
+    `since` es una fecha YYYY-MM-DD; si es None usa BACKFILL_SINCE.
     """
     payload = [{
         "keyword": BRAND_KEYWORD,
         "language_code": LANGUAGE_CODE,
         "limit": LIMIT_DATAFORSEO,
-        "date_from": DATE_FROM,
+        "date_from": since or BACKFILL_SINCE,
     }]
 
     response = requests.post(
@@ -84,16 +82,13 @@ def scrape() -> list[dict]:
         neg = conn.get("negative", 0.0) or 0.0
         pos = conn.get("positive", 0.0) or 0.0
 
-        # Queja real = sentiment negativo dominante en fuente independiente
-        is_complaint = neg > 0.4 and neg > pos
-
         results.append({
             "id": str(uuid.uuid4()),
             "platform": "web",
             "source_url": item.get("url", ""),
             "text": text,
             "author": domain or None,
-            "published_at": item.get("date_published", fetched_at),
+            "published_at": item.get("date_published") or None,
             "country": "CO",
             "likes": 0,
             "shares": 0,
@@ -102,7 +97,7 @@ def scrape() -> list[dict]:
             "sentiment_negative": neg,
             "sentiment_neutral": conn.get("neutral", 1.0) or 1.0,
             "emotion": dominant_emotion,
-            "is_complaint": is_complaint,
+            "is_complaint": False,
             "raw": item,
             "fetched_at": fetched_at,
         })

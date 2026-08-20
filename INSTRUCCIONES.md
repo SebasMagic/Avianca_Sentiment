@@ -1,3 +1,9 @@
+> ⚠️ **Documento histórico.** Este es el blueprint del pipeline v1 (junio 2026).
+> El sistema actual es el v2: ver [README.md](README.md) y
+> [el diseño de v2](docs/superpowers/specs/2026-08-19-avianca-sentiment-4meses-design.md).
+> Diferencias principales: v2 usa SQLite en vez de Supabase, clasifica drivers
+> de queja, y no incluye Twitter/X.
+
 # Avianca Colombia — Brand Sentiment Monitor
 ## Instrucciones para Claude Code
 

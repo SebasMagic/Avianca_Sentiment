@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avianca — Social Listening</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0D1117; --navy-2:#161B22; --navy-3:#21262D; --navy-4:#30363D;
+    --orange:#F97316; --orange-dim:rgba(249,115,22,.12); --orange-mid:rgba(249,115,22,.35);
+    --green:#3FB950; --green-dim:rgba(63,185,80,.12);
+    --red:#F85149;   --red-dim:rgba(248,81,73,.12);
+    --blue:#58A6FF;  --blue-dim:rgba(88,166,255,.12);
+    --txt:#E6EDF3; --txt-2:#8B949E; --txt-3:#484F58;
+    --border:rgba(48,54,61,.9);
+    /* Fallbacks explícitos: el archivo debe verse bien sin internet */
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
+    --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--navy)}
+  body{
+    background:var(--navy);color:var(--txt);font-family:var(--sans);
+    font-size:13px;line-height:1.5;
+    overflow-x:hidden;               /* scroll vertical SÍ permitido, horizontal NUNCA */
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1360px;margin:0 auto;padding:28px 22px 70px}
+
+  /* ── header ── */
+  header{
+    display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;
+    gap:8px 20px;padding-bottom:18px;margin-bottom:28px;border-bottom:1px solid var(--border);
+  }
+  header h1{
+    font-size:19px;font-weight:600;letter-spacing:.01em;color:var(--txt);
+  }
+  header h1 span{color:var(--orange)}
+  #rango{font-family:var(--mono);font-size:11px;color:var(--txt-2);letter-spacing:.02em}
+
+  section{margin-bottom:36px}
+  section > h2{
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--orange);margin-bottom:14px;
+    display:flex;align-items:center;gap:12px;
+  }
+  section > h2::after{content:'';flex:1;height:1px;background:var(--border)}
+  section > h2 .h2-sub{
+    font-family:var(--sans);text-transform:none;letter-spacing:0;color:var(--txt-3);font-size:11px;
+  }
+
+  .card{
+    background:var(--navy-2);border:1px solid var(--border);
+    border-radius:8px;padding:20px;
+  }
+  .scroll-x{overflow-x:auto;overflow-y:hidden}
+
+  /* ── block 1 · KPIs ── */
+  #kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));padding:0;overflow:hidden}
+  .kpi{padding:18px 22px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .kpi:last-child{border-right:none}
+  .kpi-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
+  .kpi-val{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--txt);line-height:1;display:flex;align-items:baseline;gap:8px}
+  .kpi-val small{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--txt-2)}
+  .kpi-sub{margin-top:8px;font-size:11px;color:var(--txt-2)}
+  .pill{
+    display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);
+    font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;
+    border:1px solid;
+  }
+  .pill.pos{color:var(--green);border-color:rgba(63,185,80,.35);background:var(--green-dim)}
+  .pill.neg{color:var(--red);border-color:rgba(248,81,73,.35);background:var(--red-dim)}
+  .pill.neu{color:var(--txt-2);border-color:var(--border);background:transparent}
+  .kpi-platlist{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+  .kpi-platrow{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--txt-2)}
+  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+  /* ── chart chrome ── */
+  .chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:14px}
+  .leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt-2)}
+  .leg-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+  .leg-line{width:16px;height:2px;border-radius:1px;flex-shrink:0}
+  .chart-box{position:relative;min-width:640px}
+  .chart-box.tall{height:320px}
+  .chart-box.med{height:260px}
+
+  /* ── block 3 · drivers (la estrella) ── */
+  .driver-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+  .driver-insight{font-size:13px;color:var(--txt)}
+  .driver-insight b{color:var(--orange);font-weight:600}
+  select, input[type=search]{
+    background:var(--navy-3);border:1px solid var(--border);color:var(--txt);
+    font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:5px;
+    outline:none;
+  }
+  select:focus, input[type=search]:focus{border-color:var(--orange-mid)}
+  .driver-layout{display:grid;grid-template-columns:1fr 220px;gap:20px}
+  .driver-list{display:flex;flex-direction:column;gap:2px}
+  .driver-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:7px 0;border-bottom:1px solid var(--border);font-size:11.5px;
+  }
+  .driver-row:last-child{border-bottom:none}
+  .driver-row .d-name{color:var(--txt-2)}
+  .driver-row .d-name.zero{color:var(--txt-3);font-style:italic}
+  .driver-row .d-val{font-family:var(--mono);color:var(--txt);font-weight:600}
+  @media (max-width:900px){ .driver-layout{grid-template-columns:1fr} }
+
+  /* ── block 4 · heatmap ── */
+  #heatmap table{width:100%;border-collapse:collapse;font-size:12px;min-width:620px}
+  #heatmap th, #heatmap td{padding:9px 10px;text-align:center;border:1px solid var(--border)}
+  #heatmap th{
+    font-family:var(--mono);font-size:9.5px;color:var(--txt-2);
+    text-transform:uppercase;letter-spacing:.06em;background:var(--navy-3);
+  }
+  #heatmap td.rowhead{
+    text-align:left;font-family:var(--sans);font-size:12px;color:var(--txt);
+    background:var(--navy-3);white-space:nowrap;
+  }
+  #heatmap td.cell{font-family:var(--mono);font-weight:600;color:var(--txt)}
+  #heatmap td.cell.zero{color:var(--txt-3);font-weight:400}
+  #heatmap tr.total td{background:var(--navy-3);font-weight:700;border-top:2px solid var(--border)}
+  #heatmap td.total-col{font-family:var(--mono);font-weight:700;color:var(--txt);background:var(--navy-3)}
+
+  /* ── block 5 · sentiment + emotions ── */
+  .sent-grid{display:grid;grid-template-columns:260px 1fr;gap:28px}
+  .donut-wrap{position:relative;width:190px;height:190px;margin:0 auto}
+  .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .donut-num{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1}
+  .donut-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--txt-3);margin-top:5px}
+  .sent-legend{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+  .sent-legend-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
+  .sent-legend-row .lv{margin-left:auto;font-family:var(--mono);color:var(--txt);font-weight:600}
+  @media (max-width:760px){ .sent-grid{grid-template-columns:1fr} }
+
+  /* ── block 6 · tabla explorable ── */
+  #filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px}
+  #filtros .fq{flex:1;min-width:180px}
+  .btn-reset{
+    background:transparent;border:1px solid var(--border);color:var(--txt-2);
+    font-family:var(--sans);font-size:11.5px;padding:7px 12px;border-radius:5px;cursor:pointer;
+  }
+  .btn-reset:hover{color:var(--txt);border-color:var(--txt-3)}
+  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+  #tabla thead th{
+    position:sticky;top:0;background:var(--navy-3);z-index:1;
+    font-family:var(--mono);font-size:10px;color:var(--txt-2);
+    text-transform:uppercase;letter-spacing:.06em;text-align:left;
+    padding:9px 10px;border-bottom:1px solid var(--border);
+  }
+  #tabla td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--txt-2)}
+  #tabla tbody tr:hover{background:rgba(255,255,255,.02)}
+  #tabla td.txt{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+  #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
+  #tabla td.date.unknown{color:var(--txt-3)}
+  #tabla td.eng{font-family:var(--mono);text-align:right;color:var(--txt)}
+  #tabla td.link a{color:var(--blue);text-decoration:none;font-size:11px}
+  #tabla td.link a:hover{text-decoration:underline}
+  .plat-tag{display:inline-flex;align-items:center;gap:6px;color:var(--txt-2)}
+  .drv-pill{
+    display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;
+    border-radius:99px;background:var(--orange-dim);color:var(--orange);
+    border:1px solid var(--orange-mid);white-space:nowrap;
+  }
+  .drv-pill.none{background:transparent;border-color:var(--border);color:var(--txt-3)}
+  #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
+  .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
+
+  /* ── block 7 · top quejas ── */
+  #topQuejas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .cq-card{
+    background:var(--navy-2);border:1px solid var(--border);border-left:3px solid var(--red);
+    border-radius:6px;padding:14px 16px;
+  }
+  .cq-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cq-plat{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-2)}
+  .cq-rank{font-family:var(--mono);color:var(--txt-3);margin-right:2px}
+  .cq-eng{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--txt)}
+  .cq-eng small{font-family:var(--sans);font-size:9px;font-weight:400;color:var(--txt-3);text-transform:uppercase;letter-spacing:.06em;margin-left:3px}
+  .cq-author{font-family:var(--mono);font-size:10.5px;color:var(--txt-3);margin-bottom:6px}
+  .cq-text{font-size:11.5px;color:var(--txt-2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:10px}
+  .cq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .cq-date{font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
+  .cq-link{font-size:10.5px;color:var(--blue);text-decoration:none}
+  .cq-link:hover{text-decoration:underline}
+
+  /* ── block 8 · calidad de datos ── */
+  .q-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:28px}
+  .q-notes{display:flex;flex-direction:column;gap:12px}
+  .q-note{display:flex;gap:10px;font-size:12.5px;color:var(--txt-2);line-height:1.6}
+  .q-note .q-num{
+    font-family:var(--mono);font-weight:700;color:var(--txt);flex-shrink:0;min-width:34px;font-size:15px;
+  }
+  .q-side{display:flex;flex-direction:column;gap:18px}
+  .q-block-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
+  .q-plat-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--txt-2);margin-bottom:6px}
+  .q-plat-row .track{flex:1;height:5px;background:var(--navy-4);border-radius:3px;overflow:hidden}
+  .q-plat-row .fill{height:100%;border-radius:3px}
+  .q-plat-row .val{font-family:var(--mono);min-width:34px;text-align:right;color:var(--txt)}
+  .q-missing{
+    display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;
+    background:var(--red-dim);border:1px solid rgba(248,81,73,.3);color:var(--red);
+    font-size:11.5px;font-weight:500;
+  }
+  .q-months{display:flex;flex-wrap:wrap;gap:6px}
+  .q-chip{
+    font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:4px;
+    background:var(--navy-3);border:1px solid var(--border);color:var(--txt-2);
+  }
+  .q-chip b{color:var(--txt)}
+  @media (max-width:860px){ .q-grid{grid-template-columns:1fr} }
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
+    font-family:var(--mono);font-size:10px;color:var(--txt-3);letter-spacing:.04em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Avianca <span>·</span> Social Listening</h1>
+    <p id="rango" class="muted"></p>
+  </header>
+
+  <section id="b1"><h2>Resumen</h2><div id="kpis" class="card"></div></section>
+
+  <section id="b2">
+    <h2>Volumen y sentimiento en el tiempo</h2>
+    <div class="card">
+      <div class="chart-legend" id="legendTimeline"></div>
+      <div class="scroll-x"><div class="chart-box tall"><canvas id="chTimeline"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="b3">
+    <h2>¿De qué se queja la gente? <span class="h2-sub">— el motivo por el que existe este reporte</span></h2>
+    <div class="card">
+      <div class="driver-toolbar">
+        <p class="driver-insight" id="driverInsight"></p>
+        <select id="driverMonthSel"></select>
+      </div>
+      <div class="driver-layout">
+        <div class="scroll-x"><div class="chart-box med" id="boxDrivers"><canvas id="chDrivers"></canvas></div></div>
+        <div class="driver-list" id="driverList"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="b4">
+    <h2>Driver por plataforma</h2>
+    <div class="card scroll-x"><div id="heatmap"></div></div>
+  </section>
+
+  <section id="b5">
+    <h2>Sentimiento y emociones</h2>
+    <div class="card scroll-x">
+      <div class="sent-grid">
+        <div>
+          <div class="donut-wrap">
+            <canvas id="chSentiment"></canvas>
+            <div class="donut-center"><div class="donut-num" id="donutNum">—</div><div class="donut-lbl">Sentiment neto</div></div>
+          </div>
+          <div class="sent-legend" id="sentLegend"></div>
+        </div>
+        <div>
+          <div class="chart-legend" id="legendEmotions"></div>
+          <div class="chart-box med" id="boxEmotions"><canvas id="chEmotions"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="b6">
+    <h2>Todas las menciones</h2>
+    <div class="card">
+      <div id="filtros"></div>
+      <div class="scroll-x"><table id="tabla">
+        <thead><tr><th>Fecha</th><th>Plataforma</th><th>Autor</th>
+          <th>Texto</th><th>Driver</th><th>Engagement</th><th>Link</th></tr></thead>
+        <tbody id="tbody"></tbody></table></div>
+      <p id="conteoTabla" class="muted"></p></div></section>
+
+  <section id="b7"><h2>Quejas con más alcance</h2><div id="topQuejas"></div></section>
+
+  <section id="b8">
+    <h2>Calidad de los datos <span class="h2-sub">— qué tan confiable es esto</span></h2>
+    <div id="calidad" class="card"></div>
+  </section>
+
+  <footer>Avianca · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
+</div>
+
+<script>__CHARTJS__</script>
+<script>
+const DATA = __DASHBOARD_DATA__;
+
+const PLT_COLOR = { web:'#58A6FF', instagram:'#E1306C', tiktok:'#69C9D0' };
+const PLT_LABEL = { web:'Web', instagram:'Instagram', tiktok:'TikTok' };
+const DRIVER_LABEL = {
+  equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
+  atencion_cliente:'Atención al cliente', cobros_tarifas:'Cobros y tarifas',
+  lifemiles:'LifeMiles', asientos_comida:'Asientos y comida',
+  reembolsos:'Reembolsos', otro:'Otro',
+};
+const DRIVER_ORDER = Object.keys(DRIVER_LABEL);
+const EMO_LABEL = { happiness:'Felicidad', anger:'Enojo', love:'Amor',
+                    sadness:'Tristeza', neutral:'Neutral', surprise:'Sorpresa', fear:'Miedo' };
+const SOURCE_LABEL = { twitter:'Twitter/X' };
+
+const FONT_MONO = "'JetBrains Mono', ui-monospace, Consolas, monospace";
+const FONT_SANS = "'Inter', system-ui, -apple-system, sans-serif";
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const fmtInt = n => (n ?? 0).toLocaleString('es-CO');
+const fmtSigned = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+const fmtPct = n => (n ?? 0).toFixed(1) + '%';
+function fmtDate(iso, opts) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return d.toLocaleDateString('es-CO', opts || { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function sentimentTone(v) {
+  if (v > 3) return 'pos';
+  if (v < -3) return 'neg';
+  return 'neu';
+}
+function sentimentWord(v) {
+  return { pos: 'Positivo', neg: 'Negativo', neu: 'Neutral' }[sentimentTone(v)];
+}
+
+Chart.defaults.font.family = FONT_SANS;
+Chart.defaults.color = '#8B949E';
+
+// Plugin genérico: dibuja el valor al final de cada barra (bar chart, horizontal o vertical).
+// ds.showEndLabels = true y ds.endLabels = [strings] activan el dibujo por dataset.
+const endLabelPlugin = {
+  id: 'endLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((ds, dsIndex) => {
+      if (!ds.showEndLabels) return;
+      const meta = chart.getDatasetMeta(dsIndex);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, i) => {
+        const label = (ds.endLabels && ds.endLabels[i] != null) ? ds.endLabels[i] : String(ds.data[i]);
+        ctx.save();
+        ctx.fillStyle = '#8B949E';
+        ctx.font = "600 11px " + FONT_MONO;
+        ctx.textBaseline = 'middle';
+        if (chart.options.indexAxis === 'y') {
+          ctx.textAlign = 'left';
+          ctx.fillText(label, bar.x + 8, bar.y);
+        } else {
+          ctx.textAlign = 'center';
+          ctx.fillText(label, bar.x, bar.y - 10);
+        }
+        ctx.restore();
+      });
+    });
+  }
+};
+Chart.register(endLabelPlugin);
+
+const tooltipBase = {
+  backgroundColor: '#21262D', titleColor: '#8B949E', bodyColor: '#E6EDF3',
+  borderColor: '#30363D', borderWidth: 1, padding: 10,
+  titleFont: { family: FONT_MONO, size: 10 }, bodyFont: { family: FONT_SANS, size: 11.5 },
+};
+
+// ── Bloque 1: KPIs ──────────────────────────────────────────────
+function renderKpis() {
+  const k = DATA.kpis;
+  const tone = sentimentTone(k.net_sentiment);
+  document.getElementById('rango').textContent =
+    `${fmtDate(k.date_from)} → ${fmtDate(k.date_to)} · ${fmtInt(k.total)} menciones · ${k.sources} fuentes`;
+
+  const platEntries = Object.entries(DATA.data_quality.by_platform)
+    .sort((a, b) => b[1] - a[1]);
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-lbl">Menciones totales</div>
+      <div class="kpi-val">${fmtInt(k.total)}</div>
+      <div class="kpi-sub">${k.sources} fuentes activas</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Quejas</div>
+      <div class="kpi-val">${fmtInt(k.complaints)} <small>${fmtPct(k.complaint_rate)}</small></div>
+      <div class="kpi-sub">del total de menciones</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Sentiment neto</div>
+      <div class="kpi-val">${fmtSigned(k.net_sentiment)}</div>
+      <div class="kpi-sub"><span class="pill ${tone}">${sentimentWord(k.net_sentiment)}</span></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Rango de fechas</div>
+      <div class="kpi-val" style="font-size:15px">${fmtDate(k.date_from,{day:'2-digit',month:'short'})} → ${fmtDate(k.date_to,{day:'2-digit',month:'short'})}</div>
+      <div class="kpi-sub">${DATA.timeline.length} días con datos</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Por plataforma</div>
+      <div class="kpi-platlist">
+        ${platEntries.map(([p, c]) => `
+          <div class="kpi-platrow">
+            <span class="dot" style="background:${PLT_COLOR[p] || '#8B949E'}"></span>
+            ${esc(PLT_LABEL[p] || p)} · ${fmtInt(c)}
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ── Bloque 2: timeline (área apilada + línea de sentiment en eje secundario) ──
+let tlChart = null;
+function renderTimeline() {
+  const rows = DATA.timeline;
+  const labels = rows.map(r => r.date);
+  const platforms = ['web', 'instagram', 'tiktok'];
+
+  document.getElementById('legendTimeline').innerHTML = platforms.map(p => `
+    <div class="leg-item"><span class="leg-swatch" style="background:${PLT_COLOR[p]}"></span>${PLT_LABEL[p]}</div>
+  `).join('') + `<div class="leg-item"><span class="leg-line" style="background:${'#F97316'}"></span>Sentiment neto (eje der.)</div>`;
+
+  const datasets = platforms.map(p => ({
+    label: PLT_LABEL[p],
+    data: rows.map(r => r.counts[p] || 0),
+    borderColor: PLT_COLOR[p],
+    backgroundColor: PLT_COLOR[p] + '26',
+    fill: true, stack: 'vol', borderWidth: 1.5,
+    pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: PLT_COLOR[p],
+    yAxisID: 'y', order: 2, tension: 0.25,
+  }));
+
+  datasets.push({
+    label: 'Sentiment neto',
+    data: rows.map(r => r.net_sentiment),
+    borderColor: '#F97316', backgroundColor: '#F97316',
+    fill: false, borderWidth: 2, borderDash: [],
+    pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#F97316',
+    yAxisID: 'y1', order: 1, tension: 0.2, spanGaps: true,
+  });
+
+  const zeroLinePlugin = {
+    id: 'zeroLine',
+    afterDatasetsDraw(chart) {
+      const y1 = chart.scales.y1;
+      if (!y1) return;
+      const { ctx, chartArea } = chart;
+      const yPix = y1.getPixelForValue(0);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(139,148,158,.35)';
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, yPix);
+      ctx.lineTo(chartArea.right, yPix);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  if (tlChart) tlChart.destroy();
+  tlChart = new Chart(document.getElementById('chTimeline').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    plugins: [zeroLinePlugin],
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase,
+          callbacks: {
+            label: (c) => {
+              if (c.dataset.yAxisID === 'y1') {
+                return c.raw == null ? 'Sentiment neto: sin menciones clasificadas' : `Sentiment neto: ${fmtSigned(c.raw)}`;
+              }
+              return `${c.dataset.label}: ${fmtInt(c.raw)}`;
+            },
+            title: (items) => fmtDate(items[0].label, { day: '2-digit', month: 'short', year: 'numeric' }),
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(48,54,61,.4)' },
+          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, maxTicksLimit: 12 },
+        },
+        y: {
+          stacked: true, beginAtZero: true, position: 'left',
+          grid: { color: 'rgba(48,54,61,.4)' },
+          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          title: { display: true, text: 'Menciones / día', color: '#484F58', font: { family: FONT_MONO, size: 9 } },
+        },
+        y1: {
+          position: 'right', min: -100, max: 100,
+          grid: { display: false },
+          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, callback: v => v + '%' },
+          title: { display: true, text: 'Sentiment neto', color: '#484F58', font: { family: FONT_MONO, size: 9 } },
+        },
+      },
+    },
+  });
+}
+
+// ── Bloque 3: drivers — la estrella del reporte ──────────────────
+let drChart = null;
+function driverRowsFor(month) {
+  let counts;
+  if (!month) {
+    counts = Object.fromEntries(DATA.drivers.map(d => [d.driver, d.count]));
+  } else {
+    counts = {};
+    DATA.driver_trend.filter(t => t.month === month).forEach(t => { counts[t.driver] = t.count; });
+  }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  return DRIVER_ORDER
+    .map(d => {
+      const count = counts[d] || 0;
+      return { driver: d, count, pct: total ? (count / total * 100) : 0 };
+    })
+    .sort((a, b) => b.count - a.count || DRIVER_ORDER.indexOf(a.driver) - DRIVER_ORDER.indexOf(b.driver));
+}
+
+function renderDrivers(month) {
+  const rows = driverRowsFor(month || '');
+  const top = rows[0];
+
+  document.getElementById('driverInsight').innerHTML = top && top.count > 0
+    ? `El motivo #1 es <b>${esc(DRIVER_LABEL[top.driver])}</b> — ${fmtInt(top.count)} quejas (${fmtPct(top.pct)} del periodo mostrado).`
+    : `No hay quejas con driver asignado en el periodo seleccionado.`;
+
+  document.getElementById('driverList').innerHTML = rows.map(r => `
+    <div class="driver-row">
+      <span class="d-name ${r.count === 0 ? 'zero' : ''}">${esc(DRIVER_LABEL[r.driver])}</span>
+      <span class="d-val">${fmtInt(r.count)}</span>
+    </div>
+  `).join('');
+
+  const box = document.getElementById('boxDrivers');
+  box.style.height = Math.max(220, rows.length * 34 + 30) + 'px';
+
+  if (drChart) drChart.destroy();
+  drChart = new Chart(document.getElementById('chDrivers').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => DRIVER_LABEL[r.driver]),
+      datasets: [{
+        data: rows.map(r => r.count),
+        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(249,115,22,.15)' : '#F97316'),
+        borderRadius: 4, borderSkipped: 'left',
+        barThickness: 20, minBarLength: 3,
+        showEndLabels: true,
+        endLabels: rows.map(r => fmtInt(r.count)),
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 34 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase,
+          callbacks: {
+            label: (c) => {
+              const r = rows[c.dataIndex];
+              return r.count === 0
+                ? 'Sin quejas registradas en este periodo'
+                : `${fmtInt(r.count)} quejas · ${fmtPct(r.pct)} del periodo`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: 'rgba(48,54,61,.4)' },
+          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#8B949E', font: { family: FONT_SANS, size: 11.5 } },
+        },
+      },
+    },
+  });
+}
+
+function initDriverSelect() {
+  const months = [...new Set(DATA.driver_trend.map(t => t.month))].sort();
+  const sel = document.getElementById('driverMonthSel');
+  sel.innerHTML = ['<option value="">Todo el periodo</option>']
+    .concat(months.map(m => `<option value="${m}">${fmtDate(m + '-01', { month: 'long', year: 'numeric' })}</option>`))
+    .join('');
+  sel.addEventListener('change', () => renderDrivers(sel.value));
+}
+
+// ── Bloque 4: heatmap driver × plataforma ────────────────────────
+function renderHeatmap() {
+  const platforms = ['web', 'instagram', 'tiktok'];
+  const grid = {};
+  DATA.driver_by_platform.forEach(r => { grid[r.driver + '|' + r.platform] = r.count; });
+
+  const driverTotals = DRIVER_ORDER.map(d => ({
+    driver: d,
+    total: platforms.reduce((s, p) => s + (grid[d + '|' + p] || 0), 0),
+  })).sort((a, b) => b.total - a.total);
+
+  let max = 1;
+  Object.values(grid).forEach(v => { if (v > max) max = v; });
+
+  const platTotals = platforms.map(p => driverTotals.reduce((s, d) => s + (grid[d.driver + '|' + p] || 0), 0));
+  const grandTotal = platTotals.reduce((a, b) => a + b, 0);
+
+  const cell = (v) => {
+    if (!v) return `<td class="cell zero">0</td>`;
+    const alpha = 0.14 + 0.72 * (v / max);
+    return `<td class="cell" style="background:rgba(249,115,22,${alpha.toFixed(2)})">${fmtInt(v)}</td>`;
+  };
+
+  const html = `
+    <table>
+      <thead><tr>
+        <th style="text-align:left">Driver</th>
+        ${platforms.map(p => `<th>${esc(PLT_LABEL[p])}</th>`).join('')}
+        <th>Total</th>
+      </tr></thead>
+      <tbody>
+        ${driverTotals.map(({ driver, total }) => `
+          <tr>
+            <td class="rowhead">${esc(DRIVER_LABEL[driver])}</td>
+            ${platforms.map(p => cell(grid[driver + '|' + p] || 0)).join('')}
+            <td class="total-col">${fmtInt(total)}</td>
+          </tr>
+        `).join('')}
+        <tr class="total">
+          <td class="rowhead">Total</td>
+          ${platTotals.map(v => `<td class="cell">${fmtInt(v)}</td>`).join('')}
+          <td class="total-col">${fmtInt(grandTotal)}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+  document.getElementById('heatmap').innerHTML = html;
+}
+
+// ── Bloque 5: dona de sentiment + barras de emociones ────────────
+let sentChart = null, emoChart = null;
+function renderSentiment() {
+  const s = DATA.sentiment;
+  const k = DATA.kpis;
+  // Con 0 menciones clasificadas, aggregate.py devuelve neutral=100.0 como
+  // valor por defecto matemático (no hay con qué promediar). Mostrarlo tal
+  // cual leería como "100% neutral" cuando en realidad es "sin datos" —
+  // s.classified_count es la señal que distingue ambos casos.
+  const hasData = s.classified_count > 0;
+
+  document.getElementById('donutNum').textContent = hasData ? fmtSigned(k.net_sentiment) : '—';
+  document.getElementById('donutNum').style.color = hasData
+    ? { pos: 'var(--green)', neg: 'var(--red)', neu: 'var(--txt-2)' }[sentimentTone(k.net_sentiment)]
+    : 'var(--txt-3)';
+
+  const rows = [
+    { key: 'positive', label: 'Positivo', color: '#3FB950', v: s.positive },
+    { key: 'negative', label: 'Negativo', color: '#F85149', v: s.negative },
+    { key: 'neutral', label: 'Neutral', color: '#8B949E', v: s.neutral },
+  ];
+
+  document.getElementById('sentLegend').innerHTML = hasData
+    ? rows.map(r => `
+        <div class="sent-legend-row">
+          <span class="dot" style="background:${r.color}"></span>${r.label}
+          <span class="lv">${fmtPct(r.v)}</span>
+        </div>
+      `).join('') + `<div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
+          ${fmtInt(s.classified_count)} menciones clasificadas
+        </div>`
+    : `<div class="sent-legend-row" style="color:var(--txt-3)">Sin menciones clasificadas todavía — no hay datos de sentiment que mostrar.</div>`;
+
+  if (sentChart) sentChart.destroy();
+  sentChart = new Chart(document.getElementById('chSentiment').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: hasData ? rows.map(r => r.label) : ['Sin datos'],
+      datasets: [{
+        data: hasData ? rows.map(r => r.v) : [1],
+        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#30363D'],
+        borderColor: '#161B22', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
+      }],
+    },
+    options: {
+      cutout: '74%', responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase,
+          callbacks: { label: c => hasData ? ` ${c.label}: ${fmtPct(c.raw)}` : ' Sin menciones clasificadas' },
+        },
+      },
+      animation: { animateRotate: true, duration: 600 },
+    },
+  });
+
+  // ── emociones ──
+  const emoEntries = Object.entries(DATA.emotions).sort((a, b) => b[1] - a[1]);
+  document.getElementById('legendEmotions').innerHTML =
+    `<div class="leg-item"><span class="leg-swatch" style="background:#58A6FF"></span>Menciones por emoción dominante</div>`;
+
+  const box = document.getElementById('boxEmotions');
+  box.style.height = Math.max(180, emoEntries.length * 30 + 30) + 'px';
+
+  if (emoChart) emoChart.destroy();
+  emoChart = new Chart(document.getElementById('chEmotions').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: emoEntries.map(([k]) => EMO_LABEL[k] || k),
+      datasets: [{
+        data: emoEntries.map(([, v]) => v),
+        backgroundColor: '#58A6FF',
+        borderRadius: 4, borderSkipped: 'left',
+        barThickness: 16, minBarLength: 3,
+        showEndLabels: true,
+        endLabels: emoEntries.map(([, v]) => fmtInt(v)),
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 30 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipBase, callbacks: { label: c => `${fmtInt(c.raw)} menciones` } },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: 'rgba(48,54,61,.4)' },
+          ticks: { color: '#484F58', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+        },
+        y: { grid: { display: false }, ticks: { color: '#8B949E', font: { family: FONT_SANS, size: 11.5 } } },
+      },
+    },
+  });
+}
+
+// ── Bloque 6: tabla con filtros en JS puro sobre DATA.mentions ───
+let filtros = { platform: '', driver: '', sentiment: '', q: '' };
+
+function filtradas() {
+  return DATA.mentions.filter(m =>
+    (!filtros.platform || m.platform === filtros.platform) &&
+    (!filtros.driver || m.complaint_driver === filtros.driver) &&
+    (!filtros.sentiment || (filtros.sentiment === 'queja' ? m.is_complaint : !m.is_complaint)) &&
+    (!filtros.q || (m.text || '').toLowerCase().includes(filtros.q.toLowerCase()))
+  );
+}
+
+function initFiltros() {
+  const platforms = [...new Set(DATA.mentions.map(m => m.platform))].sort();
+  const el = document.getElementById('filtros');
+  el.innerHTML = `
+    <select id="fPlatform"><option value="">Todas las plataformas</option>
+      ${platforms.map(p => `<option value="${p}">${esc(PLT_LABEL[p] || p)}</option>`).join('')}
+    </select>
+    <select id="fDriver"><option value="">Todos los drivers</option>
+      ${DRIVER_ORDER.map(d => `<option value="${d}">${esc(DRIVER_LABEL[d])}</option>`).join('')}
+    </select>
+    <select id="fSentiment"><option value="">Queja y no queja</option>
+      <option value="queja">Solo quejas</option>
+      <option value="no-queja">Solo no-quejas</option>
+    </select>
+    <input type="search" id="fQ" class="fq" placeholder="Buscar texto…">
+    <button type="button" class="btn-reset" id="fReset">Limpiar filtros</button>
+  `;
+  document.getElementById('fPlatform').addEventListener('change', e => { filtros.platform = e.target.value; renderTabla(); });
+  document.getElementById('fDriver').addEventListener('change', e => { filtros.driver = e.target.value; renderTabla(); });
+  document.getElementById('fSentiment').addEventListener('change', e => {
+    filtros.sentiment = e.target.value === 'queja' ? 'queja' : (e.target.value === 'no-queja' ? 'no' : '');
+    renderTabla();
+  });
+  document.getElementById('fQ').addEventListener('input', e => { filtros.q = e.target.value; renderTabla(); });
+  document.getElementById('fReset').addEventListener('click', () => {
+    filtros = { platform: '', driver: '', sentiment: '', q: '' };
+    el.querySelectorAll('select').forEach(s => s.value = '');
+    el.querySelector('#fQ').value = '';
+    renderTabla();
+  });
+}
+
+function renderTabla() {
+  const rows = filtradas();
+  const tbody = document.getElementById('tbody');
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Sin menciones que coincidan con los filtros</td></tr>`;
+  } else {
+    tbody.innerHTML = rows.map(m => {
+      const unknown = m.date_confidence === 'unknown';
+      const drv = m.complaint_driver ? DRIVER_LABEL[m.complaint_driver] || m.complaint_driver : null;
+      return `<tr>
+        <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
+        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B949E'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
+        <td>${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}</td>
+        <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
+        <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
+        <td class="eng">${fmtInt(m.engagement)}</td>
+        <td class="link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : '—'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('conteoTabla').textContent =
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · * fecha no confiable`;
+}
+
+// ── Bloque 7: cards ordenadas por engagement ─────────────────────
+function renderTopQuejas() {
+  const el = document.getElementById('topQuejas');
+  if (!DATA.top_complaints.length) {
+    el.innerHTML = `<p style="color:var(--txt-3);font-family:var(--mono);font-size:11px">Sin quejas registradas.</p>`;
+    return;
+  }
+  el.innerHTML = DATA.top_complaints.map((m, i) => `
+    <div class="cq-card">
+      <div class="cq-top">
+        <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B949E'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
+        <span class="cq-eng">${fmtInt(m.engagement)}<small>alcance</small></span>
+      </div>
+      ${m.author ? `<div class="cq-author">@${esc(m.author)}</div>` : ''}
+      <div class="cq-text">${esc(m.text)}</div>
+      <div class="cq-foot">
+        <span class="cq-date">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: 'numeric' })}${m.complaint_driver ? ' · ' + esc(DRIVER_LABEL[m.complaint_driver] || m.complaint_driver) : ''}</span>
+        ${m.source_url ? `<a class="cq-link" href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver original ↗</a>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Bloque 8: calidad de datos — texto explícito, no solo números ─
+function renderCalidad() {
+  const q = DATA.data_quality;
+  const platforms = ['web', 'instagram', 'tiktok'];
+  const maxPlat = Math.max(...Object.values(q.by_platform), 1);
+  const months = Object.entries(q.by_month);
+
+  const notes = [
+    `<div class="q-note"><span class="q-num">${fmtInt(q.unknown_date)}</span>
+      <span>menciones no tienen una fecha confiable y quedaron <b style="color:var(--txt)">excluidas del gráfico de tendencia</b> (bloque 2) — sí se cuentan en el total y en la tabla explorable.</span></div>`,
+    q.unclassified > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.unclassified)}</span>
+      <span>menciones aún no han sido clasificadas por el modelo de sentimiento y <b style="color:var(--txt)">se excluyen de los promedios de sentimiento</b>.</span></div>`
+      : `<div class="q-note"><span class="q-num" style="color:var(--green)">0</span>
+      <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} menciones recolectadas tiene sentiment y emoción asignados.</span></div>`,
+    q.last_run_at
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
+      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
+      : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">—</span>
+      <span>no hay registro de una corrida de recolección completada; no se puede reportar cuánto se descartó.</span></div>`,
+    q.last_run_at
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.short_text_last_run)}</span>
+      <span>comentarios se descartaron <b style="color:var(--txt)">en la última corrida</b> por ser demasiado cortos para analizar (típicamente solo emoji) — se filtran antes del paso de relevancia, así que no están incluidos en el número de arriba. Tampoco es un acumulado histórico, por la misma razón.</span></div>`
+      : '',
+  ];
+
+  const platRows = platforms.map(p => `
+    <div class="q-plat-row">
+      <span style="min-width:70px">${esc(PLT_LABEL[p])}</span>
+      <span class="track"><span class="fill" style="width:${(q.by_platform[p] || 0) / maxPlat * 100}%;background:${PLT_COLOR[p]}"></span></span>
+      <span class="val">${fmtInt(q.by_platform[p] || 0)}</span>
+    </div>
+  `).join('');
+
+  const missing = (q.missing_sources || []).map(s => SOURCE_LABEL[s] || (s.charAt(0).toUpperCase() + s.slice(1))).join(', ');
+
+  document.getElementById('calidad').innerHTML = `
+    <div class="q-grid">
+      <div class="q-notes">${notes.join('')}</div>
+      <div class="q-side">
+        <div>
+          <div class="q-block-title">Cobertura por plataforma</div>
+          ${platRows}
+        </div>
+        <div>
+          <div class="q-block-title">Cobertura por mes</div>
+          <div class="q-months">
+            ${months.map(([m, c]) => `<div class="q-chip">${esc(m)}: <b>${fmtInt(c)}</b></div>`).join('')}
+          </div>
+        </div>
+        ${missing ? `<div class="q-missing">⚠ ${esc(missing)} no ${q.missing_sources.length > 1 ? 'están cubiertos' : 'está cubierto'} en esta versión del monitor.</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+[
+  renderKpis, renderTimeline,
+  () => { renderDrivers(''); initDriverSelect(); },
+  renderHeatmap, renderSentiment,
+  () => { initFiltros(); renderTabla(); },
+  renderTopQuejas, renderCalidad,
+].forEach(fn => fn());
+</script>
+</body>
+</html>
