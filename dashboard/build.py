@@ -1,0 +1,57 @@
+"""
+Genera el dashboard HTML autocontenido.
+
+Un solo archivo: Chart.js inline y la data inyectada como JSON.
+Abre con doble clic, funciona sin internet, se manda por correo.
+"""
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from dashboard.aggregate import build_payload
+from store import db
+
+TEMPLATE = Path(__file__).parent / "template.html"
+VENDOR = Path(__file__).parent / "vendor" / "chart.umd.min.js"
+
+DATA_MARKER = "__DASHBOARD_DATA__"
+VENDOR_MARKER = "__CHARTJS__"
+
+
+def render(payload: dict, template_path: str = str(TEMPLATE)) -> str:
+    html = Path(template_path).read_text(encoding="utf-8")
+
+    # Escapar </script> — un comentario que lo contenga rompería el HTML.
+    data = json.dumps(payload, ensure_ascii=False).replace("</script>", "<\\/script>")
+    html = html.replace(DATA_MARKER, data)
+
+    if VENDOR_MARKER in html:
+        html = html.replace(VENDOR_MARKER, VENDOR.read_text(encoding="utf-8"))
+
+    return html
+
+
+def build(db_path: str | None = None, out_dir: str = "dashboard", conn=None) -> str:
+    own_conn = conn is None
+    if own_conn:
+        conn = db.connect(db_path) if db_path else db.connect()
+
+    try:
+        payload = build_payload(conn)
+    finally:
+        if own_conn:
+            conn.close()
+
+    html = render(payload)
+
+    fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out_path = Path(out_dir) / f"avianca_dashboard_{fecha}.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
+
+    print(f"[Dashboard] {out_path}  ({payload['kpis']['total']} menciones)")
+    return str(out_path)
+
+
+if __name__ == "__main__":
+    build()
