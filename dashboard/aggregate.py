@@ -1,10 +1,22 @@
 """
 Agregaciones para el dashboard. Lee la DB y produce el payload JSON.
 
-Sin HTML, sin red. Tres reglas que no se negocian, en el orden en que se
+Sin HTML, sin red. Cuatro reglas que no se negocian, en el orden en que se
 aplican:
 
-  - Antes de calcular cualquier otra cosa, las menciones se colapsan por
+  - Antes que nada, se descartan las menciones anteriores a
+    REPORT_WINDOW_START (config.py). El backfill se pidió con
+    --since 2026-04-19, pero el actor de TikTok (clockworks/tiktok-scraper)
+    ignoró oldestPostDate y devolvió igual 24 videos de 2023-2025 — reales,
+    ya pagados, pero que estiraban el timeline sobre 41 meses con el 98% de
+    los datos concentrados en 6. Se aplica UNA sola vez, aquí, a TODO el
+    análisis (KPIs, timeline, drivers, sentimiento, emociones, tabla, top
+    quejas) para que los números reconcilien entre bloques — no hay
+    excepciones por bloque. Las menciones sin published_at (fecha
+    desconocida) NO se filtran por esta regla — no hay fecha con la cual
+    juzgarlas contra la ventana, y ya tienen su propio tratamiento (la
+    regla del timeline, más abajo, y se cuentan en data_quality.unknown_date).
+  - Sobre lo que queda dentro de la ventana, las menciones se colapsan por
     (author, text) en "voces" únicas. Una persona real que pega el mismo
     comentario 48 veces (caso medido: alejandra.caicho, 56 filas, 56
     source_url de comentario distintas y reales) es una queja, no 48. Sin
@@ -21,10 +33,12 @@ aplican:
     como neutral inventaría neutralidad que nadie midió.
 
 Todos los bloques (KPIs, timeline, drivers, driver×plataforma, sentiment,
-emociones, tabla y top quejas) trabajan sobre las voces ya colapsadas.
+emociones, tabla y top quejas) trabajan sobre las voces ya colapsadas,
+dentro de la ventana de reporte.
 """
 import collections
 
+from config import REPORT_WINDOW_START
 from store import db
 
 PLATFORMS = ["web", "instagram", "tiktok"]
@@ -36,6 +50,19 @@ def _engagement(m: dict) -> int:
 
 def _pct(part: int, whole: int) -> float:
     return round(part / whole * 100, 1) if whole else 0.0
+
+
+def _in_report_window(m: dict) -> bool:
+    """
+    True si la mención entra en la ventana de reporte (REPORT_WINDOW_START,
+    config.py). Sin published_at no hay fecha con la cual evaluarla contra
+    la ventana, así que se conserva — el filtro solo excluye lo que
+    SABEMOS que es anterior, no lo que no sabemos fechar.
+    """
+    published_at = m.get("published_at")
+    if not published_at:
+        return True
+    return published_at[:10] >= REPORT_WINDOW_START
 
 
 def _collapse_voices(mentions: list[dict]) -> list[dict]:
@@ -104,8 +131,16 @@ def _dominant_label(m: dict) -> str:
 
 def build_payload(conn) -> dict:
     raw_mentions = db.all_mentions(conn)
-    mentions = _collapse_voices(raw_mentions)
-    collapsed_repeats = len(raw_mentions) - len(mentions)
+
+    # Ventana de reporte — ver docstring del módulo y config.REPORT_WINDOW_START.
+    # Se aplica UNA vez aquí, antes de colapsar voces, para que todo lo que
+    # sigue (KPIs, timeline, drivers, sentimiento, emociones, tabla, top
+    # quejas) trabaje sobre el mismo conjunto y los números reconcilien.
+    windowed_mentions = [m for m in raw_mentions if _in_report_window(m)]
+    outside_window = len(raw_mentions) - len(windowed_mentions)
+
+    mentions = _collapse_voices(windowed_mentions)
+    collapsed_repeats = len(windowed_mentions) - len(mentions)
     total = len(mentions)
 
     complaints = [m for m in mentions if m["is_complaint"]]
@@ -259,6 +294,11 @@ def build_payload(conn) -> dict:
         "by_platform": dict(por_plataforma),
         "by_month": dict(sorted(cobertura_mes.items())),
         "missing_sources": ["twitter"],
+        # Menciones (crudas, antes de colapsar) que quedaron fuera de la
+        # ventana de reporte — ver docstring del módulo. Reales, en la DB,
+        # pero fuera del análisis.
+        "outside_window": outside_window,
+        "window_start": REPORT_WINDOW_START,
     }
 
     return {

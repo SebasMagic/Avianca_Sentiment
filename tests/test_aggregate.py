@@ -1,3 +1,4 @@
+from config import REPORT_WINDOW_START
 from dashboard import aggregate
 from store import db
 
@@ -261,3 +262,62 @@ def test_mentions_incluye_todo_para_la_tabla(tmp_db):
         "source_url", "complaint_driver", "is_complaint", "engagement",
         "repeat_count",
     }
+
+
+# ── Ventana de reporte (REPORT_WINDOW_START) ──────────────────────────
+#
+# El backfill se pidió con --since 2026-04-19, pero el actor de TikTok
+# ignoró oldestPostDate y devolvió videos de 2023-2025. Esas menciones son
+# reales y siguen en la DB, pero quedan fuera del análisis: la ventana se
+# aplica de forma consistente a todo (KPIs, timeline, drivers, sentiment,
+# emociones, tabla, top quejas), sin excepciones por bloque.
+
+def test_mencion_anterior_a_la_ventana_no_aparece_en_ningun_bloque(tmp_db):
+    _seed(tmp_db, [
+        _m(1, author="autor_2023", published_at="2023-03-23T00:00:00+00:00",
+           is_complaint=1, complaint_driver="equipaje"),
+        _m(2, author="autor_2026", published_at="2026-05-01T00:00:00+00:00",
+           is_complaint=1, complaint_driver="demora"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+
+    # KPIs: solo la de 2026 cuenta.
+    assert p["kpis"]["total"] == 1
+    assert p["kpis"]["complaints"] == 1
+    assert p["kpis"]["date_from"] == "2026-05-01"
+
+    # Tabla y top quejas.
+    assert len(p["mentions"]) == 1
+    assert p["mentions"][0]["author"] == "autor_2026"
+    assert all(f["author"] == "autor_2026" for f in p["top_complaints"])
+
+    # Drivers, timeline, sentiment y calidad de datos.
+    assert [d["driver"] for d in p["drivers"]] == ["demora"]
+    assert all(punto["date"] != "2023-03-23" for punto in p["timeline"])
+    assert p["data_quality"]["total"] == 1
+    assert p["data_quality"]["by_platform"] == {"tiktok": 1}
+
+
+def test_outside_window_cuenta_las_que_quedan_fuera(tmp_db):
+    _seed(tmp_db, [
+        _m(1, author="a", published_at="2023-03-23T00:00:00+00:00"),
+        _m(2, author="b", published_at="2024-06-01T00:00:00+00:00"),
+        _m(3, author="c", published_at="2026-05-01T00:00:00+00:00"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["outside_window"] == 2
+    assert p["data_quality"]["window_start"] == REPORT_WINDOW_START
+
+
+def test_mencion_sin_fecha_sigue_contando_en_totales(tmp_db):
+    """Sin published_at no hay fecha con la cual juzgar la ventana — se
+    conserva en los totales, como ya hacía antes de esta corrección."""
+    _seed(tmp_db, [
+        _m(1, author="con_fecha", published_at="2026-05-01T00:00:00+00:00"),
+        _m(2, author="sin_fecha", published_at=None, date_confidence="unknown"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert p["kpis"]["total"] == 2
+    assert p["data_quality"]["total"] == 2
+    assert p["data_quality"]["outside_window"] == 0
+    assert p["data_quality"]["unknown_date"] == 1

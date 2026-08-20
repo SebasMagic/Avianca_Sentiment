@@ -67,6 +67,12 @@ DB_PATH = os.getenv("DB_PATH", "data/avianca.db")
 
 BACKFILL_SINCE = "2026-04-19"
 
+# El dashboard reporta desde esta fecha. Las menciones anteriores siguen en la
+# base pero quedan fuera del analisis: el actor de TikTok devolvio contenido de
+# 2023-2025 pese a pedirle 2026, y esas 24 menciones estiraban el timeline sobre
+# 41 meses con el 98% de los datos concentrados en 6.
+REPORT_WINDOW_START = "2026-01-01"
+
 # Drivers operativos de queja — el LLM debe devolver exactamente uno de estos.
 # El ORDEN de esta lista es solo de declaración/validación (normalize_result
 # comprueba pertenencia, no precedencia) y NO es el orden de desempate cuando

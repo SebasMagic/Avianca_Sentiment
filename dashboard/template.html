@@ -933,6 +933,10 @@ function renderCalidad() {
   const months = Object.entries(q.by_month);
 
   const notes = [
+    q.outside_window > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.outside_window)}</span>
+      <span>menciones de la base son anteriores a <b style="color:var(--txt)">${fmtDate(q.window_start, { day: '2-digit', month: 'short', year: 'numeric' })}</b> y <b style="color:var(--txt)">no entran en este reporte</b> — en el backfill, el actor de TikTok devolvió contenido fuera del rango pedido (videos de 2023 a 2025 pese a pedir solo 2026). Son menciones reales y ya pagadas, pero se excluyen de todos los bloques (KPIs, tendencia, drivers, sentimiento, tabla y top quejas) para que el reporte no se estire sobre años cuando casi todos los datos están concentrados en meses recientes.</span></div>`
+      : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
       <span>filas crudas eran repeticiones del mismo autor diciendo el mismo texto (spam o re-posteo) y se colapsaron en <b style="color:var(--txt)">${fmtInt(q.unique_voices)} voces únicas</b> — cada una cuenta una sola vez en todo este reporte, con su alcance sumado y la cantidad de repeticiones visible como <b style="color:var(--txt)">×N</b> en la tabla (bloque 6).</span></div>`
