@@ -382,8 +382,14 @@ const fmtSigned = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 const fmtPct = n => (n ?? 0).toFixed(1) + '%';
 function fmtDate(iso, opts) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  const s = String(iso);
+  // Se construye la fecha con componentes locales a propósito. `new Date("2026-01-01")`
+  // se interpreta como medianoche UTC, y al renderizar en Colombia (UTC-5) sale
+  // "31 de dic de 2025". Las fechas de la base son días calendario en UTC: se
+  // muestran tal cual quedaron registradas, sin correrlas por zona horaria.
+  const p = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = p ? new Date(+p[1], +p[2] - 1, +p[3]) : new Date(s);
+  if (isNaN(d.getTime())) return s.slice(0, 10);
   return d.toLocaleDateString('es-CO', opts || { day: '2-digit', month: 'short', year: 'numeric' });
 }
 function sentimentTone(v) {
