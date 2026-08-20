@@ -64,8 +64,34 @@ def test_sentiment_excluye_unclassified(tmp_db):
            sentiment_negative=0.0, sentiment_positive=1.0, sentiment_neutral=0.0),
     ])
     p = aggregate.build_payload(tmp_db)
-    assert p["sentiment"]["negative"] == 100.0
+    assert p["sentiment"]["counts"]["negative"] == 1
+    assert p["sentiment"]["pct"]["negative"] == 100.0
     assert p["sentiment"]["classified_count"] == 1
+
+
+def test_sentimiento_por_etiqueta_dominante_cuenta_bien(tmp_db):
+    """
+    El sentiment se muestra como conteo de menciones por etiqueta dominante
+    (la de mayor probabilidad), no como promedio de probabilidades — "52,6%
+    positivo" debe significar "52,6% de las menciones son positivas".
+    Incluye un caso de empate exacto (positive == negative): el desempate
+    definido es negative > neutral > positive, así que esa mención cuenta
+    como negativa.
+    """
+    _seed(tmp_db, [
+        _m(1, sentiment_positive=0.7, sentiment_negative=0.2, sentiment_neutral=0.1),
+        _m(2, sentiment_positive=0.1, sentiment_negative=0.8, sentiment_neutral=0.1),
+        _m(3, sentiment_positive=0.1, sentiment_negative=0.1, sentiment_neutral=0.8),
+        # Empate exacto positive/negative: el desempate lo manda a negative.
+        _m(4, sentiment_positive=0.5, sentiment_negative=0.5, sentiment_neutral=0.0),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert p["sentiment"]["counts"] == {"positive": 1, "negative": 2, "neutral": 1}
+    assert p["sentiment"]["pct"]["negative"] == 50.0
+    assert p["sentiment"]["classified_count"] == 4
+    # El promedio de probabilidades se conserva bajo otra clave, no se usa
+    # como el número que se muestra.
+    assert "avg_probabilities" in p["sentiment"]
 
 
 def test_drivers_ordenados_por_volumen(tmp_db):
@@ -78,6 +104,77 @@ def test_drivers_ordenados_por_volumen(tmp_db):
     assert p["drivers"][0]["driver"] == "equipaje"
     assert p["drivers"][0]["count"] == 2
     assert p["drivers"][1]["driver"] == "demora"
+
+
+def test_driver_pct_total_cuadra(tmp_db):
+    """
+    drivers[].pct es el % que representa cada driver sobre el total de
+    quejas — el número que alimenta la columna "% Total" del heatmap
+    driver×plataforma (Cambio 4). Debe cuadrar con el conteo real y sumar
+    100% entre todos los drivers presentes.
+    """
+    _seed(tmp_db, [
+        _m(1, complaint_driver="equipaje"),
+        _m(2, complaint_driver="equipaje"),
+        _m(3, complaint_driver="equipaje"),
+        _m(4, complaint_driver="demora"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    por_driver = {d["driver"]: d for d in p["drivers"]}
+    assert por_driver["equipaje"]["pct"] == 75.0
+    assert por_driver["demora"]["pct"] == 25.0
+    assert round(sum(d["pct"] for d in p["drivers"]), 1) == 100.0
+
+
+def test_colapsa_repeticiones_mismo_autor_y_texto(tmp_db):
+    """
+    Dos filas del mismo autor con el mismo texto pero distinta source_url
+    (el caso real: alejandra.caicho pegando el mismo comentario en URLs de
+    comentario distintas) se colapsan en una sola voz. repeat_count cuenta
+    las repeticiones y engagement suma el alcance de todas.
+    """
+    _seed(tmp_db, [
+        _m(1, author="alejandra.caicho", text="Avianca canceló mi vuelo otra vez",
+           source_url="https://x.com/c/1", likes=10, shares=1, comments_count=0),
+        _m(2, author="alejandra.caicho", text="Avianca canceló mi vuelo otra vez",
+           source_url="https://x.com/c/2", likes=5, shares=0, comments_count=2),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert p["kpis"]["total"] == 1
+    voz = p["mentions"][0]
+    assert voz["repeat_count"] == 2
+    assert voz["engagement"] == 18  # (10+1+0) + (5+0+2)
+
+
+def test_no_colapsa_autores_distintos_mismo_texto(tmp_db):
+    """Mismo texto, autores distintos: son dos voces reales, no se fusionan."""
+    _seed(tmp_db, [
+        _m(1, author="autor_a", text="Avianca canceló mi vuelo otra vez",
+           source_url="https://x.com/c/1"),
+        _m(2, author="autor_b", text="Avianca canceló mi vuelo otra vez",
+           source_url="https://x.com/c/2"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert p["kpis"]["total"] == 2
+    assert all(m["repeat_count"] == 1 for m in p["mentions"])
+
+
+def test_collapsed_repeats_y_unique_voices_en_payload(tmp_db):
+    _seed(tmp_db, [
+        _m(1, author="alejandra.caicho", text="mismo texto repetido",
+           source_url="https://x.com/c/1"),
+        _m(2, author="alejandra.caicho", text="mismo texto repetido",
+           source_url="https://x.com/c/2"),
+        _m(3, author="alejandra.caicho", text="mismo texto repetido",
+           source_url="https://x.com/c/3"),
+        _m(4, author="otro_autor", text="comentario distinto",
+           source_url="https://x.com/c/4"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    # 4 filas crudas, 2 voces únicas -> 2 filas absorbidas por el colapso.
+    assert p["data_quality"]["collapsed_repeats"] == 2
+    assert p["data_quality"]["unique_voices"] == 2
+    assert p["data_quality"]["total"] == 2
 
 
 def test_driver_por_plataforma(tmp_db):
@@ -162,4 +259,5 @@ def test_mentions_incluye_todo_para_la_tabla(tmp_db):
     assert set(p["mentions"][0]) >= {
         "id", "platform", "text", "author", "published_at",
         "source_url", "complaint_driver", "is_complaint", "engagement",
+        "repeat_count",
     }
