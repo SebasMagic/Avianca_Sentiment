@@ -14,7 +14,6 @@ APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 # Proyecto
-BRAND_KEYWORD = os.getenv("BRAND_KEYWORD", "Avianca")
 COUNTRY_CODE = os.getenv("COUNTRY_CODE", "CO")
 LANGUAGE_CODE = os.getenv("LANGUAGE_CODE", "es")
 LOCATION_CODE = int(os.getenv("LOCATION_CODE", "2170"))
@@ -35,31 +34,69 @@ LIMIT_INSTAGRAM = 50
 LIMIT_TIKTOK = 50
 LIMIT_TWITTER = 100
 
-# Perfiles de Instagram por marca
-INSTAGRAM_PROFILES = {
-    "Avianca": [
-        "https://www.instagram.com/avianca/",
-        "https://www.instagram.com/aviancacolombia/",
-    ],
-    "LATAM": [
-        "https://www.instagram.com/latam_airlines/",
-        "https://www.instagram.com/latamcolombia/",
-    ],
-}
-
-# Dominios oficiales a excluir por marca
-BRAND_DOMAINS = {
+# Perfiles de marca — capa de datos multi-marca.
+#
+# Un solo diccionario reemplaza la config dispersa que existía antes
+# (BRAND_KEYWORD + INSTAGRAM_PROFILES + BRAND_DOMAINS sueltos, resueltos a
+# nivel de módulo en cada consumidor). Ahora cada módulo recibe el perfil
+# completo de la marca como parámetro en cada llamada — nunca lo resuelve
+# una sola vez al importar — para que una misma corrida pueda procesar
+# Avianca y LATAM sin reiniciar el proceso.
+BRANDS = {
     "Avianca": {
-        "avianca.com", "www.avianca.com", "help.avianca.com",
-        "newsroom.avianca.com", "blog.avianca.com",
-        "lifemiles.com", "www.lifemiles.com",
+        "name": "Avianca",
+        "keyword": "Avianca",
+        "instagram_profiles": [
+            "https://www.instagram.com/avianca/",
+            "https://www.instagram.com/aviancacolombia/",
+        ],
+        "domains": {
+            "avianca.com", "www.avianca.com", "help.avianca.com",
+            "newsroom.avianca.com", "blog.avianca.com",
+            "lifemiles.com", "www.lifemiles.com",
+        },
+        "tiktok_hashtags": ["avianca", "aviancacolombia"],
+        "loyalty_program": "LifeMiles",
+        "color": "#F62839",
+        "logo": "Logo_wordmark_Avianca_(Colombia).png",
     },
     "LATAM": {
-        "latamairlines.com", "www.latamairlines.com",
-        "multiplus.com.br", "latampass.com",
-        "newsroom.latamairlines.com",
+        "name": "LATAM",
+        "keyword": "LATAM",
+        "instagram_profiles": [
+            "https://www.instagram.com/latam_airlines/",
+            "https://www.instagram.com/latamcolombia/",
+        ],
+        "domains": {
+            "latamairlines.com", "www.latamairlines.com",
+            "multiplus.com.br", "latampass.com",
+            "newsroom.latamairlines.com",
+        },
+        "tiktok_hashtags": ["latam", "latamairlines", "latamcolombia"],
+        "loyalty_program": "LATAM Pass",
+        "color": "#1B0088",
+        "logo": None,
     },
 }
+
+DEFAULT_BRAND = "Avianca"
+
+
+def get_brand(name: str) -> dict:
+    """
+    Perfil completo de una marca (keyword, perfiles de Instagram, dominios
+    oficiales, hashtags de TikTok, programa de fidelidad, color, logo).
+
+    Falla con un mensaje claro si `name` no está en BRANDS — mejor un
+    ValueError explícito acá que un KeyError críptico más adelante, en medio
+    de un scraper o del prompt del clasificador.
+    """
+    try:
+        return BRANDS[name]
+    except KeyError:
+        raise ValueError(
+            f"Marca desconocida: {name!r}. Marcas disponibles: {', '.join(BRANDS)}"
+        ) from None
 
 # ── v2 ────────────────────────────────────────────────────────
 
@@ -77,16 +114,21 @@ REPORT_WINDOW_START = "2026-01-01"
 # El ORDEN de esta lista es solo de declaración/validación (normalize_result
 # comprueba pertenencia, no precedencia) y NO es el orden de desempate cuando
 # una queja encaja en varios drivers a la vez. Ese orden de precedencia vive
-# en SYSTEM_PROMPT, en pipeline/classifier.py, y es distinto de este:
-# cancelacion > demora > equipaje > reembolsos > cobros_tarifas > lifemiles >
-# asientos_comida > atencion_cliente > otro.
+# en build_system_prompt(), en pipeline/classifier.py, y es distinto de este:
+# cancelacion > demora > equipaje > reembolsos > cobros_tarifas >
+# programa_fidelidad > asientos_comida > atencion_cliente > otro.
+#
+# "programa_fidelidad" (antes "lifemiles"): renombrado porque el driver es
+# genérico entre marcas — Avianca tiene LifeMiles, LATAM tiene LATAM Pass.
+# El nombre del programa que ve el LLM sale de brand["loyalty_program"],
+# inyectado en el prompt por build_system_prompt().
 COMPLAINT_DRIVERS = [
     "equipaje",
     "cancelacion",
     "demora",
     "atencion_cliente",
     "cobros_tarifas",
-    "lifemiles",
+    "programa_fidelidad",
     "asientos_comida",
     "reembolsos",
     "otro",
