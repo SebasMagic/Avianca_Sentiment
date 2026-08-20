@@ -131,6 +131,18 @@ def test_render_web_platform_color_no_cambia_por_marca():
     assert "web:'#2A78D6'" in html_latam
 
 
+def test_driver_label_programa_fidelidad_reemplaza_a_lifemiles():
+    """Tarea 4: el label huérfano 'lifemiles: LifeMiles' se renombra a
+    'programa_fidelidad', con una etiqueta neutra que sirve para ambas
+    marcas — el nombre concreto del programa vive en el perfil, no acá."""
+    html = build.render(PAYLOAD)
+    assert "programa_fidelidad:'Programa de fidelidad'" in html
+    # El código (no los comentarios explicativos) ya no referencia la clave
+    # vieja como entrada de DRIVER_LABEL — se busca el patrón de código
+    # exacto, no la palabra suelta (que sí aparece, a propósito, en un
+    # comentario que documenta el rename).
+    assert "lifemiles:'LifeMiles'" not in html
+
 
 # ── Derivación de --brand-ink (contraste WCAG AA, criterio del skill dataviz) ─
 

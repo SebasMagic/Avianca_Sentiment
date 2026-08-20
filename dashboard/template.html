@@ -486,7 +486,11 @@ const PLT_LABEL = { web:'Web', instagram:'Instagram', tiktok:'TikTok' };
 const DRIVER_LABEL = {
   equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
   atencion_cliente:'Atención al cliente', cobros_tarifas:'Cobros y tarifas',
-  lifemiles:'LifeMiles', asientos_comida:'Asientos y comida',
+  // "programa_fidelidad" (antes "lifemiles", Tarea 4): el driver es
+  // genérico entre marcas — Avianca tiene LifeMiles, LATAM tiene LATAM
+  // Pass. La etiqueta del gráfico se queda neutra a propósito; el nombre
+  // concreto del programa vive en el perfil (config.BRANDS), no acá.
+  programa_fidelidad:'Programa de fidelidad', asientos_comida:'Asientos y comida',
   reembolsos:'Reembolsos', otro:'Otro',
 };
 const DRIVER_ORDER = Object.keys(DRIVER_LABEL);
