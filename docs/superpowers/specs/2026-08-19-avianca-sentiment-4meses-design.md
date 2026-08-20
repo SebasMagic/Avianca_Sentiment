@@ -122,6 +122,10 @@ dos comentarios distintos en la misma URL podían colisionar y perderse en
 silencio. La asimetría decide: un duplicado falso es una fila de más, visible y
 auditable; una fusión falsa es pérdida de datos irrecuperable.
 
+Consecuencia asumida: si un autor edita su comentario entre dos scrapes, el
+fingerprint cambia y se guarda una fila nueva en vez de actualizar la anterior.
+Infla el conteo en vez de perder datos, que es el lado correcto del error.
+
 El `author` entra en el hash por una razón medida en datos reales: en el v1, el
 `source_url` de **todos** los comentarios de Instagram resolvía a la misma URL
 (`apify_instagram.py` cae a `post_urls[0]` cuando el ítem no trae `url` propia).
@@ -225,6 +229,11 @@ respecto al v1.
 `complaint_driver` es `null` cuando `is_complaint` es `false`. Si `is_complaint`
 es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 
+Alcance de "obligatorio": la precedencia se impone por prompt, no por código.
+`normalize_result` valida que el driver pertenezca a la lista, pero no re-deriva
+el driver del texto para comprobar que el modelo aplicó el orden. Es auditable
+estadísticamente, no ítem por ítem.
+
 **Orden de precedencia (desempate obligatorio).** Muchas quejas encajan en dos
 drivers a la vez: una maleta perdida por un vuelo cancelado, un cobro que además
 no fue reembolsado. Sin una regla, el mismo tipo de queja se reparte de forma no
@@ -275,7 +284,7 @@ Además, los cobros de equipaje pertenecen a `cobros_tarifas`, no a `equipaje`:
 ### CLI (`main.py`)
 
 ```
-python main.py                                   # corrida normal (últimos 7 días)
+python main.py                                   # corrida normal (incremental)
 python main.py --backfill --since 2026-04-19     # backfill histórico
 python main.py --seed-excel <archivo.xlsx>       # importa Excel existente
 python main.py --schedule                        # semanal, lunes 8am
@@ -288,6 +297,16 @@ python main.py --schedule                        # semanal, lunes 8am
 | DataForSEO | `date_from` en el payload (ya soportado) | Completa |
 | TikTok | `oldestPostDate` del actor `clockworks/tiktok-scraper` | Completa |
 | Instagram | Subir `resultsLimit` de posts de 20 a 80; filtrar comentarios por fecha del post | Parcial — limitada por cuántos posts publicó la marca |
+
+**La corrida `weekly` calcula su propio `since`.** No puede pasar `None`: con
+`since=None`, DataForSEO cae a `BACKFILL_SINCE` (fijo) y el filtro de fecha de
+Instagram se desactiva por completo, de modo que cada corrida "semanal" repetiría
+el volumen de un backfill indefinidamente — rompiendo el estimado de costo de §11.
+
+Regla: `since` = fecha de inicio de la última corrida terminada, menos un día de
+margen para no perder nada en el borde. Si no hay corrida previa, 7 días atrás.
+Usar la última corrida y no un rolling fijo evita abrir huecos cuando una semana
+se salta.
 
 Twitter/X queda fuera de v2. `scrapers/apify_twitter.py` se conserva en el repo
 pero se retira del arreglo de scrapers activos en `main.py`, con un comentario
@@ -344,6 +363,13 @@ naranja `#F97316`, JetBrains Mono + Inter. Se corrige el `overflow: hidden` del
 
 El bloque 8 es deliberado y no negociable: el reporte debe declarar los límites
 de su propia cobertura.
+
+**Los descartes por texto corto se cuentan aparte.** `normalize()` descarta los
+textos de menos de 10 caracteres (comentarios de solo emoji) antes de que corra el
+filtro de relevancia, de modo que no aparecen en `filtered_count`. En el backfill
+real fueron 201 de 1.310 (15%). Se registran en `runs.short_text_count` y se
+muestran en el bloque 8: un 15% que desaparece sin rastro contradice la promesa
+central del rediseño.
 
 **Las descartadas por ruido se reportan por corrida, no como acumulado.** El
 pipeline no persiste las menciones que descarta, de modo que no hay forma de
