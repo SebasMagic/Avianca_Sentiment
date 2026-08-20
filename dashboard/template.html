@@ -657,40 +657,53 @@ let sentChart = null, emoChart = null;
 function renderSentiment() {
   const s = DATA.sentiment;
   const k = DATA.kpis;
-  document.getElementById('donutNum').textContent = fmtSigned(k.net_sentiment);
-  document.getElementById('donutNum').style.color =
-    { pos: 'var(--green)', neg: 'var(--red)', neu: 'var(--txt-2)' }[sentimentTone(k.net_sentiment)];
+  // Con 0 menciones clasificadas, aggregate.py devuelve neutral=100.0 como
+  // valor por defecto matemático (no hay con qué promediar). Mostrarlo tal
+  // cual leería como "100% neutral" cuando en realidad es "sin datos" —
+  // s.classified_count es la señal que distingue ambos casos.
+  const hasData = s.classified_count > 0;
+
+  document.getElementById('donutNum').textContent = hasData ? fmtSigned(k.net_sentiment) : '—';
+  document.getElementById('donutNum').style.color = hasData
+    ? { pos: 'var(--green)', neg: 'var(--red)', neu: 'var(--txt-2)' }[sentimentTone(k.net_sentiment)]
+    : 'var(--txt-3)';
 
   const rows = [
     { key: 'positive', label: 'Positivo', color: '#3FB950', v: s.positive },
     { key: 'negative', label: 'Negativo', color: '#F85149', v: s.negative },
     { key: 'neutral', label: 'Neutral', color: '#8B949E', v: s.neutral },
   ];
-  document.getElementById('sentLegend').innerHTML = rows.map(r => `
-    <div class="sent-legend-row">
-      <span class="dot" style="background:${r.color}"></span>${r.label}
-      <span class="lv">${fmtPct(r.v)}</span>
-    </div>
-  `).join('') + `<div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
-      ${fmtInt(s.classified_count)} menciones clasificadas
-    </div>`;
+
+  document.getElementById('sentLegend').innerHTML = hasData
+    ? rows.map(r => `
+        <div class="sent-legend-row">
+          <span class="dot" style="background:${r.color}"></span>${r.label}
+          <span class="lv">${fmtPct(r.v)}</span>
+        </div>
+      `).join('') + `<div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
+          ${fmtInt(s.classified_count)} menciones clasificadas
+        </div>`
+    : `<div class="sent-legend-row" style="color:var(--txt-3)">Sin menciones clasificadas todavía — no hay datos de sentiment que mostrar.</div>`;
 
   if (sentChart) sentChart.destroy();
   sentChart = new Chart(document.getElementById('chSentiment').getContext('2d'), {
     type: 'doughnut',
     data: {
-      labels: rows.map(r => r.label),
+      labels: hasData ? rows.map(r => r.label) : ['Sin datos'],
       datasets: [{
-        data: rows.map(r => r.v),
-        backgroundColor: rows.map(r => r.color + 'CC'),
-        borderColor: '#161B22', borderWidth: 2, hoverOffset: 4,
+        data: hasData ? rows.map(r => r.v) : [1],
+        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#30363D'],
+        borderColor: '#161B22', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
       }],
     },
     options: {
       cutout: '74%', responsive: true, maintainAspectRatio: true,
       plugins: {
         legend: { display: false },
-        tooltip: { ...tooltipBase, callbacks: { label: c => ` ${c.label}: ${fmtPct(c.raw)}` } },
+        tooltip: {
+          ...tooltipBase,
+          callbacks: { label: c => hasData ? ` ${c.label}: ${fmtPct(c.raw)}` : ' Sin menciones clasificadas' },
+        },
       },
       animation: { animateRotate: true, duration: 600 },
     },
@@ -846,8 +859,11 @@ function renderCalidad() {
       <span>menciones aún no han sido clasificadas por el modelo de sentimiento y <b style="color:var(--txt)">se excluyen de los promedios de sentimiento</b>.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--green)">0</span>
       <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} menciones recolectadas tiene sentiment y emoción asignados.</span></div>`,
-    `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_total)}</span>
-      <span>elementos adicionales se descartaron antes de llegar a esta base de ${fmtInt(q.total)} menciones — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca.</span></div>`,
+    q.last_run_at
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
+      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con Avianca. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
+      : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">—</span>
+      <span>no hay registro de una corrida de recolección completada; no se puede reportar cuánto se descartó.</span></div>`,
   ];
 
   const platRows = platforms.map(p => `

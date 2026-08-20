@@ -40,6 +40,10 @@ def test_timeline_excluye_fechas_desconocidas(tmp_db):
     _seed(tmp_db, [
         _m(1),
         _m(2, published_at=None, date_confidence="unknown"),
+        # Caso que aísla la regla: published_at SÍ está presente, pero la
+        # confianza es 'unknown'. Si el filtro solo mirara published_at
+        # (ignorando date_confidence), esta mención se colaría al timeline.
+        _m(3, date_confidence="unknown"),
     ])
     p = aggregate.build_payload(tmp_db)
     fechas = [punto["date"] for punto in p["timeline"]]
@@ -52,6 +56,12 @@ def test_sentiment_excluye_unclassified(tmp_db):
         _m(1, sentiment_negative=1.0, sentiment_positive=0.0, sentiment_neutral=0.0),
         _m(2, classification_status="unclassified",
            sentiment_negative=None, sentiment_positive=None, sentiment_neutral=None),
+        # Caso que aísla la regla: classification_status es 'unclassified' pero
+        # los campos de sentiment SÍ tienen valores (p.ej. una reclasificación
+        # a medias). Si el filtro mirara la presencia de sentiment en vez del
+        # status, esta mención contaminaría el promedio.
+        _m(3, classification_status="unclassified",
+           sentiment_negative=0.0, sentiment_positive=1.0, sentiment_neutral=0.0),
     ])
     p = aggregate.build_payload(tmp_db)
     assert p["sentiment"]["negative"] == 100.0
@@ -101,6 +111,26 @@ def test_data_quality_reporta_huecos(tmp_db):
     assert p["data_quality"]["unknown_date"] == 1
     assert p["data_quality"]["unclassified"] == 1
     assert p["data_quality"]["total"] == 3
+
+
+def test_filtered_last_run_no_duplica_entre_corridas(tmp_db):
+    """
+    seed() recalcula filtered_count sobre el archivo completo cada vez que
+    corre, sin importar cuánto de eso ya estaba en la DB. Dos corridas del
+    mismo archivo (p.ej. re-ejecutar el seed por error) no deben SUMAR sus
+    filtered_count — eso reportaría descartes que no existen. Solo importa
+    la corrida más reciente que terminó.
+    """
+    for _ in range(2):
+        run_id = db.start_run(tmp_db, "seed", None)
+        db.upsert_mentions(tmp_db, [_m(1)], run_id)
+        db.finish_run(tmp_db, run_id, raw_count=100, filtered_count=96,
+                       inserted_count=1, duplicate_count=0)
+
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["filtered_last_run"] == 96
+    assert p["data_quality"]["last_run_mode"] == "seed"
+    assert p["data_quality"]["last_run_at"] is not None
 
 
 def test_mentions_incluye_todo_para_la_tabla(tmp_db):

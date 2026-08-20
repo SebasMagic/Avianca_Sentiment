@@ -130,16 +130,25 @@ def build_payload(conn) -> dict:
     por_plataforma = collections.Counter(m["platform"] for m in mentions)
     cobertura_mes = collections.Counter(m["published_at"][:7] for m in dated)
 
-    runs = [dict(r) for r in conn.execute(
-        "SELECT * FROM runs ORDER BY started_at DESC LIMIT 10"
-    ).fetchall()]
+    # filtered_count se recalcula sobre el archivo/lote completo en cada corrida
+    # de seed/scraping, aunque upsert_mentions deduplique lo ya visto. No hay
+    # forma de deduplicar los descartes entre corridas (no se persisten), así
+    # que un acumulado histórico sería una cifra inventada. Reportamos solo la
+    # última corrida que terminó, etiquetada como tal — no un total.
+    last_run = conn.execute(
+        "SELECT * FROM runs WHERE finished_at IS NOT NULL "
+        "ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    last_run = dict(last_run) if last_run else None
 
     data_quality = {
         "total": total,
         "unknown_date": sum(1 for m in mentions if m["date_confidence"] == "unknown"),
         "unclassified": sum(1 for m in mentions
                             if m["classification_status"] == "unclassified"),
-        "filtered_total": sum(r["filtered_count"] or 0 for r in runs),
+        "filtered_last_run": (last_run["filtered_count"] or 0) if last_run else 0,
+        "last_run_mode": last_run["mode"] if last_run else None,
+        "last_run_at": last_run["finished_at"] if last_run else None,
         "by_platform": dict(por_plataforma),
         "by_month": dict(sorted(cobertura_mes.items())),
         "missing_sources": ["twitter"],
