@@ -80,7 +80,12 @@ BRANDS = {
             "multiplus.com.br", "latampass.com",
             "newsroom.latamairlines.com",
         },
-        "tiktok_hashtags": ["latam", "latamairlines", "latamcolombia"],
+        # "latam" a secas queda FUERA a propósito: es la abreviatura de
+        # Latinoamérica, no solo el nombre de la aerolínea. En el backfill se
+        # revisaron a mano los videos que trajo y solo 1 de 29 hablaba de la
+        # aerolínea — el resto eran memes regionales, sismos y geografía.
+        # Un hashtag que aporta 3% de señal contamina más de lo que suma.
+        "tiktok_hashtags": ["latamairlines", "latamcolombia"],
         "loyalty_program": "LATAM Pass",
         "color": "#1B0088",
         "logo": None,
