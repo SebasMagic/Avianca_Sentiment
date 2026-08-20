@@ -234,7 +234,12 @@ es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 - **Validación de longitud:** si el array devuelto no tiene el mismo largo que el
   batch, no se hace `zip`. Se reintenta el batch completo una vez; si vuelve a
   fallar, se procesa item por item.
-- **Reintentos:** 2 reintentos con backoff exponencial ante error de red o JSON inválido.
+- **Reintentos:** 1 reintento con backoff exponencial ante error de red o JSON
+  inválido (dos intentos en total por lote). No más: ante un desajuste de longitud,
+  repetir el mismo lote rara vez ayuda — el mecanismo real de recuperación es la
+  caída a item por item. Reintentos extra de lote solo queman dinero en la ruta de
+  fallo: con un lote de 10 que falla de forma persistente, 1 reintento cuesta 22
+  llamados y 2 reintentos cuestan 33.
 - **Fallo explícito:** lo que no se logre clasificar se guarda con
   `classification_status = 'unclassified'`, no como neutral silencioso. El
   dashboard los excluye de los promedios de sentiment y los reporta en calidad de datos.
