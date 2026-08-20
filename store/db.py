@@ -207,3 +207,20 @@ def update_classification(conn, mention_id: str, result: dict) -> None:
 def all_mentions(conn) -> list[dict]:
     rows = conn.execute("SELECT * FROM mentions ORDER BY published_at DESC").fetchall()
     return [_to_dict(r) for r in rows]
+
+
+def last_completed_run_started_at(conn) -> str | None:
+    """
+    `started_at` (ISO 8601) de la última corrida que TERMINÓ
+    (finished_at IS NOT NULL), o None si no hay ninguna.
+
+    Se usa para calcular el `since` incremental de la corrida `weekly`:
+    apoyarse en cuándo arrancó la última corrida real (en vez de un
+    rolling fijo de 7 días) evita abrir huecos si una semana se salta.
+    Corridas en curso o abortadas (sin finished_at) no cuentan.
+    """
+    row = conn.execute(
+        "SELECT started_at FROM runs WHERE finished_at IS NOT NULL "
+        "ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    return row["started_at"] if row else None

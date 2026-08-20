@@ -46,13 +46,20 @@ Todos se invocan como `python main.py <flag>`:
 | Comando | Qué hace |
 |---|---|
 | `--backfill` | Corrida histórica desde `config.BACKFILL_SINCE` (por defecto) contra las tres fuentes en vivo: DataForSEO, Instagram y TikTok. Gasta dinero real de scraping. |
-| `--since YYYY-MM-DD` | Fecha de inicio explícita para la corrida (se combina con `--backfill` o se usa sola para una corrida semanal acotada). |
+| `--since YYYY-MM-DD` | Fecha de inicio explícita para la corrida (se combina con `--backfill` o se usa sola para una corrida semanal). Si se pasa, siempre gana sobre el cálculo automático. |
 | `--seed-excel <archivo.xlsx>` | Importa un Excel del pipeline v1 (Supabase) a la base SQLite v2. Idempotente: correrlo dos veces no duplica filas. |
 | `--classify` | Reclasifica solo las menciones pendientes (`unclassified`) que quedaron en la base, sin volver a scrapear. Útil para reintentar fallos de la API del clasificador. |
 | `--export-excel` | Vuelca la base SQLite completa a un `.xlsx`. |
 | `--schedule` | Deja el proceso corriendo y ejecuta el pipeline automáticamente cada lunes a las 8am. |
 
-Sin flags, `python main.py` corre una corrida semanal normal (sin `since`).
+Sin flags, `python main.py` corre una corrida semanal (`weekly`). Esta
+corrida **sí está acotada por fecha** aunque no se pase `--since`: calcula
+un `since` incremental como la fecha de inicio de la última corrida
+terminada menos un día de margen (o 7 días atrás si no hay corrida previa
+registrada). Sin esto, DataForSEO repetiría siempre la misma ventana desde
+`config.BACKFILL_SINCE` y el filtro de fecha de Instagram quedaría
+deshabilitado, así que cada corrida "semanal" se comportaría como un
+mini-backfill que paga el costo completo de Apify cada vez.
 
 ## Dashboard
 
