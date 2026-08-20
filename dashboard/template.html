@@ -953,7 +953,7 @@ function initFiltros() {
     <select id="fDriver"><option value="">Todos los drivers</option>
       ${DRIVER_ORDER.map(d => `<option value="${d}">${esc(DRIVER_LABEL[d])}</option>`).join('')}
     </select>
-    <select id="fSentiment"><option value="">Queja y no queja</option>
+    <select id="fSentiment"><option value="">Todas las menciones</option>
       <option value="queja">Solo quejas</option>
       <option value="no-queja">Solo no-quejas</option>
     </select>
