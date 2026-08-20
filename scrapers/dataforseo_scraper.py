@@ -84,16 +84,13 @@ def scrape() -> list[dict]:
         neg = conn.get("negative", 0.0) or 0.0
         pos = conn.get("positive", 0.0) or 0.0
 
-        # Queja real = sentiment negativo dominante en fuente independiente
-        is_complaint = neg > 0.4 and neg > pos
-
         results.append({
             "id": str(uuid.uuid4()),
             "platform": "web",
             "source_url": item.get("url", ""),
             "text": text,
             "author": domain or None,
-            "published_at": item.get("date_published", fetched_at),
+            "published_at": item.get("date_published") or None,
             "country": "CO",
             "likes": 0,
             "shares": 0,
@@ -102,7 +99,7 @@ def scrape() -> list[dict]:
             "sentiment_negative": neg,
             "sentiment_neutral": conn.get("neutral", 1.0) or 1.0,
             "emotion": dominant_emotion,
-            "is_complaint": is_complaint,
+            "is_complaint": False,
             "raw": item,
             "fetched_at": fetched_at,
         })

@@ -41,7 +41,7 @@ def scrape() -> list[dict]:
             "source_url": item.get("webVideoUrl", item.get("id", "")),
             "text": text,
             "author": author_meta.get("name", None),
-            "published_at": item.get("createTimeISO", fetched_at),
+            "published_at": item.get("createTimeISO") or None,
             "country": "CO",
             "likes": item.get("diggCount", 0) or 0,
             "shares": item.get("shareCount", 0) or 0,

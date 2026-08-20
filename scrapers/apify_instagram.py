@@ -72,7 +72,7 @@ def scrape() -> list[dict]:
             "source_url": item.get("url", post_urls[0] if post_urls else ""),
             "text": text,
             "author": item.get("ownerUsername", None),
-            "published_at": timestamp or fetched_at,
+            "published_at": timestamp or None,
             "country": "CO",
             "likes": item.get("likesCount", 0) or 0,
             "shares": 0,
