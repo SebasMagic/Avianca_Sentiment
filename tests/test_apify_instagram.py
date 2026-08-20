@@ -2,7 +2,11 @@
 scrapers/apify_instagram.py no golpea la API real en tests: se
 monkeypatchea ApifyClient por un doble de prueba que sirve datasets fijos.
 """
+from config import get_brand
 from scrapers import apify_instagram
+
+AVIANCA = get_brand("Avianca")
+LATAM = get_brand("LATAM")
 
 
 class _FakeDataset:
@@ -58,7 +62,7 @@ def test_usa_commentUrl_cuando_el_item_lo_trae(monkeypatch):
     fake_client = FakeApifyClient(None, posts=POSTS, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["source_url"] == "https://www.instagram.com/p/ABC123/c/18102936407183474"
@@ -78,7 +82,7 @@ def test_cae_a_construccion_manual_si_no_hay_commentUrl(monkeypatch):
     fake_client = FakeApifyClient(None, posts=POSTS, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["source_url"] == "https://www.instagram.com/p/ABC123/#comment-999"
@@ -96,7 +100,7 @@ def test_sin_commentUrl_ni_id_cae_a_la_url_del_post(monkeypatch):
     fake_client = FakeApifyClient(None, posts=POSTS, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["source_url"] == "https://www.instagram.com/p/ABC123/"
@@ -127,7 +131,7 @@ def test_comentario_de_post_video_hereda_views_con_reach_source_post(monkeypatch
     fake_client = FakeApifyClient(None, posts=posts, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["views"] == 32600
@@ -160,7 +164,7 @@ def test_comentario_de_post_sidecar_sin_video_no_tiene_views(monkeypatch):
     fake_client = FakeApifyClient(None, posts=posts, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["views"] is None
@@ -182,7 +186,7 @@ def test_comentario_sin_post_correspondiente_en_el_mapa_no_falla(monkeypatch):
     fake_client = FakeApifyClient(None, posts=POSTS, comments=comments)
     monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
 
-    results = apify_instagram.scrape()
+    results = apify_instagram.scrape(AVIANCA)
 
     assert len(results) == 1
     assert results[0]["views"] is None
@@ -231,3 +235,19 @@ def test_fetch_post_reach_sin_urls_no_llama_al_actor(monkeypatch):
 
     assert reach == {}
     assert fake_client.calls == []
+
+
+# ── Tarea 4 (multi-marca): la Fase 1 usa los perfiles de la marca pasada ──
+
+def test_scrape_usa_los_perfiles_de_instagram_de_la_marca_pasada(monkeypatch):
+    """scrape() debe pedir la Fase 1 con los perfiles de LATAM cuando se le
+    pasa el perfil de LATAM, no un default de Avianca resuelto al importar."""
+    fake_client = FakeApifyClient(None, posts=POSTS, comments=[])
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    apify_instagram.scrape(LATAM)
+
+    fase_1 = fake_client.calls[0]
+    assert fase_1["resultsType"] == "posts"
+    assert fase_1["directUrls"] == LATAM["instagram_profiles"]
+    assert fase_1["directUrls"] != AVIANCA["instagram_profiles"]

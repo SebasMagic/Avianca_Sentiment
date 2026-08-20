@@ -1,6 +1,7 @@
 import openpyxl
 import pytest
 
+from config import get_brand
 from store import db, seed_excel
 
 HEADERS = [
@@ -72,3 +73,25 @@ def test_seed_dos_veces_no_duplica(excel_v1, tmp_db):
     assert res["inserted"] == 0
     assert res["duplicates"] == 2
     assert len(db.all_mentions(tmp_db)) == 2
+
+
+def test_seed_sin_brand_explicito_etiqueta_avianca_por_default(excel_v1, tmp_db):
+    seed_excel.seed(excel_v1, tmp_db)
+    assert all(m["brand"] == "Avianca" for m in db.all_mentions(tmp_db))
+
+
+def test_seed_con_marca_explicita_etiqueta_esa_marca_y_filtra_con_su_perfil(excel_v1, tmp_db):
+    """Sembrar con el perfil de LATAM debe: (a) etiquetar cada fila
+    insertada con brand='LATAM', y (b) filtrar relevancia con el keyword de
+    LATAM en vez de el de Avianca — la fila web que menciona "Avianca" (sin
+    LATAM) debe descartarse por 'sin_keyword', algo que no pasaba al sembrar
+    como Avianca (ver test_seed_descarta_ruido_y_cuenta_razones)."""
+    latam = get_brand("LATAM")
+    res = seed_excel.seed(excel_v1, tmp_db, latam)
+
+    # La fila social (tiktok) pasa igual: el filtro de keyword solo aplica a
+    # 'web'. La fila web que solo nombra "Avianca" ahora también se descarta.
+    assert res["filter_reasons"].get("sin_keyword", 0) == 1
+    assert res["filter_reasons"].get("agregador", 0) == 1
+    assert res["inserted"] == 1
+    assert all(m["brand"] == "LATAM" for m in db.all_mentions(tmp_db))

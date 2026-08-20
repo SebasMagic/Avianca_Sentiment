@@ -14,6 +14,7 @@ import uuid
 
 import openpyxl
 
+from config import DEFAULT_BRAND, get_brand
 from pipeline.relevance import is_relevant
 from store import db
 
@@ -81,14 +82,26 @@ def read_excel(path: str) -> list[dict]:
     return out
 
 
-def seed(path: str, conn) -> dict:
+def seed(path: str, conn, brand: dict | None = None) -> dict:
+    """
+    `brand` es el perfil completo (config.get_brand(...)) — se usa para
+    filtrar relevancia (dominios/keyword de esa marca) y para etiquetar
+    cada mención insertada con brand["name"]. El Excel del v1 es todo de
+    Avianca, así que sin `brand` explícito cae a DEFAULT_BRAND.
+    """
+    if brand is None:
+        brand = get_brand(DEFAULT_BRAND)
+
     filas = read_excel(path)
-    run_id = db.start_run(conn, "seed", None)
+    for m in filas:
+        m["brand"] = brand["name"]
+
+    run_id = db.start_run(conn, "seed", None, brand=brand["name"])
 
     razones = collections.Counter()
     keep = []
     for m in filas:
-        ok, razon = is_relevant(m)
+        ok, razon = is_relevant(m, brand)
         if ok:
             keep.append(m)
         else:

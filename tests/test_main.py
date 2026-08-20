@@ -89,3 +89,81 @@ def test_weekly_sin_since_lo_calcula_en_vez_de_dejarlo_none(tmp_path, monkeypatc
     ).fetchone()
     assert row["since"] is not None
     conn.close()
+
+
+def test_run_pipeline_sin_brand_usa_avianca_por_default(tmp_path, monkeypatch):
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main, "SCRAPERS", [])
+
+    main.run_pipeline("weekly", "2026-02-01")
+
+    conn = fake_connect()
+    row = conn.execute(
+        "SELECT brand FROM runs ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    assert row["brand"] == "Avianca"
+    conn.close()
+
+
+def test_run_pipeline_con_brand_explicito_lo_registra_en_runs_y_lo_pasa_a_los_scrapers(
+    tmp_path, monkeypatch,
+):
+    """--brand debe: (a) quedar registrado en runs.brand, y (b) pasarse
+    como perfil completo a cada scraper (Tarea 4) — no un default fijo
+    resuelto al importar."""
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    perfiles_recibidos = []
+
+    def fake_scraper(brand, since=None):
+        perfiles_recibidos.append(brand)
+        return []
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main, "SCRAPERS", [("Fake", fake_scraper)])
+
+    main.run_pipeline("weekly", "2026-02-01", brand_name="LATAM")
+
+    conn = fake_connect()
+    row = conn.execute(
+        "SELECT brand FROM runs ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    assert row["brand"] == "LATAM"
+    conn.close()
+
+    assert len(perfiles_recibidos) == 1
+    assert perfiles_recibidos[0]["name"] == "LATAM"
+    assert perfiles_recibidos[0]["keyword"] == "LATAM"
+
+
+def test_run_pipeline_marca_desconocida_falla_con_mensaje_claro(tmp_path, monkeypatch):
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main, "SCRAPERS", [])
+
+    try:
+        main.run_pipeline("weekly", "2026-02-01", brand_name="Delta")
+        assert False, "debía lanzar ValueError"
+    except ValueError as e:
+        assert "Delta" in str(e)

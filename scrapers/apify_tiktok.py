@@ -1,19 +1,20 @@
 """
 Apify TikTok scraper.
-Extrae videos que mencionan Avianca en Colombia.
+Extrae videos que mencionan a la marca en Colombia, vía sus hashtags
+(brand["tiktok_hashtags"]).
 Sentiment se procesa después en pipeline/classifier.py.
 """
 import uuid
 from datetime import datetime, timezone
 from apify_client import ApifyClient
-from config import APIFY_API_TOKEN, APIFY_TIKTOK_ACTOR, BRAND_KEYWORD, LIMIT_TIKTOK
+from config import APIFY_API_TOKEN, APIFY_TIKTOK_ACTOR, LIMIT_TIKTOK
 
 
-def scrape(since: str | None = None) -> list[dict]:
+def scrape(brand: dict, since: str | None = None) -> list[dict]:
     client = ApifyClient(APIFY_API_TOKEN)
 
     run_input = {
-        "hashtags": [BRAND_KEYWORD.lower(), f"{BRAND_KEYWORD.lower()}colombia"],
+        "hashtags": brand["tiktok_hashtags"],
         "resultsPerPage": LIMIT_TIKTOK,
         "shouldDownloadVideos": False,
         "shouldDownloadCovers": False,
@@ -21,7 +22,7 @@ def scrape(since: str | None = None) -> list[dict]:
     if since:
         run_input["oldestPostDate"] = since
 
-    print(f"[TikTok] Iniciando actor {APIFY_TIKTOK_ACTOR}...")
+    print(f"[TikTok] Iniciando actor {APIFY_TIKTOK_ACTOR} para {brand['keyword']}...")
     run = client.actor(APIFY_TIKTOK_ACTOR).call(run_input=run_input)
 
     items = list(client.dataset(run["defaultDatasetId"]).iterate_items())

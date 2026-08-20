@@ -1,11 +1,11 @@
 """
 Excel writer — exporta las menciones a un .xlsx con formato.
-Archivo generado: avianca_mentions_YYYY-MM-DD.xlsx
+Archivo generado: {marca}_mentions_YYYY-MM-DD.xlsx
 """
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from datetime import datetime, timezone
-from config import BRAND_KEYWORD
+from config import DEFAULT_BRAND
 
 
 COLUMNS = [
@@ -37,9 +37,10 @@ HEADER_FILL  = PatternFill("solid", fgColor="0D1117")
 HEADER_FONT  = Font(name="Calibri", bold=True, color="F97316", size=10)
 
 
-def export(mentions: list[dict]) -> str:
+def export(mentions: list[dict], brand_name: str = DEFAULT_BRAND) -> str:
     """
     Escribe las menciones a un Excel y retorna la ruta del archivo generado.
+    `brand_name` solo se usa para el nombre del archivo.
     """
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -107,7 +108,7 @@ def export(mentions: list[dict]) -> str:
 
     # Nombre del archivo con fecha
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    filename = f"{BRAND_KEYWORD.lower()}_mentions_{date_str}.xlsx"
+    filename = f"{brand_name.lower()}_mentions_{date_str}.xlsx"
     wb.save(filename)
 
     print(f"[Excel] Archivo guardado: {filename}  ({len(mentions)} filas)")

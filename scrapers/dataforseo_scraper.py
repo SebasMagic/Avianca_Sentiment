@@ -1,7 +1,7 @@
 """
 DataForSEO Content Analysis scraper.
 Retorna menciones web/blogs/Reddit con sentiment nativo incluido.
-Excluye dominios oficiales de Avianca y filtra por fecha (`since`).
+Excluye dominios oficiales de la marca y filtra por fecha (`since`).
 """
 import uuid
 import requests
@@ -9,11 +9,8 @@ from base64 import b64encode
 from datetime import datetime, timezone
 from config import (
     DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD,
-    BRAND_KEYWORD, LANGUAGE_CODE, LIMIT_DATAFORSEO, BACKFILL_SINCE,
-    BRAND_DOMAINS as BRAND_DOMAINS_MAP,
+    LANGUAGE_CODE, LIMIT_DATAFORSEO, BACKFILL_SINCE,
 )
-
-BRAND_DOMAINS = BRAND_DOMAINS_MAP.get(BRAND_KEYWORD, set())
 
 
 def _get_headers():
@@ -26,13 +23,13 @@ def _get_headers():
     }
 
 
-def scrape(since: str | None = None) -> list[dict]:
+def scrape(brand: dict, since: str | None = None) -> list[dict]:
     """
-    Consulta DataForSEO y retorna menciones de usuarios.
+    Consulta DataForSEO y retorna menciones de usuarios sobre `brand`.
     `since` es una fecha YYYY-MM-DD; si es None usa BACKFILL_SINCE.
     """
     payload = [{
-        "keyword": BRAND_KEYWORD,
+        "keyword": brand["keyword"],
         "language_code": LANGUAGE_CODE,
         "limit": LIMIT_DATAFORSEO,
         "date_from": since or BACKFILL_SINCE,
@@ -55,12 +52,13 @@ def scrape(since: str | None = None) -> list[dict]:
         return []
 
     fetched_at = datetime.now(timezone.utc).isoformat()
+    domains = brand["domains"]
 
     for item in items:
         domain = item.get("domain", "") or ""
 
         # Saltar páginas oficiales de la marca
-        if domain.lower() in BRAND_DOMAINS:
+        if domain.lower() in domains:
             continue
 
         conn = item.get("connotation_types", {}) or {}

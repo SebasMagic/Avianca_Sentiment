@@ -152,3 +152,20 @@ def test_reporta_conteo_por_plataforma(tmp_db):
 
     assert res["by_platform"] == {"tiktok": 2, "instagram": 1}
     assert res["enriched"] == 3
+
+
+def test_run_con_brand_solo_toca_esa_marca(tmp_db):
+    """Pasar brand acota el enriquecimiento a una sola marca — la fila de
+    LATAM debe quedar intacta cuando se corre para Avianca."""
+    _seed(tmp_db, [
+        {**_mention(1, "tiktok", TIKTOK_RAW), "brand": "Avianca"},
+        {**_mention(2, "tiktok", TIKTOK_RAW), "brand": "LATAM"},
+    ])
+
+    res = engagement_enrichment.run(tmp_db, brand="Avianca")
+
+    assert res["enriched"] == 1
+    fila_avianca = [m for m in db.all_mentions(tmp_db) if m["brand"] == "Avianca"][0]
+    fila_latam = [m for m in db.all_mentions(tmp_db) if m["brand"] == "LATAM"][0]
+    assert fila_avianca["saves"] == 249
+    assert fila_latam["saves"] is None  # sin tocar

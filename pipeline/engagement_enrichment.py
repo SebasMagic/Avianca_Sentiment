@@ -68,8 +68,12 @@ _MAPPERS = {
 }
 
 
-def run(conn) -> dict:
-    mentions = db.all_mentions(conn)
+def run(conn, brand: str | None = None) -> dict:
+    """
+    `brand` es opcional: sin él, enriquece todas las marcas (comportamiento
+    histórico); pasándolo (el nombre, p.ej. "LATAM"), lo acota a una sola.
+    """
+    mentions = db.all_mentions(conn, brand=brand)
     enriched = 0
     skipped = 0
     by_platform: dict[str, int] = {}

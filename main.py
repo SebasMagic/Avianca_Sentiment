@@ -1,7 +1,8 @@
 """
-main.py — Entry point del pipeline Avianca Sentiment Monitor v2.
+main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
 
-  python main.py                                # corrida semanal (since incremental)
+  python main.py                                # corrida semanal (since incremental), marca por defecto
+  python main.py --brand LATAM                  # corrida semanal para LATAM
   python main.py --since 2026-08-10             # corrida semanal desde una fecha explícita
   python main.py --backfill                     # backfill desde config.BACKFILL_SINCE
   python main.py --backfill --since 2026-04-19  # backfill desde una fecha
@@ -11,6 +12,13 @@ main.py — Entry point del pipeline Avianca Sentiment Monitor v2.
   python main.py --enriquecer-engagement         # puebla saves/views desde el raw ya guardado
   python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
   python main.py --schedule                     # semanal, lunes 8am
+
+`--brand` (default: config.DEFAULT_BRAND = "Avianca") acota TODO el
+comando a una sola marca: qué se scrapea, con qué prompt se clasifica, y
+qué filas se leen/escriben en la DB (la capa de datos es multi-marca, ver
+config.BRANDS — el dashboard sigue siendo de una marca a la vez, mezclar
+vistas es trabajo aparte). Falla temprano con un mensaje claro si la
+marca no existe en config.BRANDS.
 
 Twitter/X queda fuera de v2: el actor de Apify con búsqueda histórica
 por rango de fechas es de pago. scrapers/apify_twitter.py se conserva
@@ -33,7 +41,7 @@ from datetime import datetime, timedelta, timezone
 
 import schedule
 
-from config import BACKFILL_SINCE
+from config import BACKFILL_SINCE, DEFAULT_BRAND, get_brand
 from pipeline import classify_pending, engagement_enrichment, instagram_reach_backfill
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
@@ -70,29 +78,38 @@ def compute_weekly_since(conn, now: datetime | None = None) -> str:
     return since_date.strftime("%Y-%m-%d")
 
 
-def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
+def run_pipeline(mode: str = "weekly", since: str | None = None,
+                  brand_name: str = DEFAULT_BRAND) -> dict:
     conn = db.connect()
+    brand = get_brand(brand_name)  # falla temprano y claro si la marca no existe
 
     # --since explícito siempre gana; solo se calcula si no se pasó nada.
     if mode == "weekly" and since is None:
         since = compute_weekly_since(conn)
 
     print(f"\n{'=' * 56}")
-    print(f"[Pipeline] {mode} | since={since or '—'} | {datetime.now(timezone.utc).isoformat()}")
+    print(f"[Pipeline] {mode} | brand={brand_name} | since={since or '—'} | "
+          f"{datetime.now(timezone.utc).isoformat()}")
     print(f"{'=' * 56}\n")
 
-    run_id = db.start_run(conn, mode, since)
+    run_id = db.start_run(conn, mode, since, brand=brand_name)
 
     raw = []
     errores = []
     for nombre, scrape_fn in SCRAPERS:
         try:
-            raw.extend(scrape_fn(since=since))
+            raw.extend(scrape_fn(brand, since=since))
         except Exception as e:
             print(f"[{nombre}] ERROR: {e}")
             errores.append(f"{nombre}: {e}")
 
     print(f"\n[Pipeline] Total crudo: {len(raw)} menciones")
+
+    # Cada mención producida por esta corrida queda etiquetada con su marca
+    # antes de normalizar/filtrar/insertar — así el fingerprint y la
+    # columna `brand` de `mentions` la reflejan correctamente.
+    for m in raw:
+        m["brand"] = brand_name
 
     normalizadas = normalize(raw)
     # normalize() descarta silenciosamente los textos de menos de
@@ -105,7 +122,7 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
     razones = collections.Counter()
     keep = []
     for m in normalizadas:
-        ok, razon = is_relevant(m)
+        ok, razon = is_relevant(m, brand)
         if ok:
             keep.append(m)
         else:
@@ -117,7 +134,7 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
     inserted, duplicates = db.upsert_mentions(conn, keep, run_id)
     print(f"[Store] {inserted} nuevas, {duplicates} ya existían")
 
-    clasificacion = classify_pending.run(conn)
+    clasificacion = classify_pending.run(conn, brand)
 
     db.finish_run(
         conn, run_id,
@@ -129,11 +146,13 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
         notes="; ".join(errores),
     )
 
-    total = conn.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
+    total = conn.execute(
+        "SELECT COUNT(*) FROM mentions WHERE brand = ?", (brand_name,)
+    ).fetchone()[0]
     conn.close()
 
     print(f"\n{'=' * 56}")
-    print(f"[Pipeline] Completado. Total acumulado en DB: {total}")
+    print(f"[Pipeline] Completado. Total acumulado en DB para {brand_name}: {total}")
     print(f"{'=' * 56}\n")
 
     return {
@@ -146,7 +165,9 @@ def run_pipeline(mode: str = "weekly", since: str | None = None) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Avianca Sentiment Monitor v2")
+    parser = argparse.ArgumentParser(description="Avianca/LATAM Sentiment Monitor v2")
+    parser.add_argument("--brand", default=DEFAULT_BRAND,
+                        help=f"marca a procesar (default: {DEFAULT_BRAND}; ver config.BRANDS)")
     parser.add_argument("--backfill", action="store_true",
                         help="corrida histórica de 4 meses")
     parser.add_argument("--since", default=None,
@@ -166,28 +187,32 @@ def main():
                         help="corre cada lunes a las 8am")
     args = parser.parse_args()
 
+    # Falla temprano y con mensaje claro si --brand no existe en config.BRANDS,
+    # antes de tocar la DB o cualquier API — para cualquier subcomando.
+    brand = get_brand(args.brand)
+
     if args.seed_excel:
         conn = db.connect()
-        res = seed_excel.seed(args.seed_excel, conn)
+        res = seed_excel.seed(args.seed_excel, conn, brand)
         conn.close()
         print(f"[Seed] {res}")
         return
 
     if args.classify:
         conn = db.connect()
-        print(f"[Classify] {classify_pending.run(conn)}")
+        print(f"[Classify] {classify_pending.run(conn, brand)}")
         conn.close()
         return
 
     if args.export_excel:
         conn = db.connect()
-        export_excel(db.all_mentions(conn))
+        export_excel(db.all_mentions(conn, brand=args.brand), brand_name=args.brand)
         conn.close()
         return
 
     if args.enriquecer_engagement:
         conn = db.connect()
-        print(f"[Engagement] {engagement_enrichment.run(conn)}")
+        print(f"[Engagement] {engagement_enrichment.run(conn, brand=args.brand)}")
         conn.close()
         return
 
@@ -198,17 +223,17 @@ def main():
         return
 
     if args.schedule:
-        print("[Scheduler] cada lunes a las 8am hora Colombia...")
-        schedule.every().monday.at("08:00").do(run_pipeline)
+        print(f"[Scheduler] cada lunes a las 8am hora Colombia, marca={args.brand}...")
+        schedule.every().monday.at("08:00").do(run_pipeline, brand_name=args.brand)
         while True:
             schedule.run_pending()
             time.sleep(60)
         return
 
     if args.backfill:
-        run_pipeline("backfill", args.since or BACKFILL_SINCE)
+        run_pipeline("backfill", args.since or BACKFILL_SINCE, brand_name=args.brand)
     else:
-        run_pipeline("weekly", args.since)
+        run_pipeline("weekly", args.since, brand_name=args.brand)
 
 
 if __name__ == "__main__":

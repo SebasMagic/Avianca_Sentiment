@@ -2,7 +2,11 @@
 scrapers/apify_tiktok.py no golpea la API real en tests: se monkeypatchea
 ApifyClient por un doble de prueba que sirve un dataset fijo.
 """
+from config import get_brand
 from scrapers import apify_tiktok
+
+AVIANCA = get_brand("Avianca")
+LATAM = get_brand("LATAM")
 
 
 class _FakeDataset:
@@ -66,7 +70,7 @@ def test_filtra_items_anteriores_a_since_aunque_el_actor_los_devuelva(monkeypatc
     fake_client = FakeApifyClient(None, items=ITEMS)
     monkeypatch.setattr(apify_tiktok, "ApifyClient", lambda token: fake_client)
 
-    results = apify_tiktok.scrape(since="2026-04-19")
+    results = apify_tiktok.scrape(AVIANCA, since="2026-04-19")
 
     assert len(results) == 1
     assert results[0]["text"] == "video nuevo sobre Avianca"
@@ -78,7 +82,7 @@ def test_actor_igual_recibe_oldestPostDate_como_defensa_en_profundidad(monkeypat
     fake_client = FakeApifyClient(None, items=ITEMS)
     monkeypatch.setattr(apify_tiktok, "ApifyClient", lambda token: fake_client)
 
-    apify_tiktok.scrape(since="2026-04-19")
+    apify_tiktok.scrape(AVIANCA, since="2026-04-19")
 
     assert fake_client.calls[0]["oldestPostDate"] == "2026-04-19"
 
@@ -87,6 +91,21 @@ def test_sin_since_no_filtra_nada(monkeypatch):
     fake_client = FakeApifyClient(None, items=ITEMS)
     monkeypatch.setattr(apify_tiktok, "ApifyClient", lambda token: fake_client)
 
-    results = apify_tiktok.scrape()
+    results = apify_tiktok.scrape(AVIANCA)
 
     assert len(results) == 2
+
+
+# ── Tarea 4 (multi-marca): los hashtags salen del perfil, no de un derivado ──
+
+def test_hashtags_salen_del_perfil_de_la_marca_pasada(monkeypatch):
+    """Antes los hashtags se derivaban de BRAND_KEYWORD ([kw, kw+'colombia']).
+    Ahora scrape() debe usar brand['tiktok_hashtags'] tal cual — para LATAM
+    eso incluye 'latamairlines', que la derivación vieja nunca producía."""
+    fake_client = FakeApifyClient(None, items=[])
+    monkeypatch.setattr(apify_tiktok, "ApifyClient", lambda token: fake_client)
+
+    apify_tiktok.scrape(LATAM)
+
+    assert fake_client.calls[0]["hashtags"] == LATAM["tiktok_hashtags"]
+    assert fake_client.calls[0]["hashtags"] == ["latam", "latamairlines", "latamcolombia"]

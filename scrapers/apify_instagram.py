@@ -1,6 +1,7 @@
 """
 Apify Instagram scraper.
-Fase 1: obtiene posts recientes de @avianca.
+Fase 1: obtiene posts recientes de los perfiles de Instagram de la marca
+(brand["instagram_profiles"]).
 Fase 2: extrae comentarios de esos posts — son usuarios reales quejándose o elogiando.
 Sentiment se procesa después en pipeline/classifier.py.
 
@@ -21,8 +22,8 @@ import uuid
 from datetime import datetime, timezone
 from apify_client import ApifyClient
 from config import (
-    APIFY_API_TOKEN, APIFY_INSTAGRAM_ACTOR, LIMIT_INSTAGRAM, BRAND_KEYWORD,
-    INSTAGRAM_PROFILES, INSTAGRAM_POSTS_LIMIT,
+    APIFY_API_TOKEN, APIFY_INSTAGRAM_ACTOR, LIMIT_INSTAGRAM,
+    INSTAGRAM_POSTS_LIMIT,
 )
 
 
@@ -80,14 +81,14 @@ def fetch_post_reach(post_urls: list[str]) -> dict[str, dict]:
     return _post_reach_map(posts)
 
 
-def scrape(since: str | None = None) -> list[dict]:
+def scrape(brand: dict, since: str | None = None) -> list[dict]:
     client = ApifyClient(APIFY_API_TOKEN)
     fetched_at = datetime.now(timezone.utc).isoformat()
 
-    profiles = INSTAGRAM_PROFILES.get(BRAND_KEYWORD, INSTAGRAM_PROFILES["Avianca"])
+    profiles = brand["instagram_profiles"]
 
     # ── FASE 1: obtener URLs de posts recientes + su alcance ──────
-    print(f"[Instagram] Fase 1 — obteniendo posts de {BRAND_KEYWORD}...")
+    print(f"[Instagram] Fase 1 — obteniendo posts de {brand['keyword']}...")
     posts_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
         "directUrls": profiles,
         "resultsType": "posts",
