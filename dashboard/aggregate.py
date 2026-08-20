@@ -35,6 +35,17 @@ aplican:
 Todos los bloques (KPIs, timeline, drivers, driver×plataforma, sentiment,
 emociones, tabla y top quejas) trabajan sobre las voces ya colapsadas,
 dentro de la ventana de reporte.
+
+Multi-marca: build_payload(conn, brand=...) acota todo lo anterior a una
+sola marca; build_payload(conn, brand=None) NO filtra — agrega TODAS las
+marcas juntas (vista combinada). Ningún bloque de este módulo asume marca
+única: ninguno lee config.BRANDS ni compara contra una marca fija en
+ningún punto de la agregación, así que un dataset con Avianca y LATAM
+mezclados se agrega igual de bien que uno de una sola marca. El colapso de
+voces (_collapse_voices) agrupa por (brand, author, text) — no solo
+(author, text) — precisamente para que, en la vista combinada, dos
+personas de marcas distintas diciendo lo mismo no se fusionen en una sola
+voz.
 """
 import collections
 
@@ -229,10 +240,19 @@ def _collapse_voices(mentions: list[dict]) -> list[dict]:
     la DB ya incluye el autor exactamente para poder distinguir a dos
     personas distintas citando la misma frase (ver store/db.py). Colapsar
     por texto solo, ignorando el autor, fusionaría voces reales.
+
+    La clave de agrupación incluye `brand` (no solo author+text): en una
+    llamada con brand=None (vista combinada, Tarea 1) las menciones de
+    Avianca y de LATAM viajan en la misma lista, y sin la marca en la
+    clave dos personas DISTINTAS de marcas distintas que por coincidencia
+    escriben exactamente el mismo texto se fusionarían en una sola voz.
+    Cuando el payload ya viene filtrado a una sola marca, `brand` es
+    constante en todas las filas y esta clave se comporta exactamente
+    igual que antes (author, text).
     """
     groups: "collections.OrderedDict[tuple, list[dict]]" = collections.OrderedDict()
     for m in mentions:
-        key = (m.get("author"), m.get("text"))
+        key = (m.get("brand"), m.get("author"), m.get("text"))
         groups.setdefault(key, []).append(m)
 
     def _sort_key(m: dict):
@@ -305,8 +325,13 @@ def _dominant_label(m: dict) -> str:
     return max(candidatos, key=lambda par: par[1])[0]
 
 
-def build_payload(conn) -> dict:
-    raw_mentions = db.all_mentions(conn)
+def build_payload(conn, brand: str | None = None) -> dict:
+    """
+    `brand`: nombre de marca (ver config.BRANDS) para acotar todo el
+    payload a esa marca, o None para NO filtrar — agrega TODAS las marcas
+    presentes en la DB juntas (vista combinada). Ver docstring del módulo.
+    """
+    raw_mentions = db.all_mentions(conn, brand=brand)
 
     # Ventana de reporte — ver docstring del módulo y config.REPORT_WINDOW_START.
     # Se aplica UNA vez aquí, antes de colapsar voces, para que todo lo que
@@ -417,6 +442,12 @@ def build_payload(conn) -> dict:
     # ── Tabla y top quejas
     filas = [{
         "id": m["id"],
+        # Marca de esta voz — sale directo de la fila (dict(oldest) en
+        # _collapse_voices ya la trae). Necesaria para que la vista
+        # combinada (brand=None) pueda distinguir de qué marca es cada
+        # fila de la tabla o cada card de top quejas; en un payload
+        # filtrado a una sola marca es simplemente constante.
+        "brand": m.get("brand"),
         "platform": m["platform"],
         "text": m["text"],
         "author": m["author"],
@@ -510,10 +541,25 @@ def build_payload(conn) -> dict:
     # forma de deduplicar los descartes entre corridas (no se persisten), así
     # que un acumulado histórico sería una cifra inventada. Reportamos solo la
     # última corrida que terminó, etiquetada como tal — no un total.
-    last_run = conn.execute(
-        "SELECT * FROM runs WHERE finished_at IS NOT NULL "
-        "ORDER BY started_at DESC LIMIT 1"
-    ).fetchone()
+    #
+    # Acotada por marca cuando build_payload() se llamó con una: `runs` no
+    # se filtra por defecto en la query, así que un payload de LATAM sin
+    # esto reportaría la última corrida de AVIANCA (marca distinta) como si
+    # fuera la suya — filtered_last_run, short_text_last_run y last_run_mode
+    # quedarían mintiendo sobre datos de la otra marca. Sin `brand` (vista
+    # combinada) se mantiene el comportamiento histórico: la última corrida
+    # de cualquier marca.
+    if brand is not None:
+        last_run = conn.execute(
+            "SELECT * FROM runs WHERE finished_at IS NOT NULL AND brand = ? "
+            "ORDER BY started_at DESC LIMIT 1",
+            (brand,),
+        ).fetchone()
+    else:
+        last_run = conn.execute(
+            "SELECT * FROM runs WHERE finished_at IS NOT NULL "
+            "ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
     last_run = dict(last_run) if last_run else None
 
     data_quality = {
@@ -547,7 +593,19 @@ def build_payload(conn) -> dict:
         "metric_applies": METRIC_APPLIES,
     }
 
+    # Qué marca(s) representa este payload — para que la plantilla pueda
+    # titularse sola (título, encabezado, color) sin adivinar a partir de
+    # los datos. Con `brand` explícito, la identidad es esa marca aunque
+    # hoy no tenga ni una mención (ver LATAM: el filtro fue explícito, el
+    # nombre no depende de que haya datos). Sin filtro (vista combinada),
+    # `names` refleja las marcas que de verdad aparecen en lo que se
+    # devolvió — puede ser una sola si por ahora solo hay datos de una.
+    brand_names = [brand] if brand is not None else sorted(
+        {m["brand"] for m in mentions if m.get("brand")}
+    )
+
     return {
+        "brand": {"filter": brand, "names": brand_names},
         "kpis": kpis,
         "timeline": timeline,
         "drivers": drivers,

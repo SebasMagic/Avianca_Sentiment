@@ -649,6 +649,117 @@ def test_outside_window_cuenta_las_que_quedan_fuera(tmp_db):
     assert p["data_quality"]["window_start"] == REPORT_WINDOW_START
 
 
+# ── Multi-marca (Tarea 1): build_payload(conn, brand=...) ─────────────────
+
+def test_build_payload_filtra_por_marca(tmp_db):
+    _seed(tmp_db, [
+        _m(1, brand="Avianca", author="a"),
+        _m(2, brand="LATAM", author="b"),
+        _m(3, brand="LATAM", author="c"),
+    ])
+    p_avianca = aggregate.build_payload(tmp_db, brand="Avianca")
+    p_latam = aggregate.build_payload(tmp_db, brand="LATAM")
+    assert p_avianca["kpis"]["total"] == 1
+    assert p_latam["kpis"]["total"] == 2
+    assert all(m["brand"] == "Avianca" for m in p_avianca["mentions"])
+    assert all(m["brand"] == "LATAM" for m in p_latam["mentions"])
+
+
+def test_build_payload_sin_marca_agrega_todo(tmp_db):
+    """brand=None no filtra: la vista combinada suma las dos marcas."""
+    _seed(tmp_db, [
+        _m(1, brand="Avianca", author="a", complaint_driver="equipaje"),
+        _m(2, brand="LATAM", author="b", complaint_driver="demora"),
+        _m(3, brand="LATAM", author="c", complaint_driver="demora"),
+    ])
+    p = aggregate.build_payload(tmp_db, brand=None)
+    assert p["kpis"]["total"] == 3
+    assert p["kpis"]["complaints"] == 3
+    por_driver = {d["driver"]: d["count"] for d in p["drivers"]}
+    assert por_driver == {"equipaje": 1, "demora": 2}
+
+
+def test_build_payload_sin_marca_no_fusiona_voces_de_marcas_distintas(tmp_db):
+    """
+    Dos personas de marcas distintas que por coincidencia escriben
+    exactamente el mismo texto NO deben colapsarse en una sola voz — el
+    colapso agrupa por (brand, author, text), no solo (author, text).
+    """
+    _seed(tmp_db, [
+        _m(1, brand="Avianca", author="mismo_autor", text="mismo texto exacto"),
+        _m(2, brand="LATAM", author="mismo_autor", text="mismo texto exacto"),
+    ])
+    p = aggregate.build_payload(tmp_db, brand=None)
+    assert p["kpis"]["total"] == 2
+    assert all(m["repeat_count"] == 1 for m in p["mentions"])
+    assert {m["brand"] for m in p["mentions"]} == {"Avianca", "LATAM"}
+
+
+def test_build_payload_declara_la_marca_en_el_payload(tmp_db):
+    _seed(tmp_db, [_m(1, brand="Avianca"), _m(2, brand="LATAM")])
+
+    p_filtrado = aggregate.build_payload(tmp_db, brand="LATAM")
+    assert p_filtrado["brand"]["filter"] == "LATAM"
+    assert p_filtrado["brand"]["names"] == ["LATAM"]
+
+    p_combinado = aggregate.build_payload(tmp_db, brand=None)
+    assert p_combinado["brand"]["filter"] is None
+    assert p_combinado["brand"]["names"] == ["Avianca", "LATAM"]
+
+
+def test_build_payload_marca_explicita_se_declara_aunque_no_haya_datos(tmp_db):
+    """
+    Filtrar por una marca sin ninguna mención (caso LATAM al arrancar) no
+    debe perder la identidad de marca del payload — el filtro fue
+    explícito, así que `names` sigue siendo esa marca aunque el dataset
+    esté vacío.
+    """
+    p = aggregate.build_payload(tmp_db, brand="LATAM")
+    assert p["kpis"]["total"] == 0
+    assert p["brand"]["filter"] == "LATAM"
+    assert p["brand"]["names"] == ["LATAM"]
+
+
+def test_build_payload_vacio_no_revienta_ningun_bloque(tmp_db):
+    """DB completamente vacía para la marca pedida: todos los bloques
+    deben degradar a listas/diccionarios vacíos, nunca reventar."""
+    p = aggregate.build_payload(tmp_db, brand="LATAM")
+    assert p["kpis"]["total"] == 0
+    assert p["kpis"]["date_from"] is None
+    assert p["kpis"]["date_to"] is None
+    assert p["timeline"] == []
+    assert p["drivers"] == []
+    assert p["driver_by_platform"] == []
+    assert p["driver_trend"] == []
+    assert p["emotions"] == {}
+    assert p["mentions"] == []
+    assert p["top_complaints"] == {"with_own_reach": [], "without_own_reach": []}
+    assert p["data_quality"]["total"] == 0
+    assert p["data_quality"]["last_run_at"] is None
+
+
+def test_last_run_no_se_cruza_entre_marcas(tmp_db):
+    """
+    Una corrida terminada de Avianca no debe aparecer como "la última
+    corrida" en el payload de LATAM — data_quality.filtered_last_run,
+    last_run_mode y last_run_at deben salir vacíos para LATAM si LATAM
+    nunca corrió, aunque Avianca sí tenga corridas recientes.
+    """
+    run_id = db.start_run(tmp_db, "seed", None, brand="Avianca")
+    db.upsert_mentions(tmp_db, [_m(1, brand="Avianca")], run_id)
+    db.finish_run(tmp_db, run_id, raw_count=10, filtered_count=3,
+                   inserted_count=1, duplicate_count=0, short_text_count=2)
+
+    p_avianca = aggregate.build_payload(tmp_db, brand="Avianca")
+    assert p_avianca["data_quality"]["filtered_last_run"] == 3
+    assert p_avianca["data_quality"]["last_run_mode"] == "seed"
+
+    p_latam = aggregate.build_payload(tmp_db, brand="LATAM")
+    assert p_latam["data_quality"]["last_run_at"] is None
+    assert p_latam["data_quality"]["filtered_last_run"] == 0
+    assert p_latam["data_quality"]["last_run_mode"] is None
+
+
 def test_mencion_sin_fecha_sigue_contando_en_totales(tmp_db):
     """Sin published_at no hay fecha con la cual juzgar la ventana — se
     conserva en los totales, como ya hacía antes de esta corrección."""
