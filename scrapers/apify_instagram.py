@@ -99,40 +99,15 @@ def fetch_post_reach(post_urls: list[str]) -> dict[str, dict]:
     return _post_reach_map(posts)
 
 
-def scrape(brand: dict, since: str | None = None) -> list[dict]:
-    client = ApifyClient(APIFY_API_TOKEN)
-    fetched_at = datetime.now(timezone.utc).isoformat()
-
-    profiles = brand["instagram_profiles"]
-
-    # ── FASE 1: obtener URLs de posts recientes + su alcance ──────
-    print(f"[Instagram] Fase 1 — obteniendo posts de {brand['keyword']}...")
-    posts_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
-        "directUrls": profiles,
-        "resultsType": "posts",
-        "resultsLimit": INSTAGRAM_POSTS_LIMIT,
-    })
-    posts = list(client.dataset(posts_run["defaultDatasetId"]).iterate_items())
-
-    post_reach = _post_reach_map(posts)
-    post_urls = list(post_reach.keys())
-
-    if not post_urls:
-        print("[Instagram] Sin posts para extraer comentarios")
-        return []
-
-    print(f"[Instagram] {len(post_urls)} posts encontrados — Fase 2: extrayendo comentarios...")
-
-    # ── FASE 2: extraer comentarios de esos posts ────────────────
-    # post_urls ya viene acotado por INSTAGRAM_POSTS_LIMIT en Fase 1 (no
-    # se trunca de nuevo aquí a 15).
-    comments_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
-        "directUrls": post_urls,
-        "resultsType": "comments",
-        "resultsLimit": LIMIT_INSTAGRAM,
-    })
-    items = list(client.dataset(comments_run["defaultDatasetId"]).iterate_items())
-
+def _parse_comment_items(items: list[dict], post_urls: list[str], post_reach: dict,
+                          since: str | None, fetched_at: str) -> list[dict]:
+    """
+    Convierte los items crudos de la Fase 2 (resultsType='comments') en
+    diccionarios listos para normalize()/is_relevant(). Extraído de
+    scrape() (antes vivía inline ahí) para que scrape_posts() — Fase 2
+    sobre un conjunto de posts elegido a mano, no descubierto por Fase 1 —
+    pueda reutilizar exactamente la misma lógica de parseo sin duplicarla.
+    """
     results = []
     for item in items:
         if "error" in item:
@@ -237,3 +212,83 @@ def scrape(brand: dict, since: str | None = None) -> list[dict]:
 
     print(f"[Instagram] {len(results)} comentarios extraídos")
     return results
+
+
+def scrape(brand: dict, since: str | None = None) -> list[dict]:
+    client = ApifyClient(APIFY_API_TOKEN)
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
+    profiles = brand["instagram_profiles"]
+
+    # ── FASE 1: obtener URLs de posts recientes + su alcance ──────
+    print(f"[Instagram] Fase 1 — obteniendo posts de {brand['keyword']}...")
+    posts_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
+        "directUrls": profiles,
+        "resultsType": "posts",
+        "resultsLimit": INSTAGRAM_POSTS_LIMIT,
+    })
+    posts = list(client.dataset(posts_run["defaultDatasetId"]).iterate_items())
+
+    post_reach = _post_reach_map(posts)
+    post_urls = list(post_reach.keys())
+
+    if not post_urls:
+        print("[Instagram] Sin posts para extraer comentarios")
+        return []
+
+    print(f"[Instagram] {len(post_urls)} posts encontrados — Fase 2: extrayendo comentarios...")
+
+    # ── FASE 2: extraer comentarios de esos posts ────────────────
+    # post_urls ya viene acotado por INSTAGRAM_POSTS_LIMIT en Fase 1 (no
+    # se trunca de nuevo aquí a 15).
+    comments_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
+        "directUrls": post_urls,
+        "resultsType": "comments",
+        "resultsLimit": LIMIT_INSTAGRAM,
+    })
+    items = list(client.dataset(comments_run["defaultDatasetId"]).iterate_items())
+
+    return _parse_comment_items(items, post_urls, post_reach, since, fetched_at)
+
+
+def scrape_posts(brand: dict, post_urls: list[str], since: str | None = None) -> list[dict]:
+    """
+    Fase 2 (comentarios) sobre un conjunto de posts elegido explícitamente
+    por el llamador, en vez de los que descubra la Fase 1 recorriendo los
+    perfiles de la marca (resultsLimit=INSTAGRAM_POSTS_LIMIT, sin filtro
+    de fecha — puede devolver muchos más posts, y de más atrás en el
+    tiempo, de los que el presupuesto disponible alcanza a pagar en
+    Fase 2).
+
+    Existe para poder profundizar el muestreo de una cuenta de forma
+    acotada en costo: el llamador ya corrió (o tiene) una Fase 1 barata
+    — p.ej. el diagnóstico de volumen que exige correr antes de gastar —
+    decide a mano cuántos y cuáles posts vale la pena pagar en Fase 2, y
+    pasa esa lista aquí. Internamente vuelve a pedir Fase 1 solo para esos
+    post_urls específicos (vía fetch_post_reach, mismo patrón que
+    pipeline/source_account_backfill.py) para tener views/likes/
+    source_account correctos, y comparte con scrape() toda la lógica de
+    parseo de comentarios (_parse_comment_items) — no hay una segunda
+    copia de esa lógica que pueda desincronizarse.
+
+    post_urls vacío devuelve [] sin llamar al actor (mismo criterio que
+    fetch_post_reach).
+    """
+    if not post_urls:
+        return []
+
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
+    print(f"[Instagram] scrape_posts: Fase 1 de {len(post_urls)} posts explícitos de {brand['keyword']}...")
+    post_reach = fetch_post_reach(post_urls)
+
+    client = ApifyClient(APIFY_API_TOKEN)
+    print(f"[Instagram] scrape_posts: Fase 2 — extrayendo comentarios de {len(post_urls)} posts...")
+    comments_run = client.actor(APIFY_INSTAGRAM_ACTOR).call(run_input={
+        "directUrls": post_urls,
+        "resultsType": "comments",
+        "resultsLimit": LIMIT_INSTAGRAM,
+    })
+    items = list(client.dataset(comments_run["defaultDatasetId"]).iterate_items())
+
+    return _parse_comment_items(items, post_urls, post_reach, since, fetched_at)

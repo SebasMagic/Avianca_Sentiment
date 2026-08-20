@@ -338,6 +338,80 @@ def test_fase_1_pide_resultsLimit_igual_a_config_instagram_posts_limit(monkeypat
     assert fase_1["resultsLimit"] == config.INSTAGRAM_POSTS_LIMIT
 
 
+# ── scrape_posts: Fase 2 sobre un conjunto de posts elegido a mano ───────
+# (muestreo profundo acotado en costo — Tarea 1 de "latam-profundidad")
+
+def test_scrape_posts_sin_urls_no_llama_al_actor(monkeypatch):
+    fake_client = FakeApifyClient(None, posts=[], comments=[])
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    results = apify_instagram.scrape_posts(LATAM, [])
+
+    assert results == []
+    assert fake_client.calls == []
+
+
+def test_scrape_posts_pide_fase_1_solo_de_los_post_urls_dados(monkeypatch):
+    """scrape_posts NO recorre los perfiles de la marca (eso es scrape()) —
+    pide Fase 1 (vía fetch_post_reach) únicamente sobre los post_urls que
+    el llamador ya decidió pagar, para no gastar en descubrir posts que
+    el presupuesto no alcanza a scrapear en Fase 2."""
+    posts = [{
+        "url": "https://www.instagram.com/p/COL1/", "shortCode": "COL1",
+        "type": "Sidecar", "likesCount": 5, "commentsCount": 1,
+        "ownerUsername": "latamairlines_colombia",
+    }]
+    comments = [{
+        "id": "1", "text": "Excelente vuelo, gracias LATAM",
+        "ownerUsername": "usuario_contento",
+        "timestamp": "2026-06-01T10:00:00.000Z",
+        "postUrl": "https://www.instagram.com/p/COL1/",
+        "commentUrl": "https://www.instagram.com/p/COL1/c/1",
+        "likesCount": 2,
+    }]
+    fake_client = FakeApifyClient(None, posts=posts, comments=comments)
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    results = apify_instagram.scrape_posts(LATAM, ["https://www.instagram.com/p/COL1/"])
+
+    assert len(results) == 1
+    assert results[0]["text"] == "Excelente vuelo, gracias LATAM"
+    assert results[0]["source_account"] == "latamairlines_colombia"
+    # Fase 1 (resultsType='posts') se pidió solo sobre el post_url dado —
+    # nunca con directUrls=brand["instagram_profiles"].
+    fase_1 = fake_client.calls[0]
+    assert fase_1["resultsType"] == "posts"
+    assert fase_1["directUrls"] == ["https://www.instagram.com/p/COL1/"]
+    # Fase 2 respeta resultsLimit = config.LIMIT_INSTAGRAM, igual que scrape().
+    fase_2 = fake_client.calls[1]
+    assert fase_2["resultsType"] == "comments"
+    assert fase_2["resultsLimit"] == config.LIMIT_INSTAGRAM
+    assert fase_2["directUrls"] == ["https://www.instagram.com/p/COL1/"]
+
+
+def test_scrape_posts_filtra_por_since_igual_que_scrape(monkeypatch):
+    posts = [{
+        "url": "https://www.instagram.com/p/COL1/", "shortCode": "COL1",
+        "ownerUsername": "latamairlines_colombia", "commentsCount": 2,
+    }]
+    comments = [
+        {"id": "1", "text": "comentario viejo", "ownerUsername": "u1",
+         "timestamp": "2025-12-01T10:00:00.000Z",
+         "postUrl": "https://www.instagram.com/p/COL1/"},
+        {"id": "2", "text": "comentario nuevo", "ownerUsername": "u2",
+         "timestamp": "2026-06-01T10:00:00.000Z",
+         "postUrl": "https://www.instagram.com/p/COL1/"},
+    ]
+    fake_client = FakeApifyClient(None, posts=posts, comments=comments)
+    monkeypatch.setattr(apify_instagram, "ApifyClient", lambda token: fake_client)
+
+    results = apify_instagram.scrape_posts(
+        LATAM, ["https://www.instagram.com/p/COL1/"], since="2026-01-01")
+
+    assert len(results) == 1
+    assert results[0]["text"] == "comentario nuevo"
+
+
 def test_correr_instagram_dos_veces_no_duplica(monkeypatch, tmp_db):
     """scrape() + upsert_mentions() dos veces seguidas con el mismo dataset
     (re-correr la misma ventana, p.ej. tras subir INSTAGRAM_POSTS_LIMIT)
