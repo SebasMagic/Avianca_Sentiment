@@ -213,7 +213,7 @@
     font-family:var(--sans);font-size:11.5px;padding:7px 12px;border-radius:5px;cursor:pointer;
   }
   .btn-reset:hover{color:var(--txt);border-color:var(--txt-3)}
-  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:1320px}
+  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:1430px}
   #tabla thead th{
     position:sticky;top:0;background:var(--bg-3);z-index:1;
     font-family:var(--mono);font-size:10px;color:var(--txt-2);
@@ -232,10 +232,12 @@
   #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
   #tabla td.date.unknown{color:var(--txt-3)}
   #tabla td.eng{font-family:var(--mono);text-align:right;color:var(--txt)}
-  /* Las tres capas (Cambio Tarea 3): columnas de métrica separadas, cada
-     una ordenable por su cuenta. .metric agrupa los cinco números crudos
-     (likes/comentarios/shares/saves/alcance); .metric.reach lleva un
-     acento sutil porque es la capa que manda ahora, no engagement. */
+  /* Las capas de engagement: columnas de métrica separadas, cada una
+     ordenable por su cuenta. .metric agrupa los números crudos
+     (likes/comentarios/shares/saves/visib. post); .metric.reach es SOLO
+     la columna Alcance (propio) — lleva un acento visual distinto a
+     propósito, porque no es lo mismo que Visib. post (heredada del post,
+     revisión 2026-08-20) y nunca deben leerse como la misma capa. */
   #tabla td.metric{font-family:var(--mono);text-align:right;color:var(--txt-2);white-space:nowrap}
   #tabla td.metric.reach{color:var(--txt);font-weight:600}
   #tabla td.metric .dash{color:var(--txt-3);font-weight:400}
@@ -263,11 +265,12 @@
   .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
 
   /* ── block 7 · top quejas ──
-     Cambio Tarea 3: ya no hay un solo grid — hay dos grupos. with_reach
-     (rankeado por alcance real) lleva el borde rojo de "esto es lo que
-     manda"; without_reach (sin alcance medido, rankeado por interacciones)
-     usa un borde neutro para no impostar una jerarquía que no se puede
-     sostener con el dato que hay. */
+     Dos grupos, con distinto criterio de orden (revisión 2026-08-20):
+     with_own_reach (rankeado por alcance PROPIO — hoy solo TikTok) lleva
+     el borde rojo de "esto es lo que manda"; without_own_reach (sin
+     alcance propio — incluye TODO Instagram, que solo tiene visibilidad
+     heredada del post, nunca comparable) usa un borde neutro y se rankea
+     por interacciones, no por esa visibilidad heredada. */
   .cq-group-title{
     font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
     color:var(--txt-3);margin:22px 0 10px;display:flex;align-items:center;gap:10px;
@@ -418,6 +421,7 @@
           <th class="sortable" data-sort="text">Texto<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="complaint_driver">Driver<span class="sort-ind"></span></th>
           <th class="sortable reach" data-sort="views">Alcance<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="post_reach">Visib. post<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="likes">Likes<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="comments_count">Coment.<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="shares">Shares<span class="sort-ind"></span></th>
@@ -427,7 +431,7 @@
         <tbody id="tbody"></tbody></table></div>
       <p id="conteoTabla" class="muted"></p></div></section>
 
-  <section id="b7"><h2>Quejas con más alcance</h2><div id="topQuejas"></div></section>
+  <section id="b7"><h2>Quejas con más impacto <span class="h2-sub">— por alcance propio cuando existe (TikTok); por interacciones cuando no (Instagram, sin alcance propio)</span></h2><div id="topQuejas"></div></section>
 
   <section id="b8">
     <h2>Calidad de los datos <span class="h2-sub">— qué tan confiable es esto</span></h2>
@@ -930,18 +934,23 @@ function renderSentiment() {
 // ── Bloque 6: tabla con filtros en JS puro sobre DATA.mentions ───
 let filtros = { platform: '', driver: '', sentiment: '', q: '', repetidas: false };
 
-// Arranca por ALCANCE descendente (Tarea 3): views es la métrica que manda
-// ahora, no engagement — la suma vieja subestimaba. Las voces sin alcance
-// medido caen al final por la regla de "sin dato" de ordenadas(), no se
-// pierden.
+// Arranca por ALCANCE PROPIO descendente: views es la métrica que manda
+// ahora, no engagement — la suma vieja subestimaba. views es SOLO alcance
+// propio (hoy: TikTok) — post_reach (visibilidad heredada del post de
+// Instagram) es una columna aparte, nunca el criterio de orden por
+// defecto: es constante entre comentarios del mismo post, así que
+// ordenaría posts, no menciones. Las voces sin alcance propio caen al
+// final por la regla de "sin dato" de ordenadas(), no se pierden.
 let orden = { col: 'views', dir: 'desc' };
 
 // Columnas numéricas y de fecha arrancan en descendente al hacer clic; las de
 // texto en ascendente, que es como se espera leer un listado alfabético.
 const SORT_DESC_FIRST = new Set([
-  'engagement', 'published_at', 'likes', 'comments_count', 'shares', 'saves', 'views',
+  'engagement', 'published_at', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach',
 ]);
-const NUMERIC_COLS = new Set(['engagement', 'likes', 'comments_count', 'shares', 'saves', 'views']);
+const NUMERIC_COLS = new Set([
+  'engagement', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach',
+]);
 
 function valorOrden(m, col) {
   if (col === 'published_at') return m.published_at || '';
@@ -1042,24 +1051,25 @@ function renderTabla() {
   const tbody = document.getElementById('tbody');
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">Sin menciones que coincidan con los filtros</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="13">Sin menciones que coincidan con los filtros</td></tr>`;
   } else {
     tbody.innerHTML = rows.map(m => {
       const unknown = m.date_confidence === 'unknown';
       const drv = m.complaint_driver ? DRIVER_LABEL[m.complaint_driver] || m.complaint_driver : null;
       const repeatBadge = m.repeat_count > 1
-        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — engagement, interacciones y alcance ya están sumados">×${m.repeat_count}</span>`
+        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — engagement, interacciones y alcance propio ya están sumados. La visibilidad del post NO se duplica si repitió en el mismo post: cada post distinto cuenta una sola vez.">×${m.repeat_count}</span>`
         : '';
-      // Las tres capas (Tarea 3): metricCell() pinta guion cuando la
+      // Las capas de engagement: metricCell() pinta guion cuando la
       // métrica no aplica a la plataforma o no se midió (null) — nunca un
       // 0 que sugiera "se midió y dio cero".
       const metricCell = (val, extraClass = '') =>
         `<td class="metric ${extraClass}">${val == null ? '<span class="dash">—</span>' : fmtInt(val)}</td>`;
-      const reachTitle = m.views == null ? '' : (
-        m.reach_source === 'propio' ? 'Alcance propio del contenido'
-        : m.reach_source === 'post' ? 'Alcance del post que contiene este comentario, no del comentario mismo'
-        : ''
-      );
+      // views es SIEMPRE alcance propio ahora (nunca heredado) — ver
+      // dashboard/aggregate.py METRIC_APPLIES. post_reach es su propia
+      // columna, con su propio tooltip, para que nunca se lean como lo mismo.
+      const reachTitle = m.views == null ? '' : 'Alcance propio de este contenido (video/post propio)';
+      const postReachTitle = m.post_reach == null ? '' :
+        'Visibilidad del POST que contiene este comentario — no es cuánta gente vio este comentario en particular, es cuánta gente vio el post. Contexto, no se usa para ordenar quejas por alcance.';
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
         <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
@@ -1067,6 +1077,7 @@ function renderTabla() {
         <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
         <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
         <td class="metric reach" title="${reachTitle}">${m.views == null ? '<span class="dash">—</span>' : fmtInt(m.views)}</td>
+        <td class="metric" title="${postReachTitle}">${m.post_reach == null ? '<span class="dash">—</span>' : fmtInt(m.post_reach)}</td>
         ${metricCell(m.likes)}
         ${metricCell(m.comments_count)}
         ${metricCell(m.shares)}
@@ -1080,30 +1091,45 @@ function renderTabla() {
   pintaIndicadores();
 
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8)`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Visib. post = del post que contiene el comentario — no son la misma cosa, no se comparan entre sí`;
 }
 
-// ── Bloque 7: cards, en dos grupos (Tarea 3) ──────────────────────
-// Rankear por engagement (la suma vieja) subestimaba: un video con 61.500
-// views y 2.216 de engagement quedaba por debajo de contenido con menos
-// alcance real. Ahora with_reach manda por views; without_reach (sin
-// alcance medido) NO se mezcla en el mismo orden — se muestra aparte, por
-// interacciones, y se dice explícitamente que no tiene alcance medido.
-function cqCard(m, i, { reachGroup }) {
-  const reachLabel = m.reach_source === 'propio' ? 'alcance propio'
-    : m.reach_source === 'post' ? 'alcance del post' : 'alcance';
-  const heroValue = reachGroup ? fmtInt(m.views) : fmtInt(m.interactions ?? 0);
-  const heroLabel = reachGroup ? reachLabel : 'interacciones';
-  const contexto = reachGroup
-    ? `${fmtInt(m.interactions ?? 0)} interacciones${m.interaction_rate != null ? ` · ${fmtPct(m.interaction_rate)} tasa` : ''}`
-    : `sin alcance medido para esta plataforma o esta fila`;
+// ── Bloque 7: cards, en dos grupos por criterio de orden ──────────
+// Corrección (revisión 2026-08-20): post_reach (visibilidad heredada del
+// post de Instagram) NUNCA se usa para rankear — es constante entre todos
+// los comentarios del mismo post, así que ordenaría posts, no quejas, y
+// no es comparable con el alcance PROPIO de TikTok (un comentario
+// irrelevante bajo un post viral desplazaba a una queja real vista por
+// 60.000 personas por sí sola). El criterio ahora depende de qué alcance
+// tiene la queja:
+//   own_reach:    tiene alcance PROPIO (views, hoy solo TikTok) — se
+//                 muestra como hero y es el criterio de orden.
+//   no_own_reach: sin alcance propio — el hero pasa a ser interacciones
+//                 (el criterio de orden), y si hay post_reach se muestra
+//                 aparte, EXPLÍCITAMENTE etiquetado como "visibilidad del
+//                 post" en la línea de contexto, nunca mezclado con el
+//                 número principal ni presentado como si fuera cuánta
+//                 gente vio ESTA queja.
+function cqCard(m, i, { ownReach }) {
+  const heroValue = ownReach ? fmtInt(m.views) : fmtInt(m.interactions ?? 0);
+  const heroLabel = ownReach ? 'alcance propio' : 'interacciones';
+  let contexto;
+  if (ownReach) {
+    contexto = `${fmtInt(m.interactions ?? 0)} interacciones${m.interaction_rate != null ? ` · ${fmtPct(m.interaction_rate)} tasa` : ''}`;
+  } else if (m.post_reach != null) {
+    // Contexto, no ranking: el post donde apareció este comentario llegó
+    // a esta visibilidad — no dice cuánta gente vio ESTE comentario.
+    contexto = `visibilidad del post: ${fmtInt(m.post_reach)} (contexto — no es el alcance de esta queja, no se usa para ordenar)`;
+  } else {
+    contexto = `sin alcance propio ni visibilidad de post medida para esta fila`;
+  }
   return `
-    <div class="cq-card ${reachGroup ? '' : 'no-reach'}">
+    <div class="cq-card ${ownReach ? '' : 'no-reach'}">
       <div class="cq-top">
         <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
         <span class="cq-eng">${heroValue}<small>${esc(heroLabel)}</small></span>
       </div>
-      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — sumado">×${m.repeat_count}</span>` : ''}</div>` : ''}
+      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — engagement/interacciones/alcance propio sumados; visibilidad de post NO duplicada si fue el mismo post">×${m.repeat_count}</span>` : ''}</div>` : ''}
       <div class="cq-text">${esc(m.text)}</div>
       <div class="cq-context">${esc(contexto)}</div>
       <div class="cq-foot">
@@ -1116,25 +1142,25 @@ function cqCard(m, i, { reachGroup }) {
 
 function renderTopQuejas() {
   const el = document.getElementById('topQuejas');
-  const conReach = DATA.top_complaints.with_reach || [];
-  const sinReach = DATA.top_complaints.without_reach || [];
+  const conAlcancePropio = DATA.top_complaints.with_own_reach || [];
+  const sinAlcancePropio = DATA.top_complaints.without_own_reach || [];
 
-  if (!conReach.length && !sinReach.length) {
+  if (!conAlcancePropio.length && !sinAlcancePropio.length) {
     el.innerHTML = `<p style="color:var(--txt-3);font-family:var(--mono);font-size:11px">Sin quejas registradas.</p>`;
     return;
   }
 
-  const bloqueConReach = conReach.length ? `
-    <div class="cq-group-title">Por alcance real (${fmtInt(conReach.length)})</div>
-    <div class="cq-grid">${conReach.map((m, i) => cqCard(m, i, { reachGroup: true })).join('')}</div>
+  const bloqueConAlcance = conAlcancePropio.length ? `
+    <div class="cq-group-title">Por alcance propio — TikTok (${fmtInt(conAlcancePropio.length)})</div>
+    <div class="cq-grid">${conAlcancePropio.map((m, i) => cqCard(m, i, { ownReach: true })).join('')}</div>
   ` : '';
 
-  const bloqueSinReach = sinReach.length ? `
-    <div class="cq-group-title">Sin alcance medido — por interacciones (${fmtInt(sinReach.length)})</div>
-    <div class="cq-grid">${sinReach.map((m, i) => cqCard(m, i, { reachGroup: false })).join('')}</div>
+  const bloqueSinAlcance = sinAlcancePropio.length ? `
+    <div class="cq-group-title">Sin alcance propio — por interacciones (${fmtInt(sinAlcancePropio.length)})</div>
+    <div class="cq-grid">${sinAlcancePropio.map((m, i) => cqCard(m, i, { ownReach: false })).join('')}</div>
   ` : '';
 
-  el.innerHTML = bloqueConReach + bloqueSinReach;
+  el.innerHTML = bloqueConAlcance + bloqueSinAlcance;
 }
 
 // ── Bloque 8: calidad de datos — texto explícito, no solo números ─
@@ -1205,10 +1231,12 @@ function renderCalidad() {
 // Tarea 4: por plataforma, qué métricas de engagement hay y cuáles no, con
 // conteo de filas — antes de leer la tabla del bloque 6 o el top de
 // quejas, un lector tiene que poder ver que p.ej. "saves" solo cubre un
-// subconjunto de tiktok, y que instagram nunca tiene shares.
+// subconjunto de tiktok, y que instagram nunca tiene shares. Alcance y
+// Visib. post son columnas separadas a propósito (revisión 2026-08-20):
+// son dos cosas distintas que nunca deben leerse como la misma.
 const METRIC_COLS = [
   ['likes', 'Likes'], ['comments_count', 'Comentarios'], ['shares', 'Shares'],
-  ['saves', 'Saves'], ['views', 'Alcance'],
+  ['saves', 'Saves'], ['views', 'Alcance'], ['post_reach', 'Visib. post'],
 ];
 
 function renderMetricCoverage(coverage, applies) {
@@ -1249,6 +1277,9 @@ function renderMetricCoverage(coverage, applies) {
       </div>
       <p style="margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3)">
         "no aplica" = ninguna voz de esa plataforma tiene ese dato — ver bloque 6 (columnas con guion) y el detalle de cobertura en el reporte del proyecto.
+      </p>
+      <p style="margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3)">
+        <b style="color:var(--txt-2)">Alcance ≠ Visib. post:</b> en TikTok, el alcance es del video mismo. En Instagram no hay alcance propio de un comentario — "Visib. post" es la visibilidad del POST donde apareció ese comentario, no de la queja en sí, y por eso el bloque 7 nunca la usa para ordenar ni la suma con el alcance de TikTok.
       </p>
     </div>
   `;

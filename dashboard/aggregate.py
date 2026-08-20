@@ -51,25 +51,45 @@ PLATFORMS = ["web", "instagram", "tiktok"]
 #   web:       DataForSEO nunca entrega ninguna métrica de engagement.
 #   tiktok:    diggCount/commentCount/shareCount/collectCount/playCount son
 #              del video mismo — las cinco métricas aplican, alcance
-#              reach_source='propio'.
+#              PROPIO (reach_source='propio').
 #   instagram: cada mención ES un comentario. likesCount es el like propio
 #              del comentario; comments_count y shares NO aplican — un
 #              comentario no tiene comentarios propios ni se comparte
 #              (repliesCount viene NULL en el 100% de los items reales) —
-#              tampoco tiene saves. views SÍ aplica pero es prestado del
-#              post contenedor (reach_source='post'), nunca del comentario.
+#              tampoco tiene saves.
+#
+# `views` y `post_reach` son DOS métricas distintas a propósito, no una
+# con dos fuentes — encontrado en revisión de código (2026-08-20):
+# mezclarlas bajo un solo campo "views" hacía que quince comentarios bajo
+# el mismo post de Instagram mostraran cada uno el alcance TOTAL de ese
+# post (7,3M), lo cual (a) no sirve para rankear comentarios porque es
+# constante dentro del post — ordena posts, no quejas; (b) no es
+# comparable con el alcance propio de TikTok, que sí es del ítem; y
+# (c) al sumarse entre repeticiones de una voz colapsada, multiplicaba la
+# MISMA audiencia por cada vez que la persona comentó ese post.
+#
+#   views:      SOLO alcance propio del ítem (reach_source='propio') —
+#               aplica a tiktok, nunca a instagram ni a web. Es la métrica
+#               que se rankea y se compara entre menciones.
+#   post_reach: visibilidad HEREDADA del post contenedor
+#               (reach_source='post') — aplica a instagram, nunca a tiktok
+#               ni a web. Es CONTEXTO ("dónde apareció esta queja"), nunca
+#               se presenta como si fuera el alcance de la mención, nunca
+#               se suma junto con `views`, y se deduplica por post antes
+#               de sumar entre repeticiones de una misma voz (ver
+#               _post_reach_sum).
 #
 # Esto declara qué CONCEPTO existe por plataforma, no si el valor guardado
 # es cero: una métrica que no aplica se fuerza a None (guion en el
 # dashboard) aunque la columna tenga un 0 heredado del schema — "las que
 # no aplican van con guion, no con cero".
 METRIC_APPLIES = {
-    "web":       {"likes": False, "shares": False, "comments_count": False, "saves": False, "views": False},
-    "tiktok":    {"likes": True,  "shares": True,  "comments_count": True,  "saves": True,  "views": True},
-    "instagram": {"likes": True,  "shares": False, "comments_count": False, "saves": False, "views": True},
+    "web":       {"likes": False, "shares": False, "comments_count": False, "saves": False, "views": False, "post_reach": False},
+    "tiktok":    {"likes": True,  "shares": True,  "comments_count": True,  "saves": True,  "views": True,  "post_reach": False},
+    "instagram": {"likes": True,  "shares": False, "comments_count": False, "saves": False, "views": False, "post_reach": True},
 }
 
-ENGAGEMENT_METRICS = ("likes", "shares", "comments_count", "saves", "views")
+ENGAGEMENT_METRICS = ("likes", "shares", "comments_count", "saves", "views", "post_reach")
 
 
 def _engagement(m: dict) -> int:
@@ -95,13 +115,52 @@ def _apply_metric(platform: str, metric: str, value):
 
 def _interaction_rate(interactions, views) -> float | None:
     """
-    interacciones ÷ alcance, en %. None si no hay alcance medido (views
-    None o 0) o no hay interacciones que dividir — nunca ZeroDivisionError,
-    y un alcance de 0 no produce una tasa (dividir por cero no es "0%").
+    interacciones ÷ alcance PROPIO, en %. Deliberadamente NUNCA usa
+    post_reach como denominador: dividir las interacciones de UN
+    comentario entre la audiencia total de TODO el post en el que aparece
+    exageraría o diluiría la tasa sin decir nada real sobre ese comentario
+    — el mismo tipo de error que mezclar `views` y `post_reach` en un solo
+    campo (ver METRIC_APPLIES). Consecuencia: interaction_rate es siempre
+    None en Instagram (nunca tiene alcance propio) — es más conservador
+    que antes, pero antes era una tasa engañosa, no una tasa real.
+
+    None si no hay alcance propio medido (views None o 0) o no hay
+    interacciones que dividir — nunca ZeroDivisionError, y un alcance de 0
+    no produce una tasa (dividir por cero no es "0%").
     """
     if not views or interactions is None:
         return None
     return round(interactions / views * 100, 1)
+
+
+def _post_reach_sum(group: list[dict]) -> int | None:
+    """
+    Visibilidad heredada del post (reach_source='post'), sumada SIN
+    duplicar. Si esta voz comentó varias veces bajo el MISMO post, ese
+    post cuenta una sola vez — la audiencia del post no crece porque la
+    misma persona haya comentado más veces, a diferencia de likes o
+    engagement, que sí son acciones distintas y aditivas. Si comentó en
+    posts DISTINTOS, cada post distinto sí aporta su propia visibilidad,
+    una vez cada uno.
+
+    Deduplicación por raw['postUrl'] — el identificador real del post en
+    el JSON crudo de Instagram (ver scrapers/apify_instagram.py, Tarea 2).
+    Un registro con reach_source='post' pero sin postUrl en su raw (no
+    debería ocurrir: es exactamente el campo que Tarea 2 usa para calcular
+    ese valor) se trata como un post no identificable y no se deduplica
+    contra nada — mejor no perder el dato que fusionarlo con el post
+    equivocado.
+    """
+    por_post: dict = {}
+    for i, m in enumerate(group):
+        if m.get("reach_source") != "post":
+            continue
+        v = m.get("views")
+        if v is None:
+            continue
+        post_key = (m.get("raw") or {}).get("postUrl") or ("__sin_posturl__", i)
+        por_post.setdefault(post_key, v)
+    return sum(por_post.values()) if por_post else None
 
 
 def _pct(part: int, whole: int) -> float:
@@ -139,24 +198,32 @@ def _collapse_voices(mentions: list[dict]) -> list[dict]:
                        presenta como la medida de impacto (ver las tres
                        capas más abajo: likes/shares/comments_count/saves/
                        views, interactions e interaction_rate).
-      - likes/shares/comments_count/saves/views: suma por metrica de TODAS
-        las repeticiones, forzada a None cuando la metrica no aplica a la
+      - likes/shares/comments_count/saves: suma por métrica de TODAS las
+        repeticiones, forzada a None cuando la métrica no aplica a la
         plataforma (METRIC_APPLIES) — "las que no aplican van con guion,
-        no con cero". saves/views usan _sum_maybe: si NINGUNA repeticion
-        tiene el dato, el total es None, no 0.
-      - reach_source: el primer reach_source no-nulo que aparezca en el
-        grupo — NO el de la ocurrencia más antigua. Con voces repetidas es
-        real que unas repeticiones tengan views medidas y otras no (p.ej.
-        909 comentarios de Instagram, solo 537 con backfill de alcance de
-        su post — Tarea 2): si la más antigua es justo una sin dato pero
-        otra repetición sí aportó views al total sumado, reach_source debe
-        seguir contando de dónde viene ese número, no perderlo por mirar
-        solo la primera repetición.
+        no con cero". saves usa _sum_maybe: si NINGUNA repetición tiene el
+        dato, el total es None, no 0.
+      - views (alcance PROPIO): suma SOLO de las repeticiones con
+        reach_source='propio' — nunca mezcla con visibilidad heredada de
+        post. Aditivo entre repeticiones porque cada una es, en la
+        práctica, un ítem propio distinto (p.ej. varios videos de TikTok
+        del mismo autor) con su propia audiencia.
+      - post_reach (visibilidad HEREDADA del post): ver _post_reach_sum.
+        NUNCA se suma con `views`, y se deduplica por post — comentar 48
+        veces bajo el mismo post no multiplica por 48 la audiencia de ese
+        post (corregido: antes `views` mezclaba ambos conceptos bajo un
+        solo campo y sí los sumaba por repetición, inflando voces como
+        alejandra.caicho x48 a una cifra sin sentido).
+      - reach_source: 'propio' si `views` quedó con dato, si no 'post' si
+        `post_reach` quedó con dato, si no None. Ya no se lee de una
+        ocurrencia puntual del grupo — se deriva de cuál de los dos
+        totales (ya deduplicados/sumados arriba) terminó con valor.
       - interactions: likes+comments_count+shares+saves ya sumados y
         filtrados por plataforma — None si ninguna métrica aplica (caso
-        web) o ninguna tiene dato.
-      - interaction_rate: interactions ÷ views en %, None si no hay views
-        medidas (nunca división por cero).
+        web) o ninguna tiene dato. NUNCA incluye views ni post_reach —
+        alcance e interacciones son capas separadas, no se mezclan.
+      - interaction_rate: interactions ÷ views (alcance PROPIO), nunca
+        ÷ post_reach — ver docstring de _interaction_rate.
 
     Autores distintos con el mismo texto NO se colapsan: el fingerprint de
     la DB ya incluye el autor exactamente para poder distinguir a dos
@@ -186,15 +253,25 @@ def _collapse_voices(mentions: list[dict]) -> list[dict]:
         comments_count = _apply_metric(
             platform, "comments_count", sum(m.get("comments_count") or 0 for m in group))
         saves = _apply_metric(platform, "saves", _sum_maybe(m.get("saves") for m in group))
-        views = _apply_metric(platform, "views", _sum_maybe(m.get("views") for m in group))
+
+        # Alcance PROPIO: solo ocurrencias con reach_source='propio'. Nunca
+        # se mezcla con la visibilidad heredada del post (post_reach).
+        own_reach_values = [m.get("views") for m in group if m.get("reach_source") == "propio"]
+        views = _apply_metric(platform, "views", _sum_maybe(own_reach_values))
+
+        # Visibilidad HEREDADA del post — deduplicada por post, nunca
+        # sumada por repetición de la misma voz en el mismo post.
+        post_reach = _apply_metric(platform, "post_reach", _post_reach_sum(group))
 
         voice["likes"] = likes
         voice["shares"] = shares
         voice["comments_count"] = comments_count
         voice["saves"] = saves
         voice["views"] = views
-        voice["reach_source"] = next(
-            (m.get("reach_source") for m in group if m.get("reach_source")), None)
+        voice["post_reach"] = post_reach
+        voice["reach_source"] = (
+            "propio" if views is not None else ("post" if post_reach is not None else None)
+        )
 
         interactions = _sum_maybe([likes, comments_count, shares, saves])
         voice["interactions"] = interactions
@@ -358,35 +435,48 @@ def build_payload(conn) -> dict:
         # presenta (ver las tres capas: alcance/interacciones/tasa abajo).
         "engagement": m["engagement"],
         "repeat_count": m["repeat_count"],
-        # ── Las tres capas (Tarea 3): alcance (views), interacciones
-        # (likes+comments+shares+saves) y tasa de interacción — nunca
-        # sumadas entre sí en un número compuesto. None = la métrica no
-        # aplica a esta plataforma o no se midió; el dashboard lo pinta
-        # como guion, no como 0.
+        # ── Las capas de engagement: alcance PROPIO (views), visibilidad
+        # HEREDADA del post (post_reach — contexto, nunca alcance de la
+        # mención), interacciones (likes+comments+shares+saves) y tasa de
+        # interacción — nunca sumadas entre sí en un número compuesto, y
+        # views/post_reach nunca se mezclan entre sí (ver METRIC_APPLIES).
+        # None = la métrica no aplica a esta plataforma o no se midió; el
+        # dashboard lo pinta como guion, no como 0.
         "likes": m["likes"],
         "shares": m["shares"],
         "comments_count": m["comments_count"],
         "saves": m["saves"],
         "views": m["views"],
+        "post_reach": m["post_reach"],
         "reach_source": m["reach_source"],
         "interactions": m["interactions"],
         "interaction_rate": m["interaction_rate"],
     } for m in mentions]
 
     quejas = [f for f in filas if f["is_complaint"]]
-    # Bloque 7: rankear por ALCANCE (views) cuando existe — hoy se rankeaba
-    # por engagement (la suma vieja), que subestima: un video con 61.500
-    # views y 2.216 de engagement quedaba detrás de contenido con menos
-    # alcance real pero más "engagement" sumado. Una queja SIN alcance
-    # medido no se inventa un valor ni se mezcla en el mismo ranking — va a
-    # un grupo aparte, ordenado por interacciones, y el dashboard lo dice.
+    # Bloque 7: el criterio de orden depende de qué alcance tiene la queja
+    # — nunca se usa post_reach (visibilidad heredada del post) para
+    # rankear: es constante entre todos los comentarios del mismo post, así
+    # que ordenaría posts, no quejas, y no es comparable con el alcance
+    # propio de TikTok. Dos grupos, con la métrica de orden visible en cada
+    # card (ver template.html):
+    #   with_own_reach:    tiene alcance PROPIO (hoy: solo TikTok) — ordena
+    #                       por views. Es el único caso donde "cuánta gente
+    #                       vio ESTO" es una cifra que la mención posee.
+    #   without_own_reach: sin alcance propio (incluye TODO Instagram, que
+    #                       solo tiene post_reach heredado, y cualquier fila
+    #                       sin ningún dato de alcance) — ordena por
+    #                       interacciones. post_reach viaja en el payload de
+    #                       cada fila como CONTEXTO ("dónde apareció"), el
+    #                       template lo muestra pero nunca lo usa para
+    #                       ordenar ni para comparar contra el otro grupo.
     top_complaints = {
-        "with_reach": sorted(
+        "with_own_reach": sorted(
             [f for f in quejas if f["views"] is not None],
             key=lambda f: (f["views"], f["interactions"] or 0),
             reverse=True,
         )[:20],
-        "without_reach": sorted(
+        "without_own_reach": sorted(
             [f for f in quejas if f["views"] is None],
             key=lambda f: f["interactions"] or 0,
             reverse=True,

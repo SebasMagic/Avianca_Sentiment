@@ -10,3 +10,6 @@ dashboard/avianca_dashboard_*.html
 # El dashboard publicado lleva nombres de usuario y textos de personas reales:
 # la configuracion de deploy se versiona, el contenido no.
 deploy/index.html
+
+# Respaldos locales de la base — nunca al repo
+data/backups/
