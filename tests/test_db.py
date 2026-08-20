@@ -482,6 +482,19 @@ def test_source_account_se_puebla_en_filas_nuevas(tmp_db):
     assert fila_sin["source_account"] is None
 
 
+def test_update_source_account_actualiza_solo_esa_columna(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    m = _mention(mid="m-1")
+    m["platform"] = "instagram"
+    db.upsert_mentions(tmp_db, [m], run_id)
+
+    db.update_source_account(tmp_db, "m-1", "latamairlines_colombia")
+
+    fila = tmp_db.execute("SELECT * FROM mentions WHERE id = 'm-1'").fetchone()
+    assert fila["source_account"] == "latamairlines_colombia"
+    assert fila["likes"] == 10  # nada más se tocó
+
+
 def test_update_engagement_actualiza_solo_columnas_permitidas(tmp_db):
     run_id = db.start_run(tmp_db, "seed", None)
     db.upsert_mentions(tmp_db, [_mention(mid="m-1")], run_id)

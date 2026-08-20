@@ -371,6 +371,23 @@ def update_engagement(conn, mention_id: str, fields: dict) -> None:
     conn.commit()
 
 
+def update_source_account(conn, mention_id: str, source_account: str | None) -> None:
+    """
+    Actualiza SOLO `source_account` de una mención YA existente. No
+    inserta filas, no toca ninguna otra columna — usado por el backfill
+    retroactivo (pipeline/source_account_backfill.py) para poblar la
+    cuenta de origen de comentarios de Instagram que se guardaron ANTES
+    de que source_account existiera (ver Tarea 1, migración aditiva en
+    _migrate — esas filas quedan NULL hasta que algo las corrija con un
+    dato real, nunca con una suposición).
+    """
+    conn.execute(
+        "UPDATE mentions SET source_account = ? WHERE id = ?",
+        (source_account, mention_id),
+    )
+    conn.commit()
+
+
 def all_mentions(conn, brand: str | None = None) -> list[dict]:
     """
     Todas las menciones, o solo las de `brand` si se pasa uno — el
