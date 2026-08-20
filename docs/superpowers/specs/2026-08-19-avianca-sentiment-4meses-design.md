@@ -340,10 +340,18 @@ naranja `#F97316`, JetBrains Mono + Inter. Se corrige el `overflow: hidden` del
 | 5 | Sentiment y emociones | Distribución agregada (dona + barras) |
 | 6 | Tabla explorable | Todas las menciones. Filtros por plataforma, driver, sentimiento y rango de fechas; búsqueda de texto libre; link al post original |
 | 7 | Top quejas por engagement | Ordenadas por `likes + shares + comments_count` |
-| 8 | Calidad de datos | Menciones sin fecha · descartadas por relevancia (con razón) · `unclassified` · cobertura por fuente y por mes |
+| 8 | Calidad de datos | Menciones sin fecha · descartadas por relevancia **en la última corrida** · `unclassified` · cobertura por fuente y por mes |
 
 El bloque 8 es deliberado y no negociable: el reporte debe declarar los límites
 de su propia cobertura.
+
+**Las descartadas por ruido se reportan por corrida, no como acumulado.** El
+pipeline no persiste las menciones que descarta, de modo que no hay forma de
+deduplicarlas entre corridas: volver a correr el seed sobre el mismo Excel vuelve
+a contar las mismas 96, y sumarlas daría 192. Un acumulado histórico veraz es
+imposible sin guardar los descartes, y guardarlos no vale la pena. Se reporta
+entonces el número de la última corrida, etiquetado como tal — coherente con el
+resto del proyecto: no se publica una cifra que no se pueda sostener.
 
 **Nota de implementación:** cargar el skill `dataviz` antes de escribir código de
 gráficos, y el skill `frontend-design` para la maquetación.
