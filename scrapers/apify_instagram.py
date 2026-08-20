@@ -94,9 +94,22 @@ def scrape(since: str | None = None) -> list[dict]:
         # eso fue el defecto original, verificado con datos reales de
         # Apify donde el 100% de 189 comentarios colisionaban en una sola
         # URL.
-        post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
-        comment_id = item.get("id")
-        source_url = f"{post_url}#comment-{comment_id}" if comment_id else post_url
+        #
+        # Preferir "commentUrl": el actor lo entrega como un permalink real
+        # y navegable (".../p/<shortcode>/c/<comment_id>"), que Instagram sí
+        # interpreta como ancla al comentario. Verificado con datos reales:
+        # el 100% de 909 filas de Instagram lo traen. La construcción manual
+        # "{post_url}#comment-{id}" de abajo NO es una URL que Instagram
+        # entienda como ancla — solo abre el post, nunca el comentario — así
+        # que se conserva únicamente como fallback si el ítem no trae
+        # commentUrl (p.ej. una versión vieja del actor).
+        comment_url = item.get("commentUrl")
+        if comment_url:
+            source_url = comment_url
+        else:
+            post_url = item.get("postUrl") or item.get("url") or (post_urls[0] if post_urls else "")
+            comment_id = item.get("id")
+            source_url = f"{post_url}#comment-{comment_id}" if comment_id else post_url
 
         results.append({
             "id": str(uuid.uuid4()),
