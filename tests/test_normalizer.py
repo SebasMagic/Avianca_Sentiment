@@ -52,3 +52,29 @@ def test_normaliza_sentiment_que_no_suma_uno():
     total = (out[0]["sentiment_positive"] + out[0]["sentiment_negative"]
              + out[0]["sentiment_neutral"])
     assert abs(total - 1.0) < 0.01
+
+
+def test_confidence_explicito_se_ignora_si_no_hay_fecha_con_none():
+    """Un scraper no puede afirmar 'approx' si no trajo fecha: sin fecha, siempre unknown."""
+    out = normalize([_m(published_at=None, date_confidence="approx")])
+    assert out[0]["date_confidence"] == "unknown"
+    assert out[0]["published_at"] is None
+
+
+def test_confidence_explicito_se_ignora_si_no_hay_fecha_con_string_vacio():
+    """Un scraper no puede afirmar 'approx' si no trajo fecha (string vacío): sin fecha, siempre unknown."""
+    out = normalize([_m(published_at="", date_confidence="approx")])
+    assert out[0]["date_confidence"] == "unknown"
+    assert out[0]["published_at"] is None
+
+
+def test_mencion_sin_claves_de_sentiment_no_finge_neutralidad():
+    """Sin datos de sentiment el resultado es (0,0,0), no un 1.0 neutral inventado.
+    La autoridad sobre si algo fue analizado es classification_status."""
+    out = normalize([_m(published_at="2026-05-01T10:00:00+00:00",
+                        sentiment_positive=None,
+                        sentiment_negative=None,
+                        sentiment_neutral=None)])
+    assert out[0]["sentiment_positive"] == 0.0
+    assert out[0]["sentiment_negative"] == 0.0
+    assert out[0]["sentiment_neutral"] == 0.0
