@@ -225,6 +225,28 @@ respecto al v1.
 `complaint_driver` es `null` cuando `is_complaint` es `false`. Si `is_complaint`
 es `true` el driver es obligatorio; ante duda el modelo debe usar `otro`.
 
+**Orden de precedencia (desempate obligatorio).** Muchas quejas encajan en dos
+drivers a la vez: una maleta perdida por un vuelo cancelado, un cobro que además
+no fue reembolsado. Sin una regla, el mismo tipo de queja se reparte de forma no
+determinista y el reporte agregado deja de significar algo. El modelo elige el
+**primero que aplique** en este orden:
+
+`cancelacion` → `demora` → `equipaje` → `reembolsos` → `cobros_tarifas` →
+`lifemiles` → `asientos_comida` → `atencion_cliente` → `otro`
+
+Dos consecuencias deliberadas del orden:
+
+- Las disrupciones de vuelo (cancelación, demora) ganan porque son la causa raíz
+  accionable: si la maleta no llegó porque cancelaron el vuelo, el problema a
+  arreglar es la cancelación.
+- `atencion_cliente` va casi al final **a propósito**. Casi toda queja incluye
+  "y nadie me ayudó"; si compitiera de igual a igual se tragaría el resto de
+  categorías y el driver dejaría de informar. Solo gana cuando el mal servicio
+  **es** la queja, no su acompañamiento.
+
+Además, los cobros de equipaje pertenecen a `cobros_tarifas`, no a `equipaje`:
+`equipaje` cubre el manejo físico (maletas perdidas, dañadas, demoradas).
+
 ### Robustez (corrige hallazgos #4 y #8)
 
 - **Todas las plataformas pasan por el clasificador**, incluida `web`. Se elimina
