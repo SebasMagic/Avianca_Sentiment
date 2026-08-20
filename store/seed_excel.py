@@ -17,19 +17,6 @@ import openpyxl
 from pipeline.relevance import is_relevant
 from store import db
 
-COLUMN_MAP = {
-    "Plataforma": "platform",
-    "Texto": "text",
-    "Autor": "author",
-    "Fecha publicación": "published_at",
-    "URL": "source_url",
-    "Likes": "likes",
-    "Shares": "shares",
-    "Comentarios": "comments_count",
-    "Emoción": "emotion",
-    "Extraído en": "fetched_at",
-}
-
 
 def _num(value, cast=int):
     try:

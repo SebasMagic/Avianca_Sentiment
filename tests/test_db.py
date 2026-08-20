@@ -3,14 +3,15 @@ from store import db
 
 def _mention(text="Avianca me perdió la maleta en Bogotá",
              url="https://x.com/1", mid="m-1",
-             fetched_at="2026-08-19T00:00:00+00:00"):
+             fetched_at="2026-08-19T00:00:00+00:00",
+             author="usuario1", published_at="2026-05-01T10:00:00+00:00"):
     return {
         "id": mid,
         "platform": "tiktok",
         "source_url": url,
         "text": text,
-        "author": "usuario1",
-        "published_at": "2026-05-01T10:00:00+00:00",
+        "author": author,
+        "published_at": published_at,
         "date_confidence": "exact",
         "country": "CO",
         "likes": 10,
@@ -29,16 +30,55 @@ def _mention(text="Avianca me perdió la maleta en Bogotá",
 
 
 def test_fingerprint_es_estable_y_ignora_id():
-    a = db.fingerprint("tiktok", "https://x.com/1", "hola mundo")
-    b = db.fingerprint("tiktok", "https://x.com/1", "hola mundo")
+    a = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
+    b = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
     assert a == b
     assert len(a) == 64
 
 
 def test_fingerprint_distingue_texto_distinto_en_misma_url():
-    a = db.fingerprint("tiktok", "https://x.com/1", "hola mundo")
-    b = db.fingerprint("tiktok", "https://x.com/1", "otro comentario distinto")
+    a = db.fingerprint("tiktok", "https://x.com/1", "user1", "hola mundo")
+    b = db.fingerprint("tiktok", "https://x.com/1", "user1", "otro comentario distinto")
     assert a != b
+
+
+def test_fingerprint_distingue_autores_distintos_en_misma_url_mismo_texto(tmp_db):
+    """Regresión: Instagram scrape usa URL genérica para todos los comentarios.
+    Si dos usuarios distintos escriben lo mismo en esa URL, SON dos menciones
+    diferentes, no un duplicado. El fingerprint debe incluir author para evitar
+    falsos positivos.
+
+    Caso real: catherine_zik_oppenheimer y valentina_ahumada977 comentaron
+    '❤️❤️❤️❤️❤️' en fechas distintas (2026-06-02 vs 2026-05-29) en
+    https://www.instagram.com/p/DYxQDxwlUP_/ — eran dos menciones distintas,
+    pero se fusionaban en una si el fingerprint no incluía author."""
+    run_id = db.start_run(tmp_db, "seed", None)
+
+    # Mismo URL, mismo texto, autores distintos
+    ins, dup = db.upsert_mentions(
+        tmp_db,
+        [
+            _mention(
+                mid="m-1",
+                url="https://www.instagram.com/p/DYxQDxwlUP_/",
+                text="❤️❤️❤️❤️❤️",
+                author="catherine_zik_oppenheimer",
+                published_at="2026-06-02T10:00:00+00:00"
+            ),
+            _mention(
+                mid="m-2",
+                url="https://www.instagram.com/p/DYxQDxwlUP_/",
+                text="❤️❤️❤️❤️❤️",
+                author="valentina_ahumada977",
+                published_at="2026-05-29T14:30:00+00:00"
+            ),
+        ],
+        run_id,
+    )
+
+    # Ambos deben insertarse, NO hay duplicado
+    assert (ins, dup) == (2, 0)
+    assert len(db.all_mentions(tmp_db)) == 2
 
 
 def test_insertar_menciones_nuevas(tmp_db):

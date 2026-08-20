@@ -86,19 +86,25 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
-def fingerprint(platform: str, source_url: str, text: str) -> str:
+def fingerprint(platform: str, source_url: str, author: str | None, text: str) -> str:
     """
-    Hash SHA256 del contenido completo (platform|url|text íntegro).
+    Hash SHA256 del contenido completo (platform|url|author|text íntegro).
 
     Se hashea el TEXTO COMPLETO sin truncar para evitar colisiones falsas.
     Dos comentarios genuinamente distintos que comparten un prefijo largo
     pueden coexistir en la misma URL — el dedup por fingerprint debe
     distinguirlos correctamente.
 
+    El autor está incluido en el fingerprint para discriminar personas distintas:
+    si dos autores distintos escriben lo mismo en la misma URL, son dos menciones
+    diferentes. Esto evita falsos positivos en redes donde la URL es constante
+    (ej. Instagram scrape usa una URL genérica). Un mismo autor repitiendo texto
+    idéntico SÍ se deduplica correctamente (re-scrape).
+
     Diseño: un duplicado falso es una fila auditable; una fusión falsa
     es pérdida irrecuperable de datos. La asimetría decide: hashea completo.
     """
-    base = f"{platform}|{source_url or ''}|{text or ''}"
+    base = f"{platform}|{source_url or ''}|{author or ''}|{text or ''}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -136,7 +142,7 @@ def upsert_mentions(conn, mentions: list[dict], run_id: str) -> tuple[int, int]:
     duplicates = 0
 
     for m in mentions:
-        fp = fingerprint(m["platform"], m.get("source_url", ""), m["text"])
+        fp = fingerprint(m["platform"], m.get("source_url", ""), m.get("author"), m["text"])
         row = {
             **{f: m.get(f) for f in _FIELDS},
             "id": m.get("id") or str(uuid.uuid4()),
