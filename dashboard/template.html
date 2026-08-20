@@ -9,18 +9,28 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0E0C0B; --bg-2:#17130F; --bg-3:#211B16; --bg-4:#2B241D;
-    /* Rojo Avianca — SOLO para chrome/marca (encabezados, logo, acentos de UI,
-       barras de un solo driver). El sentiment negativo usa un rojo distinto
-       (--red, más coral/claro) para que "marca" y "negativo" nunca se lean
-       como la misma señal — ver nota en el bloque 5. */
-    --brand:#F62839; --brand-dim:rgba(246,40,57,.12); --brand-mid:rgba(246,40,57,.35);
-    --green:#3FB950; --green-dim:rgba(63,185,80,.12);
-    --red:#F85149;   --red-dim:rgba(248,81,73,.12);
-    --blue:#58A6FF;  --blue-dim:rgba(88,166,255,.12);
-    --gold:#E3B341;  /* única línea de tendencia (sentiment en el timeline) — nunca roja, para no colisionar con marca ni con "negativo" */
-    --txt:#F2ECE6; --txt-2:#A9A29A; --txt-3:#7A7268;
-    --border:rgba(255,244,235,.09);
+    /* Blanco hueso cálido de fondo, tarjetas blancas puras — la identidad de
+       avianca.com. bg-3/bg-4 son capas intermedias (cabecera pegajosa, chips,
+       tracks) que se distinguen de la tarjeta blanca sin recurrir a un borde. */
+    --bg:#FAF7F2; --bg-2:#FFFFFF; --bg-3:#F4F0EA; --bg-4:#ECE4D6;
+    /* Rojo Avianca — SOLO para chrome/marca no textual (logo, barra del KPI
+       héroe, fondo del heatmap, barras de un solo driver): es el rojo puro
+       del logo y sobre blanco no llega a 4.5:1 como texto. --brand-ink es la
+       misma familia de color oscurecida para usarse como texto (5.9:1 sobre
+       blanco). El sentiment negativo usa --red, un terracota/ladrillo (hue
+       ~11°) deliberadamente alejado del rojo-crimson de marca (hue ~355°)
+       para que "esto es de Avianca" y "esto es negativo" nunca se lean como
+       la misma señal — ver nota en el bloque 5. Contraste validado con la
+       fórmula WCAG del skill dataviz (scripts/validate_palette.js).
+       */
+    --brand:#F62839; --brand-ink:#C81030; --brand-dim:rgba(246,40,57,.07); --brand-mid:rgba(246,40,57,.45);
+    --green:#1E8E3E; --green-dim:rgba(30,142,62,.08);
+    --red:#B03D24;   --red-dim:rgba(176,61,36,.08);
+    --blue:#1863BD;  --blue-dim:rgba(24,99,189,.08);
+    --gold:#8A6300;  /* única línea de tendencia (sentiment en el timeline) y badge de repetición — nunca roja, para no colisionar con marca ni con "negativo" */
+    --txt:#1A1613; --txt-2:#6B6259; --txt-3:#786F63;
+    --border:rgba(20,16,12,.10);
+    --shadow:0 1px 2px rgba(20,16,12,.04), 0 6px 16px rgba(20,16,12,.05);
     /* Fallbacks explícitos: el archivo debe verse bien sin internet */
     --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
@@ -52,7 +62,7 @@
   section{margin-bottom:36px}
   section > h2{
     font-family:var(--mono);font-size:11px;letter-spacing:.16em;
-    text-transform:uppercase;color:var(--brand);margin-bottom:14px;
+    text-transform:uppercase;color:var(--brand-ink);margin-bottom:14px;
     display:flex;align-items:center;gap:12px;
   }
   section > h2::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -62,9 +72,21 @@
 
   .card{
     background:var(--bg-2);border:1px solid var(--border);
-    border-radius:8px;padding:20px;
+    border-radius:8px;padding:20px;box-shadow:var(--shadow);
   }
   .scroll-x{overflow-x:auto;overflow-y:hidden}
+  /* Bug preexistente (verificado en el tema oscuro también, no es nuevo de
+     este cambio): un elemento con overflow-x:auto siempre computa su
+     overflow-y como "auto" aunque se pida "visible" (regla de la spec CSS:
+     si un eje no es visible, el otro deja de contar como visible) — así que
+     .scroll-x termina siendo, de cualquier forma, el ancestro con overflow
+     más cercano de la cabecera del bloque 6. Como .scroll-x no tenía alto
+     acotado, nunca llegaba a scrollear por sí mismo y position:sticky nunca
+     se activaba: la cabecera se iba con el resto de la tabla en vez de
+     quedarse fija. La cabecera visualmente "pegajosa" scrollea el bloque
+     6 completo hoy; se le da a su .scroll-x un alto acotado y scroll propio
+     para que la cabecera SÍ se quede fija mientras esas filas pasan debajo. */
+  #b6 .scroll-x{max-height:620px;overflow-y:auto}
 
   /* ── two-column row: bloques 3 + 4 lado a lado ── */
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;margin-bottom:36px}
@@ -87,7 +109,7 @@
      (ver dataviz: "Hero figure ... Exactly one per view"). */
   .kpi.hero{background:linear-gradient(180deg, var(--brand-dim), transparent 68%)}
   .kpi.hero::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand)}
-  .kpi.hero .kpi-lbl{color:var(--brand)}
+  .kpi.hero .kpi-lbl{color:var(--brand-ink)}
   .kpi-val.hero-val{font-size:42px;white-space:nowrap}
   .kpi-platlist{display:flex;flex-direction:column;gap:5px;margin-top:2px}
   @media (max-width:820px){
@@ -110,12 +132,22 @@
   /* ── block 3 · drivers (la estrella) ── */
   .driver-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}
   .driver-insight{font-size:13px;color:var(--txt)}
-  .driver-insight b{color:var(--brand);font-weight:600}
+  .driver-insight b{color:var(--brand-ink);font-weight:600}
   select, input[type=search]{
     background:var(--bg-3);border:1px solid var(--border);color:var(--txt);
     font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:5px;
     outline:none;
   }
+  /* Sin esto el <select> hereda el chrome del sistema operativo (fondo blanco
+     genérico, flecha nativa) y desentona con el resto del tablero. Flecha
+     propia dibujada en línea, color de tinta secundaria. */
+  select{
+    appearance:none;-webkit-appearance:none;-moz-appearance:none;
+    cursor:pointer;padding-right:30px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236B6259' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center;background-size:10px 6px;
+  }
+  select:hover{border-color:var(--txt-3)}
   select:focus, input[type=search]:focus{border-color:var(--brand-mid)}
   .driver-layout{display:grid;grid-template-columns:1fr 190px;gap:20px;min-width:0}
   /* El bloque 3 ahora vive en media columna (Cambio 3) — el min-width:640px
@@ -149,7 +181,7 @@
   #heatmap td.cell.zero{color:var(--txt-3);font-weight:400}
   #heatmap tr.total td{background:var(--bg-3);font-weight:700;border-top:2px solid var(--border)}
   #heatmap td.total-col{font-family:var(--mono);font-weight:700;color:var(--txt);background:var(--bg-3)}
-  #heatmap td.pct-col{font-family:var(--mono);font-weight:600;color:var(--brand);background:var(--brand-dim)}
+  #heatmap td.pct-col{font-family:var(--mono);font-weight:600;color:var(--brand-ink);background:var(--brand-dim)}
 
   /* ── block 5 · sentiment + emotions ── */
   .sent-grid{display:grid;grid-template-columns:260px 1fr;gap:28px}
@@ -190,12 +222,12 @@
   }
   #tabla thead th.sortable{cursor:pointer;user-select:none;white-space:nowrap;transition:color .12s}
   #tabla thead th.sortable:hover{color:var(--txt)}
-  #tabla thead th.sorted{color:var(--brand)}
+  #tabla thead th.sorted{color:var(--brand-ink)}
   #tabla thead th .sort-ind{display:inline-block;width:.9em;margin-left:4px;font-size:8px;vertical-align:middle}
   /* Reserva el espacio de la flecha en todas las cabeceras ordenables para que
      las columnas no salten de ancho al cambiar el orden. */
   #tabla td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--txt-2)}
-  #tabla tbody tr:hover{background:rgba(255,244,235,.025)}
+  #tabla tbody tr:hover{background:rgba(20,16,12,.035)}
   #tabla td.txt{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
   #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
   #tabla td.date.unknown{color:var(--txt-3)}
@@ -205,7 +237,7 @@
   .plat-tag{display:inline-flex;align-items:center;gap:6px;color:var(--txt-2)}
   .drv-pill{
     display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;
-    border-radius:99px;background:var(--brand-dim);color:var(--brand);
+    border-radius:99px;background:var(--brand-dim);color:var(--brand-ink);
     border:1px solid var(--brand-mid);white-space:nowrap;
   }
   .drv-pill.none{background:transparent;border-color:var(--border);color:var(--txt-3)}
@@ -216,7 +248,7 @@
   .repeat-badge{
     display:inline-flex;align-items:center;font-family:var(--mono);font-size:9.5px;
     font-weight:700;padding:1px 6px;border-radius:99px;color:var(--gold);
-    background:rgba(227,179,65,.12);border:1px solid rgba(227,179,65,.35);
+    background:rgba(138,99,0,.10);border:1px solid rgba(138,99,0,.35);
     white-space:nowrap;
   }
   #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
@@ -255,7 +287,7 @@
   .q-plat-row .val{font-family:var(--mono);min-width:34px;text-align:right;color:var(--txt)}
   .q-missing{
     display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;
-    background:var(--red-dim);border:1px solid rgba(248,81,73,.3);color:var(--red);
+    background:var(--red-dim);border:1px solid rgba(176,61,36,.3);color:var(--red);
     font-size:11.5px;font-weight:500;
   }
   .q-months{display:flex;flex-wrap:wrap;gap:6px}
@@ -361,7 +393,7 @@
 <script>
 const DATA = __DASHBOARD_DATA__;
 
-const PLT_COLOR = { web:'#58A6FF', instagram:'#E1306C', tiktok:'#69C9D0' };
+const PLT_COLOR = { web:'#2A78D6', instagram:'#C13584', tiktok:'#0E8C96' };
 const PLT_LABEL = { web:'Web', instagram:'Instagram', tiktok:'TikTok' };
 const DRIVER_LABEL = {
   equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
@@ -378,10 +410,14 @@ const SOURCE_LABEL = { twitter:'Twitter/X' };
 // de tendencia (ámbar) son tres roles de color distintos a propósito — ver
 // nota en :root del <style>. BRAND se usa solo en chrome/UI y en series de
 // un solo dataset (barras de drivers, heatmap); TONE_COLOR es la única
-// fuente de verdad para positivo/negativo/neutral.
+// fuente de verdad para positivo/negativo/neutral. El rojo de TONE_COLOR.neg
+// es un terracota (hue ~11°) deliberadamente distinto del crimson de marca
+// (hue ~355°) — con marca y "negativo" ambos en rojo, sobre blanco la
+// colisión visual es más fácil que sobre negro, así que la separación de
+// tono tiene que ser mayor, no igual.
 const BRAND = '#F62839';
-const TONE_COLOR = { pos:'#3FB950', neg:'#F85149', neu:'#7A7268' };
-const TREND_COLOR = '#E3B341';
+const TONE_COLOR = { pos:'#1E8E3E', neg:'#B03D24', neu:'#8B8378' };
+const TREND_COLOR = '#8A6300';
 
 const FONT_MONO = "'JetBrains Mono', ui-monospace, Consolas, monospace";
 const FONT_SANS = "'Inter', system-ui, -apple-system, sans-serif";
@@ -414,7 +450,7 @@ function sentimentWord(v) {
 }
 
 Chart.defaults.font.family = FONT_SANS;
-Chart.defaults.color = '#A9A29A';
+Chart.defaults.color = '#6B6259';
 
 // Plugin genérico: dibuja el valor al final de cada barra (bar chart, horizontal o vertical).
 // ds.showEndLabels = true y ds.endLabels = [strings] activan el dibujo por dataset.
@@ -429,7 +465,7 @@ const endLabelPlugin = {
       meta.data.forEach((bar, i) => {
         const label = (ds.endLabels && ds.endLabels[i] != null) ? ds.endLabels[i] : String(ds.data[i]);
         ctx.save();
-        ctx.fillStyle = '#A9A29A';
+        ctx.fillStyle = '#6B6259';
         ctx.font = "600 11px " + FONT_MONO;
         ctx.textBaseline = 'middle';
         if (chart.options.indexAxis === 'y') {
@@ -447,8 +483,8 @@ const endLabelPlugin = {
 Chart.register(endLabelPlugin);
 
 const tooltipBase = {
-  backgroundColor: '#211B16', titleColor: '#A9A29A', bodyColor: '#F2ECE6',
-  borderColor: '#3A322A', borderWidth: 1, padding: 10,
+  backgroundColor: '#FFFFFF', titleColor: '#6B6259', bodyColor: '#1A1613',
+  borderColor: '#DED6C8', borderWidth: 1, padding: 10,
   titleFont: { family: FONT_MONO, size: 10 }, bodyFont: { family: FONT_SANS, size: 11.5 },
 };
 
@@ -490,7 +526,7 @@ function renderKpis() {
       <div class="kpi-platlist">
         ${platEntries.map(([p, c]) => `
           <div class="kpi-platrow">
-            <span class="dot" style="background:${PLT_COLOR[p] || '#A9A29A'}"></span>
+            <span class="dot" style="background:${PLT_COLOR[p] || '#8B8378'}"></span>
             ${esc(PLT_LABEL[p] || p)} · ${fmtInt(c)}
           </div>`).join('')}
       </div>
@@ -536,7 +572,7 @@ function renderTimeline() {
       const { ctx, chartArea } = chart;
       const yPix = y1.getPixelForValue(0);
       ctx.save();
-      ctx.strokeStyle = 'rgba(169,162,154,.35)';
+      ctx.strokeStyle = 'rgba(114,107,96,.45)';
       ctx.setLineDash([3, 4]);
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -572,20 +608,20 @@ function renderTimeline() {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(255,244,235,.05)' },
-          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, maxTicksLimit: 12 },
+          grid: { color: 'rgba(20,16,12,.07)' },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, maxTicksLimit: 12 },
         },
         y: {
           stacked: true, beginAtZero: true, position: 'left',
-          grid: { color: 'rgba(255,244,235,.05)' },
-          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
-          title: { display: true, text: 'Menciones / día', color: '#7A7268', font: { family: FONT_MONO, size: 9 } },
+          grid: { color: 'rgba(20,16,12,.07)' },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          title: { display: true, text: 'Menciones / día', color: '#786F63', font: { family: FONT_MONO, size: 9 } },
         },
         y1: {
           position: 'right', min: -100, max: 100,
           grid: { display: false },
-          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, callback: v => v + '%' },
-          title: { display: true, text: 'Sentiment neto', color: '#7A7268', font: { family: FONT_MONO, size: 9 } },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, callback: v => v + '%' },
+          title: { display: true, text: 'Sentiment neto', color: '#786F63', font: { family: FONT_MONO, size: 9 } },
         },
       },
     },
@@ -636,7 +672,7 @@ function renderDrivers(month) {
       labels: rows.map(r => DRIVER_LABEL[r.driver]),
       datasets: [{
         data: rows.map(r => r.count),
-        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(246,40,57,.15)' : BRAND),
+        backgroundColor: rows.map(r => r.count === 0 ? 'rgba(246,40,57,.18)' : BRAND),
         borderRadius: 4, borderSkipped: 'left',
         barThickness: 20, minBarLength: 3,
         showEndLabels: true,
@@ -664,12 +700,12 @@ function renderDrivers(month) {
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: 'rgba(255,244,235,.05)' },
-          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          grid: { color: 'rgba(20,16,12,.07)' },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
         },
         y: {
           grid: { display: false },
-          ticks: { color: '#A9A29A', font: { family: FONT_SANS, size: 11.5 } },
+          ticks: { color: '#6B6259', font: { family: FONT_SANS, size: 11.5 } },
         },
       },
     },
@@ -784,8 +820,8 @@ function renderSentiment() {
       labels: hasData ? rows.map(r => r.label) : ['Sin datos'],
       datasets: [{
         data: hasData ? rows.map(r => r.count) : [1],
-        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#2B241D'],
-        borderColor: '#17130F', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
+        backgroundColor: hasData ? rows.map(r => r.color + 'CC') : ['#ECE4D6'],
+        borderColor: '#FFFFFF', borderWidth: 2, hoverOffset: hasData ? 4 : 0,
       }],
     },
     options: {
@@ -804,7 +840,7 @@ function renderSentiment() {
   // ── emociones ──
   const emoEntries = Object.entries(DATA.emotions).sort((a, b) => b[1] - a[1]);
   document.getElementById('legendEmotions').innerHTML =
-    `<div class="leg-item"><span class="leg-swatch" style="background:#58A6FF"></span>Menciones por emoción dominante</div>`;
+    `<div class="leg-item"><span class="leg-swatch" style="background:#2A78D6"></span>Menciones por emoción dominante</div>`;
 
   const box = document.getElementById('boxEmotions');
   box.style.height = Math.max(180, emoEntries.length * 30 + 30) + 'px';
@@ -816,7 +852,7 @@ function renderSentiment() {
       labels: emoEntries.map(([k]) => EMO_LABEL[k] || k),
       datasets: [{
         data: emoEntries.map(([, v]) => v),
-        backgroundColor: '#58A6FF',
+        backgroundColor: '#2A78D6',
         borderRadius: 4, borderSkipped: 'left',
         barThickness: 16, minBarLength: 3,
         showEndLabels: true,
@@ -834,10 +870,10 @@ function renderSentiment() {
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: 'rgba(255,244,235,.05)' },
-          ticks: { color: '#7A7268', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          grid: { color: 'rgba(20,16,12,.07)' },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
         },
-        y: { grid: { display: false }, ticks: { color: '#A9A29A', font: { family: FONT_SANS, size: 11.5 } } },
+        y: { grid: { display: false }, ticks: { color: '#6B6259', font: { family: FONT_SANS, size: 11.5 } } },
       },
     },
   });
@@ -957,7 +993,7 @@ function renderTabla() {
         : '';
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
-        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#A9A29A'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
+        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
         <td><span class="author-cell">${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}${repeatBadge}</span></td>
         <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
         <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
@@ -983,7 +1019,7 @@ function renderTopQuejas() {
   el.innerHTML = DATA.top_complaints.map((m, i) => `
     <div class="cq-card">
       <div class="cq-top">
-        <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#A9A29A'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
+        <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
         <span class="cq-eng">${fmtInt(m.engagement)}<small>alcance</small></span>
       </div>
       ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — alcance sumado">×${m.repeat_count}</span>` : ''}</div>` : ''}
