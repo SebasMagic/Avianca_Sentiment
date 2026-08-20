@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS mentions (
     likes                 INTEGER DEFAULT 0,
     shares                INTEGER DEFAULT 0,
     comments_count        INTEGER DEFAULT 0,
+    saves                 INTEGER,
+    views                 INTEGER,
+    reach_source          TEXT,
     sentiment_positive    REAL,
     sentiment_negative    REAL,
     sentiment_neutral     REAL,
@@ -64,10 +67,17 @@ CREATE TABLE IF NOT EXISTS runs (
 _FIELDS = [
     "id", "fingerprint", "platform", "source_url", "text", "author",
     "published_at", "date_confidence", "country", "likes", "shares",
-    "comments_count", "sentiment_positive", "sentiment_negative",
+    "comments_count", "saves", "views", "reach_source",
+    "sentiment_positive", "sentiment_negative",
     "sentiment_neutral", "emotion", "is_complaint", "complaint_driver",
     "classification_status", "raw", "fetched_at", "run_id",
 ]
+
+# Columnas de engagement/alcance que update_engagement() tiene permitido tocar.
+# Allowlist fija — nunca se interpola un nombre de columna que no venga de aquí,
+# así el UPDATE dinámico no puede ejecutar SQL arbitrario a partir del dict que
+# le pase el llamador.
+_ENGAGEMENT_FIELDS = {"likes", "shares", "comments_count", "saves", "views", "reach_source"}
 
 
 def _now() -> str:
@@ -86,6 +96,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "short_text_count" not in cols:
         conn.execute("ALTER TABLE runs ADD COLUMN short_text_count INTEGER DEFAULT 0")
         conn.commit()
+
+    # saves/views/reach_source (desglose de engagement — ver
+    # pipeline/engagement_enrichment.py): sin DEFAULT, quedan NULL en filas
+    # viejas. NULL es correcto aquí — "no medido todavía", no "cero".
+    mention_cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    for col, coltype in (("saves", "INTEGER"), ("views", "INTEGER"), ("reach_source", "TEXT")):
+        if col not in mention_cols:
+            conn.execute(f"ALTER TABLE mentions ADD COLUMN {col} {coltype}")
+            conn.commit()
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -218,6 +237,31 @@ def update_classification(conn, mention_id: str, result: dict) -> None:
             result.get("complaint_driver"),
             mention_id,
         ),
+    )
+    conn.commit()
+
+
+def update_engagement(conn, mention_id: str, fields: dict) -> None:
+    """
+    Actualiza columnas de engagement/alcance (likes, shares, comments_count,
+    saves, views, reach_source) de una mención YA existente. No inserta filas,
+    no toca clasificación ni ningún otro campo — usado por el enriquecimiento
+    retroactivo (pipeline/engagement_enrichment.py, backfill de alcance de
+    Instagram) para corregir esas columnas desde datos ya pagados.
+
+    `fields` puede traer solo un subconjunto (p.ej. solo views+reach_source);
+    las claves fuera de _ENGAGEMENT_FIELDS se ignoran en vez de fallar, para
+    que el llamador pueda pasar un dict con más contexto sin filtrar antes.
+    Solo se actualizan columnas de la allowlist fija _ENGAGEMENT_FIELDS —
+    nunca se interpola un nombre de columna ajeno al dict.
+    """
+    cols = [c for c in fields if c in _ENGAGEMENT_FIELDS]
+    if not cols:
+        return
+    set_clause = ", ".join(f"{c} = ?" for c in cols)
+    conn.execute(
+        f"UPDATE mentions SET {set_clause} WHERE id = ?",
+        [fields[c] for c in cols] + [mention_id],
     )
     conn.commit()
 

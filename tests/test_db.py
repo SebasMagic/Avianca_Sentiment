@@ -259,3 +259,108 @@ def test_migracion_agrega_short_text_count_sin_perder_filas():
     cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()]
     assert cols_2.count("short_text_count") == 1
     conn.close()
+
+
+def test_migracion_agrega_columnas_de_engagement_sin_perder_filas():
+    """
+    Migración aditiva del desglose de engagement: una DB con el schema viejo
+    de `mentions` (sin saves/views/reach_source) debe ganar esas tres
+    columnas al pasar por init_db, sin perder ninguna fila existente —
+    exactamente la misma protección que ya tiene short_text_count para
+    `runs`. data/avianca.db tiene 1.261 filas de scraping ya pagado.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, text, "
+        "date_confidence, classification_status, likes) "
+        "VALUES ('m1', 'fp1', 'tiktok', 'hola', 'exact', 'classified', 42)"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar las columnas sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert {"saves", "views", "reach_source"} <= cols
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila["id"] == "m1"
+    assert fila["likes"] == 42  # dato viejo intacto
+    # Sin DEFAULT: filas viejas quedan NULL, no en cero — la ausencia no es un dato.
+    assert fila["saves"] is None
+    assert fila["views"] is None
+    assert fila["reach_source"] is None
+
+    # Idempotente: correrlo dos veces no falla ni duplica columnas.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("saves") == 1
+    assert cols_2.count("views") == 1
+    assert cols_2.count("reach_source") == 1
+    conn.close()
+
+
+def test_update_engagement_actualiza_solo_columnas_permitidas(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention(mid="m-1")], run_id)
+
+    db.update_engagement(tmp_db, "m-1", {
+        "saves": 249, "views": 61500, "reach_source": "propio",
+        # Clave ajena a _ENGAGEMENT_FIELDS: debe ignorarse, no romper el UPDATE.
+        "text": "esto no debe escribirse",
+    })
+
+    fila = db.all_mentions(tmp_db)[0]
+    assert fila["saves"] == 249
+    assert fila["views"] == 61500
+    assert fila["reach_source"] == "propio"
+    assert fila["text"] == "Avianca me perdió la maleta en Bogotá"  # sin tocar
+
+
+def test_update_engagement_es_idempotente(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention(mid="m-1")], run_id)
+
+    for _ in range(2):
+        db.update_engagement(tmp_db, "m-1", {"saves": 249, "views": 61500, "reach_source": "propio"})
+
+    fila = db.all_mentions(tmp_db)[0]
+    assert fila["saves"] == 249
+    assert fila["views"] == 61500
+    assert len(db.all_mentions(tmp_db)) == 1  # no insertó filas nuevas
+
+
+def test_update_engagement_sin_campos_permitidos_no_hace_nada(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention(mid="m-1")], run_id)
+
+    db.update_engagement(tmp_db, "m-1", {"text": "intento de escribir algo no permitido"})
+
+    fila = db.all_mentions(tmp_db)[0]
+    assert fila["text"] == "Avianca me perdió la maleta en Bogotá"

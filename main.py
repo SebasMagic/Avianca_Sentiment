@@ -8,6 +8,7 @@ main.py — Entry point del pipeline Avianca Sentiment Monitor v2.
   python main.py --seed-excel v1.xlsx           # importa el Excel del v1
   python main.py --classify                     # solo reclasifica lo pendiente
   python main.py --export-excel                 # vuelca la DB a .xlsx
+  python main.py --enriquecer-engagement         # puebla saves/views desde el raw ya guardado
   python main.py --schedule                     # semanal, lunes 8am
 
 Twitter/X queda fuera de v2: el actor de Apify con búsqueda histórica
@@ -32,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 import schedule
 
 from config import BACKFILL_SINCE
-from pipeline import classify_pending
+from pipeline import classify_pending, engagement_enrichment
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
 from pipeline.relevance import is_relevant
@@ -155,6 +156,8 @@ def main():
                         help="solo reclasifica lo pendiente en la DB")
     parser.add_argument("--export-excel", action="store_true",
                         help="vuelca la DB completa a un .xlsx")
+    parser.add_argument("--enriquecer-engagement", action="store_true",
+                        help="puebla saves/views/reach_source desde el raw ya guardado (sin llamar APIs)")
     parser.add_argument("--schedule", action="store_true",
                         help="corre cada lunes a las 8am")
     args = parser.parse_args()
@@ -175,6 +178,12 @@ def main():
     if args.export_excel:
         conn = db.connect()
         export_excel(db.all_mentions(conn))
+        conn.close()
+        return
+
+    if args.enriquecer_engagement:
+        conn = db.connect()
+        print(f"[Engagement] {engagement_enrichment.run(conn)}")
         conn.close()
         return
 
