@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS mentions (
     classification_status TEXT NOT NULL,
     raw                   TEXT,
     fetched_at            TEXT,
-    run_id                TEXT
+    run_id                TEXT,
+    exclusion_reason      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_mentions_published ON mentions(published_at);
@@ -132,6 +133,25 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # (ver scrapers/apify_instagram.py), no una suposición retroactiva.
     if "source_account" not in mention_cols:
         conn.execute("ALTER TABLE mentions ADD COLUMN source_account TEXT")
+        conn.commit()
+
+    # exclusion_reason: marca una mención social de HASHTAG (hoy: TikTok)
+    # como excluida de las agregaciones del dashboard sin borrar la fila —
+    # ver pipeline/relevance.py (Tarea 1/2 de la corrección de relevancia
+    # social) y pipeline/social_relevance_backfill.py (Tarea 3, aplica la
+    # regla retroactivamente a lo que ya estaba guardado). NULL = incluida
+    # (default para toda fila nueva o vieja); con texto = la razón de
+    # descarte ("sin_keyword", "sin_contexto_aeronautico" — las mismas que
+    # devuelve is_relevant()), igual que ya se hace con el filtro web.
+    #
+    # Reversible por diseño: es una sola columna, nunca una fila borrada —
+    # si la regla resulta mal calibrada, corregirla y re-correr el backfill
+    # deja la columna en NULL de nuevo para las filas que ya no aplican.
+    # dashboard/aggregate.py la trata igual que la ventana de reporte
+    # (config.REPORT_WINDOW_START): la fila sigue en la DB, auditable, pero
+    # ningún bloque del dashboard la cuenta.
+    if "exclusion_reason" not in mention_cols:
+        conn.execute("ALTER TABLE mentions ADD COLUMN exclusion_reason TEXT")
         conn.commit()
 
     # Índice sobre brand — se crea acá y no dentro de SCHEMA porque en una
@@ -384,6 +404,28 @@ def update_source_account(conn, mention_id: str, source_account: str | None) -> 
     conn.execute(
         "UPDATE mentions SET source_account = ? WHERE id = ?",
         (source_account, mention_id),
+    )
+    conn.commit()
+
+
+def set_exclusion_reason(conn, mention_id: str, reason: str | None) -> None:
+    """
+    Marca (o desmarca) una mención como excluida de las agregaciones del
+    dashboard sin borrar la fila — usado por el backfill retroactivo
+    (pipeline/social_relevance_backfill.py, Tarea 3) para aplicar el
+    filtro de relevancia de hashtag (pipeline/relevance.py) a menciones
+    de TikTok que ya estaban en la DB antes de que ese filtro existiera.
+
+    `reason` es la razón de descarte que devuelve is_relevant() (p.ej.
+    "sin_contexto_aeronautico") o None para reincluir una fila — la
+    exclusión es reversible por diseño: si la regla resulta mal calibrada,
+    corregirla y volver a correr el backfill deja `exclusion_reason` en
+    NULL de nuevo para las filas que ya no aplican, sin perder ningún dato
+    (nunca se borra una fila; ver docstring de _migrate).
+    """
+    conn.execute(
+        "UPDATE mentions SET exclusion_reason = ? WHERE id = ?",
+        (reason, mention_id),
     )
     conn.commit()
 

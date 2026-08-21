@@ -696,3 +696,102 @@ def test_migracion_indice_de_brand_no_revienta_en_db_vieja():
     idx = {row[1] for row in conn.execute("PRAGMA index_list(mentions)").fetchall()}
     assert "idx_mentions_brand" in idx
     conn.close()
+
+
+# ── Tarea 3 (relevancia social): exclusion_reason ──────────────────────
+
+def test_migracion_agrega_exclusion_reason_sin_perder_filas():
+    """
+    Migración aditiva de exclusion_reason (Tarea 3 — corrección de
+    relevancia social): una DB con el schema viejo de `mentions` (sin esa
+    columna) debe ganarla al pasar por init_db, sin perder ninguna fila
+    existente. Las filas viejas quedan NULL — "incluida", nunca excluida
+    por defecto.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            brand                 TEXT NOT NULL DEFAULT 'Avianca',
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, text, "
+        "date_confidence, classification_status, author) "
+        "VALUES ('m1', 'fp1', 'tiktok', 'hola', 'exact', 'classified', 'usuario1')"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar la columna sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert "exclusion_reason" in cols
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila["id"] == "m1"
+    assert fila["text"] == "hola"  # dato viejo intacto
+    assert fila["exclusion_reason"] is None  # fila vieja: incluida por defecto
+
+    # Idempotente: correrlo dos veces no falla ni duplica la columna.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("exclusion_reason") == 1
+    conn.close()
+
+
+def test_exclusion_reason_es_none_por_defecto_en_filas_nuevas(tmp_db):
+    run_id = db.start_run(tmp_db, "weekly", None, brand="Avianca")
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+
+    fila = tmp_db.execute("SELECT exclusion_reason FROM mentions WHERE id = 'm-1'").fetchone()
+    assert fila["exclusion_reason"] is None
+
+
+def test_set_exclusion_reason_marca_solo_esa_columna(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+
+    db.set_exclusion_reason(tmp_db, "m-1", "sin_contexto_aeronautico")
+
+    fila = tmp_db.execute("SELECT * FROM mentions WHERE id = 'm-1'").fetchone()
+    assert fila["exclusion_reason"] == "sin_contexto_aeronautico"
+    assert fila["likes"] == 10  # nada más se tocó
+    assert fila["text"] == "Avianca me perdió la maleta en Bogotá"
+
+
+def test_set_exclusion_reason_es_reversible(tmp_db):
+    """Pasar None reincluye la fila — la exclusión no es definitiva."""
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+
+    db.set_exclusion_reason(tmp_db, "m-1", "sin_keyword")
+    assert tmp_db.execute(
+        "SELECT exclusion_reason FROM mentions WHERE id = 'm-1'"
+    ).fetchone()["exclusion_reason"] == "sin_keyword"
+
+    db.set_exclusion_reason(tmp_db, "m-1", None)
+    assert tmp_db.execute(
+        "SELECT exclusion_reason FROM mentions WHERE id = 'm-1'"
+    ).fetchone()["exclusion_reason"] is None

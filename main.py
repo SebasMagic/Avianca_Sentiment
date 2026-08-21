@@ -13,6 +13,7 @@ main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
   python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
   python main.py --backfill-cuenta-origen --brand LATAM  # cuenta de origen para IG ya en la DB (gasta poco Apify)
   python main.py --solo-instagram --since 2026-01-01  # re-corre SOLO Instagram, sin re-pagar DataForSEO/TikTok
+  python main.py --limpiar-relevancia-social --brand LATAM  # aplica el filtro de hashtag a TikTok ya en la DB (no gasta API)
   python main.py --schedule                     # semanal, lunes 8am
 
 `--brand` (default: config.DEFAULT_BRAND = "Avianca") acota TODO el
@@ -54,7 +55,7 @@ import schedule
 from config import BACKFILL_SINCE, DEFAULT_BRAND, get_brand
 from pipeline import (
     classify_pending, engagement_enrichment, instagram_reach_backfill,
-    source_account_backfill,
+    social_relevance_backfill, source_account_backfill,
 )
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
@@ -213,6 +214,10 @@ def main():
                         help="backfill de source_account (cuenta de Instagram del post) para "
                              "menciones YA en la DB que quedaron NULL — 1 llamada de Fase 1 a "
                              "Apify sobre los posts únicos pendientes (gasta poco, ver --brand)")
+    parser.add_argument("--limpiar-relevancia-social", action="store_true",
+                        help="aplica retroactivamente el filtro de relevancia de hashtag "
+                             "(pipeline/relevance.py) a las menciones de TikTok YA en la DB — "
+                             "no borra filas, marca exclusion_reason; no gasta API (ver --brand)")
     args = parser.parse_args()
 
     # Falla temprano y con mensaje claro si --brand no existe en config.BRANDS,
@@ -253,6 +258,12 @@ def main():
     if args.backfill_cuenta_origen:
         conn = db.connect()
         print(f"[SourceAccountBackfill] {source_account_backfill.run(conn, brand=args.brand)}")
+        conn.close()
+        return
+
+    if args.limpiar_relevancia_social:
+        conn = db.connect()
+        print(f"[SocialRelevanceBackfill] {social_relevance_backfill.run(conn, brand=args.brand)}")
         conn.close()
         return
 
