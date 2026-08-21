@@ -1,7 +1,7 @@
 """
 Agregaciones para el dashboard. Lee la DB y produce el payload JSON.
 
-Sin HTML, sin red. Cuatro reglas que no se negocian, en el orden en que se
+Sin HTML, sin red. Cinco reglas que no se negocian, en el orden en que se
 aplican:
 
   - Antes que nada, se descartan las menciones anteriores a
@@ -16,13 +16,22 @@ aplican:
     desconocida) NO se filtran por esta regla — no hay fecha con la cual
     juzgarlas contra la ventana, y ya tienen su propio tratamiento (la
     regla del timeline, más abajo, y se cuentan en data_quality.unknown_date).
-  - Sobre lo que queda dentro de la ventana, las menciones se colapsan por
-    (author, text) en "voces" únicas. Una persona real que pega el mismo
-    comentario 48 veces (caso medido: alejandra.caicho, 56 filas, 56
-    source_url de comentario distintas y reales) es una queja, no 48. Sin
-    colapsar, un puñado de spammers reescribe la distribución de drivers:
-    con los 1.261 registros crudos de este proyecto, atencion_cliente pasa
-    de representar 32,8% de las quejas a solo 26-27% una vez colapsado, y
+  - Sobre lo que queda dentro de la ventana, se descartan las menciones con
+    `exclusion_reason` — filas de TikTok (resultado de búsqueda por
+    hashtag) que pipeline/relevance.py o el backfill retroactivo
+    (pipeline/social_relevance_backfill.py, Tarea 3) marcaron como
+    irrelevantes: mencionan la marca por coincidencia pero no hablan de
+    ella (caso real: "#latam" trajo 29 videos, 28 eran memes de
+    Latinoamérica sin relación con la aerolínea). Igual que con la
+    ventana de reporte, la fila SIGUE en la DB — auditable, reversible si
+    la regla resulta mal calibrada — pero no cuenta en ningún bloque.
+  - Sobre lo que queda, las menciones se colapsan por (author, text) en
+    "voces" únicas. Una persona real que pega el mismo comentario 48
+    veces (caso medido: alejandra.caicho, 56 filas, 56 source_url de
+    comentario distintas y reales) es una queja, no 48. Sin colapsar, un
+    puñado de spammers reescribe la distribución de drivers: con los
+    1.261 registros crudos de este proyecto, atencion_cliente pasa de
+    representar 32,8% de las quejas a solo 26-27% una vez colapsado, y
     "otro" sube de 20,4% a ~26%. El scraper no está mal — cada fila es una
     URL de comentario real — el problema es puramente analítico: contar
     personas, no apariciones. La insistencia del autor no se descarta, se
@@ -191,6 +200,17 @@ def _in_report_window(m: dict) -> bool:
     return published_at[:10] >= REPORT_WINDOW_START
 
 
+def _is_excluded_by_relevance(m: dict) -> bool:
+    """
+    True si la mención tiene `exclusion_reason` (Tarea 3 — corrección de
+    relevancia social): TikTok que ya no pasa el filtro de hashtag de
+    pipeline/relevance.py, marcado por pipeline/social_relevance_backfill.py
+    o por una corrida nueva del pipeline. La fila sigue en la DB, esto solo
+    decide si CUENTA en el reporte.
+    """
+    return bool(m.get("exclusion_reason"))
+
+
 def _collapse_voices(mentions: list[dict]) -> list[dict]:
     """
     Agrupa menciones por (author, text) — la misma persona diciendo lo mismo,
@@ -340,8 +360,19 @@ def build_payload(conn, brand: str | None = None) -> dict:
     windowed_mentions = [m for m in raw_mentions if _in_report_window(m)]
     outside_window = len(raw_mentions) - len(windowed_mentions)
 
-    mentions = _collapse_voices(windowed_mentions)
-    collapsed_repeats = len(windowed_mentions) - len(mentions)
+    # Relevancia social (Tarea 3) — ver docstring del módulo. Se aplica
+    # DESPUÉS de la ventana de reporte (para no cambiar outside_window,
+    # que sigue siendo "cuántas quedan fuera de fecha" tal cual estaba) y
+    # ANTES de colapsar voces — una mención excluida no debe aportar su
+    # repeat_count/engagement a una voz que sí cuenta.
+    relevant_mentions = [m for m in windowed_mentions if not _is_excluded_by_relevance(m)]
+    excluded_irrelevant = len(windowed_mentions) - len(relevant_mentions)
+    excluded_irrelevant_reasons = dict(collections.Counter(
+        m["exclusion_reason"] for m in windowed_mentions if _is_excluded_by_relevance(m)
+    ))
+
+    mentions = _collapse_voices(relevant_mentions)
+    collapsed_repeats = len(relevant_mentions) - len(mentions)
     total = len(mentions)
 
     complaints = [m for m in mentions if m["is_complaint"]]
@@ -581,6 +612,15 @@ def build_payload(conn, brand: str | None = None) -> dict:
         # pero fuera del análisis.
         "outside_window": outside_window,
         "window_start": REPORT_WINDOW_START,
+        # Tarea 3 (relevancia social): menciones de TikTok, dentro de la
+        # ventana de reporte, que exclusion_reason marca como resultado de
+        # hashtag sin relación real con la marca (ver docstring del
+        # módulo). Reales, en la DB, auditables — fuera del análisis por
+        # la misma razón que outside_window: no borradas, solo no
+        # contadas. `_reasons` desglosa el motivo tal cual lo reporta
+        # is_relevant() ("sin_keyword", "sin_contexto_aeronautico").
+        "excluded_irrelevant": excluded_irrelevant,
+        "excluded_irrelevant_reasons": excluded_irrelevant_reasons,
         # Tarea 4: qué métricas de engagement hay y cuáles no, por
         # plataforma, con conteo de filas — para que nadie saque
         # conclusiones de "shares" sin saber cuántas filas lo cubren.

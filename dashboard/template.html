@@ -497,6 +497,12 @@ const DRIVER_ORDER = Object.keys(DRIVER_LABEL);
 const EMO_LABEL = { happiness:'Felicidad', anger:'Enojo', love:'Amor',
                     sadness:'Tristeza', neutral:'Neutral', surprise:'Sorpresa', fear:'Miedo' };
 const SOURCE_LABEL = { twitter:'Twitter/X' };
+// Razones de exclusión por irrelevancia (Tarea 3) — las mismas que
+// devuelve pipeline/relevance.py para el filtro de hashtag de TikTok.
+const EXCLUSION_REASON_LABEL = {
+  sin_keyword: 'no mencionan la marca',
+  sin_contexto_aeronautico: 'mencionan la marca pero no hablan de volar con ella',
+};
 
 // Marca (color de marca) vs. estado (verde/rojo/gris de sentiment) vs.
 // línea de tendencia (ámbar) son tres roles de color distintos a propósito
@@ -1297,10 +1303,18 @@ function renderCalidad() {
   const maxPlat = Math.max(...Object.values(q.by_platform), 1);
   const months = Object.entries(q.by_month);
 
+  const exclusionReasonsTxt = Object.entries(q.excluded_irrelevant_reasons || {})
+    .map(([r, c]) => `${fmtInt(c)} ${EXCLUSION_REASON_LABEL[r] || r}`)
+    .join(', ');
+
   const notes = [
     q.outside_window > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.outside_window)}</span>
       <span>menciones de la base son anteriores a <b style="color:var(--txt)">${fmtDate(q.window_start, { day: '2-digit', month: 'short', year: 'numeric' })}</b> y <b style="color:var(--txt)">no entran en este reporte</b> — en el backfill, el actor de TikTok devolvió contenido fuera del rango pedido (videos de 2023 a 2025 pese a pedir solo 2026). Son menciones reales y ya pagadas, pero se excluyen de todos los bloques (KPIs, tendencia, drivers, sentimiento, tabla y top quejas) para que el reporte no se estire sobre años cuando casi todos los datos están concentrados en meses recientes.</span></div>`
+      : '',
+    q.excluded_irrelevant > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_irrelevant)}</span>
+      <span>menciones de TikTok dentro de la ventana son resultado de una búsqueda por <b style="color:var(--txt)">hashtag sin relación real con la marca</b> (${esc(exclusionReasonsTxt)}) — caso real: el hashtag "#latam" trajo videos de memes de Latinoamérica, geografía y K-pop que mencionaban "latam" sin hablar de la aerolínea. Se excluyen de todos los bloques del reporte, igual que las de fuera de ventana — la fila sigue en la base para poder auditar la decisión.</span></div>`
       : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>

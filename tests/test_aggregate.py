@@ -649,6 +649,77 @@ def test_outside_window_cuenta_las_que_quedan_fuera(tmp_db):
     assert p["data_quality"]["window_start"] == REPORT_WINDOW_START
 
 
+# ── Tarea 3 (relevancia social): exclusion_reason ──────────────────────
+# Mismo tratamiento que outside_window — la fila sigue en la DB
+# (db.set_exclusion_reason nunca borra), pero ningún bloque la cuenta.
+
+def test_mencion_excluida_por_irrelevancia_no_aparece_en_ningun_bloque(tmp_db):
+    _seed(tmp_db, [
+        _m(1, author="meme_autor", is_complaint=1, complaint_driver="equipaje"),
+        _m(2, author="autor_real", is_complaint=1, complaint_driver="demora"),
+    ])
+    db.set_exclusion_reason(tmp_db, "m-1", "sin_contexto_aeronautico")
+
+    p = aggregate.build_payload(tmp_db)
+
+    assert p["kpis"]["total"] == 1
+    assert p["kpis"]["complaints"] == 1
+    assert len(p["mentions"]) == 1
+    assert p["mentions"][0]["author"] == "autor_real"
+    todas_las_quejas = p["top_complaints"]["with_own_reach"] + p["top_complaints"]["without_own_reach"]
+    assert all(f["author"] == "autor_real" for f in todas_las_quejas)
+    assert [d["driver"] for d in p["drivers"]] == ["demora"]
+    assert p["data_quality"]["total"] == 1
+
+
+def test_excluded_irrelevant_cuenta_las_marcadas_dentro_de_la_ventana(tmp_db):
+    _seed(tmp_db, [
+        _m(1, author="a"), _m(2, author="b"), _m(3, author="c"),
+    ])
+    db.set_exclusion_reason(tmp_db, "m-1", "sin_contexto_aeronautico")
+    db.set_exclusion_reason(tmp_db, "m-2", "sin_keyword")
+
+    p = aggregate.build_payload(tmp_db)
+
+    assert p["data_quality"]["excluded_irrelevant"] == 2
+    assert p["data_quality"]["excluded_irrelevant_reasons"] == {
+        "sin_contexto_aeronautico": 1, "sin_keyword": 1,
+    }
+
+
+def test_excluded_irrelevant_es_cero_sin_exclusiones(tmp_db):
+    _seed(tmp_db, [_m(1, author="a")])
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["excluded_irrelevant"] == 0
+    assert p["data_quality"]["excluded_irrelevant_reasons"] == {}
+
+
+def test_exclusion_es_reversible_en_las_agregaciones(tmp_db):
+    """Reincluir (exclusion_reason=None) hace que la mención vuelva a
+    contar en todo — la exclusión no es una decisión de un solo sentido."""
+    _seed(tmp_db, [_m(1, author="a")])
+    db.set_exclusion_reason(tmp_db, "m-1", "sin_contexto_aeronautico")
+    assert aggregate.build_payload(tmp_db)["kpis"]["total"] == 0
+
+    db.set_exclusion_reason(tmp_db, "m-1", None)
+    assert aggregate.build_payload(tmp_db)["kpis"]["total"] == 1
+
+
+def test_exclusion_no_afecta_outside_window(tmp_db):
+    """excluded_irrelevant y outside_window son criterios independientes —
+    marcar una fila irrelevante no cambia cuántas quedan fuera de fecha."""
+    _seed(tmp_db, [
+        _m(1, author="a", published_at="2023-03-23T00:00:00+00:00"),
+        _m(2, author="b", published_at="2026-05-01T00:00:00+00:00"),
+    ])
+    db.set_exclusion_reason(tmp_db, "m-2", "sin_keyword")
+
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["outside_window"] == 1
+    assert p["data_quality"]["excluded_irrelevant"] == 1
+    assert p["kpis"]["total"] == 0
+
+
 # ── Multi-marca (Tarea 1): build_payload(conn, brand=...) ─────────────────
 
 def test_build_payload_filtra_por_marca(tmp_db):
