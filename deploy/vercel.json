@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/latam", "destination": "/latam.html" },
+    { "source": "/avianca", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
