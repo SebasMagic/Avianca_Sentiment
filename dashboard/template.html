@@ -110,10 +110,26 @@
      para que la cabecera SÍ se quede fija mientras esas filas pasan debajo. */
   #b6 .scroll-x{max-height:620px;overflow-y:auto}
 
-  /* ── two-column row: bloques 3 + 4 lado a lado ── */
+  /* ── two-column row: bloques 3 + 4 lado a lado ──
+     Quiebra en 1040px (no 960): a 1024px de viewport cada columna quedaba
+     en ~439px de ancho útil, por debajo del min-width:460px del heatmap
+     (bloque 4) — obligaba a un scroll horizontal interno de ~20px, chico
+     pero real, en un ancho que Tarea 2 pide verificar explícitamente.
+     Apilando una fila antes elimina ese scroll fantasma sin sacrificar
+     nada: 1040–1440px siguen viendo las dos columnas lado a lado. */
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;margin-bottom:36px}
-  .two-col > section{margin-bottom:0}
-  @media (max-width:960px){ .two-col{grid-template-columns:1fr;gap:36px} }
+  /* min-width:0 es obligatorio en el item de grid, no solo en el chart de
+     adentro (Tarea 2, hallado con Playwright a 390px): un grid item con
+     overflow:visible (el default de <section>) hereda min-width:auto, que
+     el spec define como el tamaño min-content del contenido — y ese
+     min-content viaja hacia arriba a través de bloques normales aunque
+     tengan overflow-x:auto más abajo (el .scroll-x del heatmap, con la
+     tabla de min-width:460px). Sin esto, la columna del heatmap se negaba
+     a encogerse por debajo de ~500px y forzaba scroll horizontal del BODY
+     entero a 390px — no del contenedor scroll-x, que es donde debía
+     quedarse contenido. */
+  .two-col > section{margin-bottom:0;min-width:0}
+  @media (max-width:1040px){ .two-col{grid-template-columns:1fr;gap:36px} }
 
   /* ── block 1 · KPIs ──
      Grid explícito (no auto-fit): el héroe (Cambio 2, ver abajo) necesita
@@ -223,6 +239,14 @@
     margin-top:4px;padding-top:11px;border-top:1px solid var(--border);
   }
   .sent-legend-net .lv{margin-left:auto;font-family:var(--mono);color:var(--txt-2);font-weight:600}
+  /* Bug preexistente (Tarea 2): #boxEmotions heredaba min-width:640px de la
+     regla genérica .chart-box, y el .card que lo envuelve cubre TODO el
+     sent-grid (dona incluida) con scroll-x — a 1024px o en móvil, esas
+     barras arrastraban también la dona fuera de vista al scrollear. Mismo
+     arreglo que ya tiene #boxDrivers (bloque 3): un chart de barras
+     horizontal con puñado de categorías se encoge bien, no necesita
+     imponer un ancho mínimo ni scroll propio. */
+  #boxEmotions{min-width:0}
   @media (max-width:760px){ .sent-grid{grid-template-columns:1fr} }
 
   /* ── block 6 · tabla explorable ──
@@ -355,6 +379,74 @@
   }
   #conteoTabla{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3);letter-spacing:.03em}
   .empty-row td{text-align:center;color:var(--txt-3);padding:30px 0;font-family:var(--mono);font-size:11px;letter-spacing:.05em}
+
+  /* ── Tarea 2: tabla → tarjetas apiladas en móvil ──
+     Comprimir 7+ columnas dentro de 390px de ancho es siempre ilegible,
+     compacte lo que compacte la vista de escritorio. Debajo de 680px la
+     tabla se re-renderiza como una lista de tarjetas: cada <tr> es una
+     tarjeta, cada <td> es una fila etiqueta→valor (data-label viene del
+     mismo renderTabla() de siempre, sin duplicar lógica). La cabecera se
+     oculta visualmente pero NO se saca del DOM — sigue ahí por si el
+     viewport crece de nuevo, y sus <th data-sort> siguen siendo el mismo
+     nodo que initOrden() enganchó al cargar. */
+  @media (max-width:680px){
+    table#tabla, table#tabla.tabla-detalle{min-width:0}
+    #tabla, #tabla tbody, #tabla tr, #tabla th, #tabla td{display:block}
+    #tabla thead{
+      position:absolute;width:1px;height:1px;overflow:hidden;
+      clip:rect(0 0 0 0);white-space:nowrap;
+    }
+    #tabla tbody tr{
+      background:var(--bg-2);border:1px solid var(--border);border-radius:8px;
+      padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);
+    }
+    #tabla tbody tr:hover{background:var(--bg-2)}
+    #tabla td{
+      display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+      padding:6px 0;border-bottom:1px dashed var(--border);
+    }
+    /* "#tabla td"/"#tabla th" (id+tag) le ganan en especificidad a
+       ".detail-col" (una sola clase) — sin estos dos selectores más
+       específicos, las 6 columnas de detalle se veían SIEMPRE en la
+       tarjeta móvil sin importar el estado del toggle #btnDetalle (los
+       <td> importan visualmente; los <th> viven en el thead ya oculto
+       por clip, pero se cierran igual por prolijidad). Hallado con
+       Playwright a 390px. */
+    #tabla td.detail-col, #tabla th.detail-col{display:none}
+    table#tabla.tabla-detalle .detail-col{display:flex}
+    #tabla td:last-child{border-bottom:none}
+    #tabla td::before{
+      content:attr(data-label);flex-shrink:0;
+      font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;
+      text-transform:uppercase;color:var(--txt-3);
+    }
+    #tabla td.author-text{display:block;max-width:none}
+    #tabla td.author-text::before{display:block;margin-bottom:5px}
+    /* Sin recorte, un texto largo (frecuente: hilos/quejas de varias
+       oraciones) producía UNA tarjeta de cientos de px de alto que se
+       comía toda la ventana de scroll — hallado con Playwright a 390px.
+       Mismo patrón que .cq-text (bloque 7): 3 líneas y puntos suspensivos,
+       el texto completo sigue disponible en el title del span. */
+    #tabla td.author-text .at-text{
+      white-space:normal;display:-webkit-box;-webkit-line-clamp:3;
+      -webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;
+    }
+    #tabla tr.empty-row{background:transparent;border:none;box-shadow:none;padding:0;margin-bottom:0}
+    #tabla tr.empty-row td{display:block;text-align:center;padding:24px 0;border-bottom:none}
+    #tabla tr.empty-row td::before{content:none}
+    /* El límite de 620px (arriba, #b6 .scroll-x) es un número pensado para
+       filas de tabla compactas — probado con Playwright: quitarlo del todo
+       en móvil parecía "más natural" pero con miles de menciones cada
+       tarjeta ocupa mucho más alto que una fila, así que la página entera
+       se volvía de cientos de miles de px (el bloque 6 solo, sin límite,
+       empujaba los bloques 7 y 8 a un scroll interminable — y de hecho
+       rompía la propia captura de pantalla al verificar esto). Se acota a
+       una fracción del alto de pantalla en vez de un píxel fijo: cabe
+       cómodo un puñado de tarjetas y el resto de la lista queda a un
+       scroll corto y contenido DENTRO del bloque, sin arrastrar los
+       bloques de abajo lejos de su lugar. */
+    #b6 .scroll-x{max-height:64vh;overflow-y:auto}
+  }
 
   /* Estado vacío compartido — cuando un bloque no tiene datos que mostrar
      (caso LATAM al arrancar: cero menciones) se reemplaza el gráfico/tabla
@@ -493,7 +585,7 @@
 
   <section id="b5">
     <h2>Sentimiento y emociones</h2>
-    <div class="card scroll-x">
+    <div class="card">
       <div class="sent-grid">
         <div>
           <div class="donut-wrap">

@@ -233,3 +233,11 @@ def test_fecha_compacta_reemplaza_el_formato_largo_en_la_tabla():
     html = build.render(PAYLOAD)
     assert "function fmtDateShort(iso)" in html
     assert "fmtDateShort(m.published_at)" in html
+
+
+def test_media_query_de_tarjetas_moviles_existe_para_el_bloque_6():
+    """Debajo de 680px la tabla se degrada a tarjetas apiladas (Tarea 2)
+    en vez de comprimir columnas hasta volverse ilegible."""
+    html = build.render(PAYLOAD)
+    assert "@media (max-width:680px)" in html
+    assert "content:attr(data-label)" in html
