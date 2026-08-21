@@ -166,3 +166,70 @@ def test_derive_ink_oscurece_un_color_generico_que_no_sirve_como_texto():
     assert build._contrast_ratio(claro, "#FFFFFF") < 4.5
     ink = build._derive_ink(claro)
     assert build._contrast_ratio(ink, "#FFFFFF") >= 4.5
+
+
+# ── Tarea 1 (revisión 2026-08-20): tabla de menciones responsive, bloque 6 ──
+# La tabla tenía 13 columnas y no cabía en 1440px sin scroll horizontal. El
+# rediseño vive entero en template.html (HTML/CSS/JS) — build.py y
+# aggregate.py no se tocan — así que estas pruebas verifican, sobre el HTML
+# ya renderizado por build.render(), que el marcado nuevo (vista compacta
+# por defecto + toggle de detalle) quedó en su lugar. No hay runtime de JS
+# en esta suite (es Python puro, como el resto del archivo): se prueba la
+# forma del HTML/CSS/JS servido, no su ejecución en un navegador — el
+# comportamiento en vivo (toggle, sorting, degradado a tarjetas) se
+# verificó aparte con Playwright (ver .superpowers/tabla-responsive.md).
+
+def test_boton_de_detalle_arranca_en_estado_compacto():
+    """El toggle "Ver detalle de engagement" existe y arranca sin activar
+    — la vista por defecto es la compacta (Tarea 1)."""
+    html = build.render(PAYLOAD)
+    assert 'id="btnDetalle"' in html
+    assert 'aria-pressed="false"' in html
+    assert ">Ver detalle de engagement<" in html
+
+
+def test_columnas_desglosadas_quedan_marcadas_detail_col_pero_siguen_siendo_th_data_sort():
+    """Las 6 columnas que el usuario pidió desglosadas (Visib. post, Likes,
+    Coment., Shares, Saves, Engagement) no se eliminan — quedan detrás del
+    toggle, pero cada una sigue siendo un <th data-sort> real y ordenable,
+    no un elemento sacado del DOM ni con el ordenamiento roto."""
+    html = build.render(PAYLOAD)
+    columnas_desglosadas = [
+        "post_reach", "likes", "comments_count", "shares", "saves", "engagement",
+    ]
+    for col in columnas_desglosadas:
+        assert f'class="sortable detail-col" data-sort="{col}"' in html, col
+
+
+def test_interacciones_es_columna_compacta_no_desglosada():
+    """Interacciones (el agregado likes+comentarios+shares+saves) es una de
+    las columnas que sobreviven a la vista compacta — no debe llevar la
+    clase detail-col como las 6 desglosadas."""
+    html = build.render(PAYLOAD)
+    assert 'data-sort="interactions"' in html
+    assert 'class="sortable detail-col" data-sort="interactions"' not in html
+    assert '<th class="sortable" data-sort="interactions">Interacciones' in html
+
+
+def test_autor_y_texto_comparten_celda_pero_siguen_ordenables_por_separado():
+    """Autor y Texto comparten una sola cabecera <th> (Tarea 1: "pueden
+    compartir celda") pero cada uno sigue siendo su propio <span
+    data-sort> ordenable — no se perdió la capacidad de ordenar por
+    cualquiera de los dos por separado."""
+    html = build.render(PAYLOAD)
+    assert '<th class="sortable multi">' in html
+    assert '<span class="sort-seg" data-sort="author">Autor' in html
+    assert '<span class="sort-seg" data-sort="text">Texto' in html
+    # El cuerpo junta autor+texto en una sola celda con clases propias.
+    assert 'class="author-text"' in html
+    assert 'class="at-author"' in html
+    assert 'class="at-text"' in html
+
+
+def test_fecha_compacta_reemplaza_el_formato_largo_en_la_tabla():
+    """"11 de ago de 26" gastaba demasiado espacio — la tabla usa
+    fmtDateShort (DD/MM/AA) en vez del fmtDate largo que sigue usando el
+    resto del dashboard (encabezado, tarjetas de quejas, etc.)."""
+    html = build.render(PAYLOAD)
+    assert "function fmtDateShort(iso)" in html
+    assert "fmtDateShort(m.published_at)" in html

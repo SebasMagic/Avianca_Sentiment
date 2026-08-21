@@ -225,8 +225,26 @@
   .sent-legend-net .lv{margin-left:auto;font-family:var(--mono);color:var(--txt-2);font-weight:600}
   @media (max-width:760px){ .sent-grid{grid-template-columns:1fr} }
 
-  /* ── block 6 · tabla explorable ── */
-  #filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px}
+  /* ── block 6 · tabla explorable ──
+     Rediseño (Tarea 1, revisión 2026-08-20): la tabla tenía 13 columnas y
+     no cabía en 1440px sin scroll horizontal — "la fecha ocupa demasiado
+     espacio, necesito que en 1 solo cuadrante todo quepa". Dos decisiones:
+       1. Fecha compacta DD/MM/AA en monoespaciada (fmtDateShort en el
+          <script>), con la fecha completa en title.
+       2. Vista compacta por defecto: Fecha, Plataforma, Autor+Texto
+          (una sola celda), Driver, Alcance, Interacciones (el agregado
+          likes+comentarios+shares+saves), Link — 7 columnas, caben sin
+          scroll en un viewport de escritorio típico. Las 6 columnas
+          desglosadas que el usuario pidió antes (Visib. post, Likes,
+          Coment., Shares, Saves, Engagement) NO se eliminan: quedan
+          marcadas .detail-col, escondidas con display:none, y un botón
+          "Ver detalle de engagement" las despliega — ver #btnDetalle más
+          abajo y initDetalleToggle() en el <script>.
+     El ordenamiento por cabecera sigue funcionando en ambas vistas: las
+     columnas ocultas siguen siendo <th data-sort> reales en el DOM, solo
+     display:none — el click handler y valorOrden() no se enteran de si
+     están visibles. */
+  #filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
   #filtros .fq{flex:1;min-width:180px}
   .chk-repeat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt-2);cursor:pointer;user-select:none}
   .chk-repeat input{accent-color:var(--brand)}
@@ -235,33 +253,86 @@
     font-family:var(--sans);font-size:11.5px;padding:7px 12px;border-radius:5px;cursor:pointer;
   }
   .btn-reset:hover{color:var(--txt);border-color:var(--txt-3)}
-  table#tabla{width:100%;border-collapse:collapse;font-size:12px;min-width:1430px}
+
+  /* Barra propia para el toggle de detalle — separada de #filtros a
+     propósito: filtra QUÉ filas se ven, esto cambia QUÉ columnas se ven,
+     y mezclarlos en la misma fila de chips confundiría los dos gestos. */
+  .tabla-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+  .btn-detalle{
+    display:inline-flex;align-items:center;gap:7px;
+    background:transparent;border:1px solid var(--border);color:var(--txt-2);
+    font-family:var(--sans);font-size:11.5px;padding:7px 13px;border-radius:5px;cursor:pointer;
+    transition:color .12s,border-color .12s,background .12s;
+  }
+  .btn-detalle:hover{color:var(--txt);border-color:var(--txt-3)}
+  .btn-detalle::after{content:'▾';font-size:9px;color:var(--txt-3);transition:transform .15s}
+  .btn-detalle[aria-pressed="true"]{color:var(--brand-ink);border-color:var(--brand-mid);background:var(--brand-dim)}
+  .btn-detalle[aria-pressed="true"]::after{transform:rotate(180deg)}
+
+  table#tabla{width:100%;border-collapse:collapse;font-size:12px}
+  /* min-width solo entra en juego con las 6 columnas de detalle desplegadas
+     — la vista compacta (7 columnas) nunca lo necesita en un viewport de
+     escritorio típico, que es exactamente el punto de este rediseño. */
+  table#tabla.tabla-detalle{min-width:1180px}
   #tabla thead th{
     position:sticky;top:0;background:var(--bg-3);z-index:1;
     font-family:var(--mono);font-size:10px;color:var(--txt-2);
     text-transform:uppercase;letter-spacing:.06em;text-align:left;
     padding:9px 10px;border-bottom:1px solid var(--border);
   }
-  #tabla thead th.sortable{cursor:pointer;user-select:none;white-space:nowrap;transition:color .12s}
-  #tabla thead th.sortable:hover{color:var(--txt)}
-  #tabla thead th.sorted{color:var(--brand-ink)}
-  #tabla thead th .sort-ind{display:inline-block;width:.9em;margin-left:4px;font-size:8px;vertical-align:middle}
-  /* Reserva el espacio de la flecha en todas las cabeceras ordenables para que
-     las columnas no salten de ancho al cambiar el orden. */
+  /* .sortable/.sorted/.sort-ind ya no viven solo en <th> — la cabecera
+     combinada Autor/Texto (th.multi) anida dos <span class="sort-seg"
+     data-sort="…"> independientes, cada uno ordenable por su cuenta, así
+     que estas reglas alcanzan también a elementos que no son <th>. */
+  #tabla thead th.sortable, #tabla thead .sortable{cursor:pointer;user-select:none;transition:color .12s}
+  #tabla thead th.sortable:hover, #tabla thead .sortable:hover{color:var(--txt)}
+  #tabla thead th.sorted, #tabla thead .sorted{color:var(--brand-ink)}
+  #tabla thead th .sort-ind, #tabla thead .sort-ind{display:inline-block;width:.9em;margin-left:3px;font-size:8px;vertical-align:middle}
+  #tabla thead th:not(.multi){white-space:nowrap}
+  #tabla thead th.multi{white-space:normal;min-width:150px}
+  #tabla thead .sort-seg{white-space:nowrap}
+  #tabla thead .sep{margin:0 3px;color:var(--txt-3);font-weight:400}
+
+  /* Columnas desglosadas — ocultas hasta que #btnDetalle activa
+     table#tabla.tabla-detalle. Un solo selector cubre th y td porque
+     ambos son elementos <th>/<td> reales (display:table-cell nativo). */
+  .detail-col{display:none}
+  table#tabla.tabla-detalle .detail-col{display:table-cell}
+
   #tabla td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--txt-2)}
   #tabla tbody tr:hover{background:rgba(20,16,12,.035)}
-  #tabla td.txt{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
-  #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap}
+
+  /* Autor + Texto comparten celda (Tarea 1: "pueden compartir celda si
+     ayuda a ganar ancho") — autor chico arriba, texto debajo. Dos <th>
+     de cabecera siguen existiendo por separado (arriba) para que cada
+     uno se pueda ordenar solo; el cuerpo los junta en un <td> porque ahí
+     es donde sobraba ancho por repartir entre 13 columnas. */
+  #tabla td.author-text{max-width:0}
+  #tabla td.author-text .at-author{
+    display:flex;align-items:center;gap:6px;margin-bottom:3px;
+    font-family:var(--mono);font-size:10px;color:var(--txt-3);
+  }
+  /* El nombre trunca con ellipsis; el badge ×N (ancho fijo, flex-shrink:0
+     ya lo trae .repeat-badge) nunca se corta junto con él. */
+  #tabla td.author-text .at-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #tabla td.author-text .at-text{
+    display:block;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  #tabla td.date{font-family:var(--mono);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
   #tabla td.date.unknown{color:var(--txt-3)}
-  #tabla td.eng{font-family:var(--mono);text-align:right;color:var(--txt)}
+  #tabla td.eng{font-family:var(--mono);text-align:right;color:var(--txt-2);white-space:nowrap}
   /* Las capas de engagement: columnas de métrica separadas, cada una
      ordenable por su cuenta. .metric agrupa los números crudos
-     (likes/comentarios/shares/saves/visib. post); .metric.reach es SOLO
-     la columna Alcance (propio) — lleva un acento visual distinto a
-     propósito, porque no es lo mismo que Visib. post (heredada del post,
-     revisión 2026-08-20) y nunca deben leerse como la misma capa. */
+     (likes/comentarios/shares/saves/visib. post/engagement legado);
+     .metric.reach (Alcance) y .metric.aggregate (Interacciones) son las
+     DOS columnas numéricas que sobreviven a la vista compacta — llevan el
+     mismo acento visual (tinta oscura, negrita) para señalar que son las
+     que de verdad importan sin abrir el detalle. Alcance ≠ Visib. post
+     (heredada del post, revisión 2026-08-20): nunca deben leerse como la
+     misma capa. */
   #tabla td.metric{font-family:var(--mono);text-align:right;color:var(--txt-2);white-space:nowrap}
-  #tabla td.metric.reach{color:var(--txt);font-weight:600}
+  #tabla td.metric.reach, #tabla td.metric.aggregate{color:var(--txt);font-weight:600}
   #tabla td.metric .dash{color:var(--txt-3);font-weight:400}
   #tabla th.sortable.reach{color:var(--brand-ink)}
   #tabla td.link a{color:var(--blue);text-decoration:none;font-size:11px}
@@ -276,9 +347,8 @@
   /* Badge de repetición (Cambio 6): deliberadamente NO usa el rojo de marca
      ni el de sentiment — es metadato ("esta voz se repitió"), no una
      categoría ni una polaridad, así que lleva un tono ámbar propio. */
-  .author-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .repeat-badge{
-    display:inline-flex;align-items:center;font-family:var(--mono);font-size:9.5px;
+    display:inline-flex;align-items:center;flex-shrink:0;font-family:var(--mono);font-size:9.5px;
     font-weight:700;padding:1px 6px;border-radius:99px;color:var(--gold);
     background:rgba(138,99,0,.10);border:1px solid rgba(138,99,0,.35);
     white-space:nowrap;
@@ -444,20 +514,23 @@
     <h2>Todas las menciones</h2>
     <div class="card">
       <div id="filtros"></div>
+      <div class="tabla-toolbar">
+        <button type="button" class="btn-detalle" id="btnDetalle" aria-pressed="false" aria-controls="tabla">Ver detalle de engagement</button>
+      </div>
       <div class="scroll-x"><table id="tabla">
         <thead><tr>
           <th class="sortable" data-sort="published_at">Fecha<span class="sort-ind"></span></th>
           <th class="sortable" data-sort="platform">Plataforma<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="author">Autor<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="text">Texto<span class="sort-ind"></span></th>
+          <th class="sortable multi"><span class="sort-seg" data-sort="author">Autor<span class="sort-ind"></span></span><span class="sep">/</span><span class="sort-seg" data-sort="text">Texto<span class="sort-ind"></span></span></th>
           <th class="sortable" data-sort="complaint_driver">Driver<span class="sort-ind"></span></th>
           <th class="sortable reach" data-sort="views">Alcance<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="post_reach">Visib. post<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="likes">Likes<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="comments_count">Coment.<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="shares">Shares<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="saves">Saves<span class="sort-ind"></span></th>
-          <th class="sortable" data-sort="engagement">Engagement<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="post_reach">Visib. post<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="likes">Likes<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="comments_count">Coment.<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="shares">Shares<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="saves">Saves<span class="sort-ind"></span></th>
+          <th class="sortable" data-sort="interactions">Interacciones<span class="sort-ind"></span></th>
+          <th class="sortable detail-col" data-sort="engagement">Engagement<span class="sort-ind"></span></th>
           <th>Link</th></tr></thead>
         <tbody id="tbody"></tbody></table></div>
       <p id="conteoTabla" class="muted"></p></div></section>
@@ -557,6 +630,16 @@ function fmtDate(iso, opts) {
   const d = p ? new Date(+p[1], +p[2] - 1, +p[3]) : new Date(s);
   if (isNaN(d.getTime())) return s.slice(0, 10);
   return d.toLocaleDateString('es-CO', opts || { day: '2-digit', month: 'short', year: 'numeric' });
+}
+// Fecha compacta para la tabla del bloque 6 (Tarea 1: "la fecha ocupa
+// demasiado espacio") — DD/MM/AA de ancho fijo en monoespaciada, en vez
+// de "11 de ago de 26". Mismos componentes locales que fmtDate (nunca
+// Date.parse de un ISO puro: se corre por zona horaria — ver su comentario).
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  const p = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!p) return String(iso).slice(0, 10);
+  return `${p[3]}/${p[2]}/${p[1].slice(2)}`;
 }
 function sentimentTone(v) {
   if (v > 3) return 'pos';
@@ -1069,10 +1152,10 @@ let orden = { col: 'views', dir: 'desc' };
 // Columnas numéricas y de fecha arrancan en descendente al hacer clic; las de
 // texto en ascendente, que es como se espera leer un listado alfabético.
 const SORT_DESC_FIRST = new Set([
-  'engagement', 'published_at', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach',
+  'engagement', 'published_at', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach', 'interactions',
 ]);
 const NUMERIC_COLS = new Set([
-  'engagement', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach',
+  'engagement', 'likes', 'comments_count', 'shares', 'saves', 'views', 'post_reach', 'interactions',
 ]);
 
 function valorOrden(m, col) {
@@ -1111,10 +1194,14 @@ function filtradas() {
   ));
 }
 
+// [data-sort], no "th.sortable": la cabecera combinada Autor/Texto
+// (Tarea 1 — "pueden compartir celda") anida dos <span class="sort-seg
+// sortable" data-sort="…"> independientes dentro de un único <th>, así
+// que el nodo clickeable/ordenable ya no es siempre el <th> mismo.
 function initOrden() {
-  document.querySelectorAll('#tabla th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.sort;
+  document.querySelectorAll('#tabla thead [data-sort]').forEach(el => {
+    el.addEventListener('click', () => {
+      const col = el.dataset.sort;
       if (orden.col === col) {
         orden.dir = orden.dir === 'asc' ? 'desc' : 'asc';
       } else {
@@ -1126,11 +1213,32 @@ function initOrden() {
 }
 
 function pintaIndicadores() {
-  document.querySelectorAll('#tabla th.sortable').forEach(th => {
-    const activa = th.dataset.sort === orden.col;
-    th.classList.toggle('sorted', activa);
-    th.querySelector('.sort-ind').textContent = activa ? (orden.dir === 'asc' ? '▲' : '▼') : '';
-    th.setAttribute('aria-sort', activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  document.querySelectorAll('#tabla thead [data-sort]').forEach(el => {
+    const activa = el.dataset.sort === orden.col;
+    el.classList.toggle('sorted', activa);
+    el.querySelector('.sort-ind').textContent = activa ? (orden.dir === 'asc' ? '▲' : '▼') : '';
+    // aria-sort es semántica de <th> (columnheader) — en el <th> combinado
+    // Autor/Texto el atributo vive ahí, no en cada <span> hijo.
+    if (el.tagName === 'TH') {
+      el.setAttribute('aria-sort', activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    }
+  });
+}
+
+// Toggle del bloque 6 (Tarea 1): despliega/oculta las 6 columnas .detail-col
+// (Visib. post, Likes, Coment., Shares, Saves, Engagement) que el usuario
+// pidió desglosadas hace poco — nunca se eliminan, solo se esconden detrás
+// de este botón para que la vista por defecto quepa sin scroll horizontal.
+// Las columnas ocultas siguen siendo <th data-sort>/<td> reales en el DOM
+// (display:none, no display:remove), así que ordenar por ellas sigue
+// funcionando estén visibles o no — ver initOrden()/pintaIndicadores().
+function initDetalleToggle() {
+  const btn = document.getElementById('btnDetalle');
+  const tabla = document.getElementById('tabla');
+  btn.addEventListener('click', () => {
+    const activo = tabla.classList.toggle('tabla-detalle');
+    btn.setAttribute('aria-pressed', String(activo));
+    btn.textContent = activo ? 'Ocultar detalle de engagement' : 'Ver detalle de engagement';
   });
 }
 
@@ -1184,29 +1292,35 @@ function renderTabla() {
         : '';
       // Las capas de engagement: metricCell() pinta guion cuando la
       // métrica no aplica a la plataforma o no se midió (null) — nunca un
-      // 0 que sugiera "se midió y dio cero".
-      const metricCell = (val, extraClass = '') =>
-        `<td class="metric ${extraClass}">${val == null ? '<span class="dash">—</span>' : fmtInt(val)}</td>`;
+      // 0 que sugiera "se midió y dio cero". data-label alimenta la vista
+      // de tarjetas en móvil (Tarea 2, ver el <style>, media max-width:680px).
+      const metricCell = (val, label, extraClass = '') =>
+        `<td class="metric ${extraClass}" data-label="${label}">${val == null ? '<span class="dash">—</span>' : fmtInt(val)}</td>`;
       // views es SIEMPRE alcance propio ahora (nunca heredado) — ver
       // dashboard/aggregate.py METRIC_APPLIES. post_reach es su propia
       // columna, con su propio tooltip, para que nunca se lean como lo mismo.
       const reachTitle = m.views == null ? '' : 'Alcance propio de este contenido (video/post propio)';
       const postReachTitle = m.post_reach == null ? '' :
         'Visibilidad del POST que contiene este comentario — no es cuánta gente vio este comentario en particular, es cuánta gente vio el post. Contexto, no se usa para ordenar quejas por alcance.';
+      const fechaTitle = (unknown ? 'Fecha no confiable — excluida del timeline. ' : '') +
+        (m.published_at ? fmtDate(m.published_at, { day: '2-digit', month: 'long', year: 'numeric' }) : 'Sin fecha');
       return `<tr>
-        <td class="date ${unknown ? 'unknown' : ''}" title="${unknown ? 'Fecha no confiable — excluida del timeline' : ''}">${fmtDate(m.published_at, { day: '2-digit', month: 'short', year: '2-digit' })}${unknown ? ' *' : ''}</td>
-        <td><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
-        <td><span class="author-cell">${esc(m.author) || '<span style="color:var(--txt-3)">—</span>'}${repeatBadge}</span></td>
-        <td class="txt" title="${esc(m.text)}">${esc(m.text)}</td>
-        <td>${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
-        <td class="metric reach" title="${reachTitle}">${m.views == null ? '<span class="dash">—</span>' : fmtInt(m.views)}</td>
-        <td class="metric" title="${postReachTitle}">${m.post_reach == null ? '<span class="dash">—</span>' : fmtInt(m.post_reach)}</td>
-        ${metricCell(m.likes)}
-        ${metricCell(m.comments_count)}
-        ${metricCell(m.shares)}
-        ${metricCell(m.saves)}
-        <td class="eng">${fmtInt(m.engagement)}</td>
-        <td class="link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : '—'}</td>
+        <td class="date ${unknown ? 'unknown' : ''}" data-label="Fecha" title="${esc(fechaTitle)}">${fmtDateShort(m.published_at)}${unknown ? ' *' : ''}</td>
+        <td data-label="Plataforma"><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
+        <td class="author-text" data-label="Autor / Texto">
+          <span class="at-author"><span class="at-name">${esc(m.author) || '—'}</span>${repeatBadge}</span>
+          <span class="at-text" title="${esc(m.text)}">${esc(m.text)}</span>
+        </td>
+        <td data-label="Driver">${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
+        <td class="metric reach" data-label="Alcance" title="${reachTitle}">${m.views == null ? '<span class="dash">—</span>' : fmtInt(m.views)}</td>
+        <td class="metric detail-col" data-label="Visib. post" title="${postReachTitle}">${m.post_reach == null ? '<span class="dash">—</span>' : fmtInt(m.post_reach)}</td>
+        ${metricCell(m.likes, 'Likes', 'detail-col')}
+        ${metricCell(m.comments_count, 'Coment.', 'detail-col')}
+        ${metricCell(m.shares, 'Shares', 'detail-col')}
+        ${metricCell(m.saves, 'Saves', 'detail-col')}
+        ${metricCell(m.interactions, 'Interacciones', 'aggregate')}
+        <td class="eng detail-col" data-label="Engagement">${fmtInt(m.engagement)}</td>
+        <td class="link" data-label="Link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : '—'}</td>
       </tr>`;
     }).join('');
   }
@@ -1214,7 +1328,7 @@ function renderTabla() {
   pintaIndicadores();
 
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Visib. post = del post que contiene el comentario — no son la misma cosa, no se comparan entre sí`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Interacciones = likes+comentarios+shares+saves · "Ver detalle de engagement" despliega Visib. post, Likes, Coment., Shares, Saves y Engagement`;
 }
 
 // ── Bloque 7: cards, en dos grupos por criterio de orden ──────────
@@ -1430,7 +1544,7 @@ function renderMetricCoverage(coverage, applies) {
   renderKpis, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
-  () => { initFiltros(); initOrden(); renderTabla(); },
+  () => { initFiltros(); initOrden(); initDetalleToggle(); renderTabla(); },
   renderTopQuejas, renderCalidad,
 ].forEach(fn => fn());
 </script>
