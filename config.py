@@ -57,6 +57,17 @@ BRANDS = {
             "lifemiles.com", "www.lifemiles.com",
         },
         "tiktok_hashtags": ["avianca", "aviancacolombia"],
+        # Cuentas oficiales de TikTok — comparadas en minúsculas contra
+        # authorMeta.name del video (ver pipeline/relevance.py, filtro de
+        # hashtag). "aviancaoficial" es la única verificada contra datos
+        # reales de Apify (2026-08-20): verified=True, 233.600 seguidores,
+        # bio "¡Bienvenid@ a la nueva avianca!". "avianca" y
+        # "aviancacolombia" no aparecieron todavía como autor de ningún
+        # video en la base, pero son los mismos handles que ya se usan
+        # como perfil de Instagram y como hashtag de esta marca — se
+        # incluyen por si el actor los trae en una corrida futura, sin
+        # inventar ninguno nuevo.
+        "tiktok_official_accounts": {"avianca", "aviancacolombia", "aviancaoficial"},
         "loyalty_program": "LifeMiles",
         "color": "#F62839",
         "logo": "Logo_wordmark_Avianca_(Colombia).png",
@@ -87,6 +98,16 @@ BRANDS = {
         # aerolínea — el resto eran memes regionales, sismos y geografía.
         # Un hashtag que aporta 3% de señal contamina más de lo que suma.
         "tiktok_hashtags": ["latamairlines", "latamcolombia"],
+        # Cuentas oficiales de TikTok — ver comentario equivalente en
+        # Avianca. "latam_colombia" es la única verificada contra datos
+        # reales de Apify (2026-08-20): verified=True, 57.600 seguidores,
+        # bio "¡Hola Colombia! Bienvenido a ir más alto". "latamairlines"
+        # y "latamairlines_colombia" son los mismos handles del perfil de
+        # Instagram de esta marca — se incluyen por si el actor los trae
+        # como autor de un video en una corrida futura.
+        "tiktok_official_accounts": {
+            "latamairlines", "latamairlines_colombia", "latamcolombia", "latam_colombia",
+        },
         "loyalty_program": "LATAM Pass",
         "color": "#1B0088",
         "logo": None,
@@ -166,6 +187,118 @@ SPANISH_STOPWORDS = {
 LANG_MIN_WORDS = 15
 # Nº de stopwords españolas distintas requeridas por encima de ese umbral
 LANG_MIN_STOPWORDS = 2
+
+# Vocabulario de contexto aeronáutico — usado por pipeline/relevance.py
+# para decidir si un resultado de búsqueda por HASHTAG (TikTok) habla de
+# verdad de la aerolínea o solo contiene el nombre de la marca por
+# coincidencia (ver docstring de is_relevant y el caso real de "#latam":
+# 28 de 29 videos eran memes de Latinoamérica, geografía o K-pop que ni
+# por asomo hablaban de volar).
+#
+# Formas ya en minúscula y SIN tilde — pipeline/relevance.py le quita los
+# acentos al texto antes de comparar (unicodedata NFKD), así que
+# "cancelación" y "cancelacion" son la misma entrada acá ("cancelacion")
+# y no hace falta duplicar cada palabra con y sin tilde. Cuando dos
+# idiomas usan palabras genuinamente distintas (no una variante de
+# acentuación de la misma palabra: avión/avião, aerolinea/companhia
+# aerea/airline, equipaje/bagagem/luggage) sí se listan todas por
+# separado.
+#
+# Cubre español, portugués e inglés — el dataset tiene los tres (el
+# ejemplo que sí es relevante en "#latam" está en portugués: "Como foi
+# minha experiência voando com a latam").
+#
+# La lista base (vuelo/volar/avión/aerolínea/equipaje/aeropuerto/check-in/
+# abordaje/escala/piloto/tripulación/asiento/tiquete/millas/cancelación/
+# reembolso/sobrecargo/terminal/puerta) salió del enunciado de la tarea.
+# Calibrando contra los hashtags reales #avianca/#aviancacolombia (ver
+# .superpowers/relevancia-social.md) se encontró que esa lista, con
+# equivalentes en un solo idioma para varios conceptos, descartaba
+# contenido real de la marca que sí hablaba de volar pero en inglés —
+# "Avianca flight attendant...", "...SEAT EXPERIENCE...", "...Avianca
+# Pilot clarifies...", "psa if you are traveling... #avianca" — porque
+# "flight", "seat", "pilot" (inglés) no tenían equivalente en la lista
+# aunque "piloto"/"asiento" (español) sí. Las líneas de abajo agregan el
+# equivalente que faltaba por idioma para esos mismos conceptos (no
+# conceptos nuevos), más "pasajero/passenger/passageiro" (pasajero no
+# estaba en el enunciado pero es evidentemente aeronáutico y apareció
+# repetido en contenido real de tripulación) y "aéreo/aviación/aviation/
+# aviação" (adjetivo/sustantivo genérico de aviación, de riesgo muy bajo
+# de falso positivo y que también apareció en contenido real descartado
+# por error). Todo sigue siendo comparación por PALABRA COMPLETA
+# (word-boundary vía tokenización, ver _has_aviation_context) — nunca
+# substring — así que términos cortos como "milla"/"miles" no capturan
+# "sonríe"/"smiles" ni "escala" captura "escalator".
+AVIATION_CONTEXT_WORDS = {
+    "vuelo", "vuelos", "flight", "flights",
+    "volar", "volando", "voando", "voo", "voos", "fly", "flying",
+    "avion", "aviones", "aviao", "avioes", "plane", "planes", "airplane", "airplanes",
+    "aerolinea", "aerolineas", "airline", "airlines",
+    "equipaje", "equipajes", "maleta", "maletas", "bagagem", "bagagens",
+    "luggage", "baggage",
+    "aeropuerto", "aeropuertos", "aeroporto", "aeroportos", "airport", "airports",
+    "checkin",
+    "abordaje", "boarding",
+    "escala", "escalas", "layover", "stopover",
+    "piloto", "pilotos", "pilot", "pilots",
+    "tripulacion", "tripulantes", "tripulacao", "crew",
+    "asiento", "asientos", "assento", "assentos", "seat", "seats",
+    "tiquete", "tiquetes", "pasaje", "pasajes", "boleto", "boletos",
+    "passagem", "passagens", "ticket", "tickets",
+    "pasajero", "pasajeros", "passageiro", "passageiros", "passenger", "passengers",
+    "milla", "millas",
+    "cancelacion", "cancelamento", "cancelled", "canceled", "cancellation", "cancellations",
+    "reembolso", "reembolsos", "refund", "refunds",
+    "sobrecargo", "sobrecargos", "azafata", "azafatas",
+    "terminal", "terminales",
+    "puerta", "puertas", "portao", "portoes",
+    "aereo", "aerea", "aereos", "aereas",
+    "aviacion", "aviacao", "aviation",
+}
+
+# Términos de más de una palabra — no pueden vivir en AVIATION_CONTEXT_WORDS
+# porque esa se compara palabra por palabra (ver _has_aviation_context).
+# Se buscan como substring del texto ya sin tildes; "check-in"/"check in"
+# se normalizan aparte a "checkin" (ver relevance.py) y por eso ya caen en
+# la lista de arriba, no acá.
+AVIATION_CONTEXT_PHRASES = {
+    "companhia aerea",
+}
+
+# Subconjunto de AVIATION_CONTEXT_WORDS seguro para buscar como SUBSTRING
+# dentro de cada hashtag individual (no del texto completo — ver
+# _has_aviation_context) — para los hashtags de TikTok que llegan pegados
+# sin espacio, verificados en datos reales: "#latamairlines" (reseña real:
+# "Reliable and good quality! ... #LATAMairlines #airlinereview"),
+# "#aviancaairlines", "#flightattendant", "#airlinereview". Un match
+# exacto de token nunca los detecta.
+#
+# Curado a mano: cada término de acá se revisó buscando si es substring de
+# alguna palabra común NO aeronáutica antes de incluirlo. Términos de
+# AVIATION_CONTEXT_WORDS que SÍ colisionan como substring se dejan FUERA
+# de este subconjunto a propósito (solo cuentan si aparecen como palabra
+# completa, arriba):
+#   "milla"/"miles"  → substring de "sonríe"/"smiles", "milestone"
+#   "escala"         → substring de "escalador", "escalada", "escalator"
+#   "crew"           → substring de "screw"
+#   "boarding"       → substring de "skateboarding", "snowboarding"
+#   "checkin"        → substring de "checking"
+#   "plane"          → substring de "planeta", "planeación"
+#   "gate"           → ni siquiera está en AVIATION_CONTEXT_WORDS por esto
+AVIATION_CONTEXT_SUBSTRING_TERMS = {
+    "flight", "vuelo", "avion", "aereo", "aerolinea", "airline", "aviacion", "aviation",
+    "equipaje", "luggage", "baggage", "maleta",
+    "aeropuerto", "aeroporto", "airport",
+    "piloto", "pilot",
+    "tripulacion", "azafata", "sobrecargo",
+    "asiento", "assento", "seat",
+    "tiquete", "pasaje", "boleto", "ticket", "passagem",
+    "pasajero", "passenger", "passageiro",
+    "reembolso", "refund",
+    "cancelacion", "cancelled", "canceled", "cancelamento",
+    "terminal",
+    "puerta", "portao",
+}
 
 # Instagram: cuántos posts del perfil recorrer, por marca, en la Fase 1.
 #

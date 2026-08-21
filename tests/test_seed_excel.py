@@ -85,13 +85,17 @@ def test_seed_con_marca_explicita_etiqueta_esa_marca_y_filtra_con_su_perfil(exce
     insertada con brand='LATAM', y (b) filtrar relevancia con el keyword de
     LATAM en vez de el de Avianca — la fila web que menciona "Avianca" (sin
     LATAM) debe descartarse por 'sin_keyword', algo que no pasaba al sembrar
-    como Avianca (ver test_seed_descarta_ruido_y_cuenta_razones)."""
+    como Avianca (ver test_seed_descarta_ruido_y_cuenta_razones).
+
+    La fila social (tiktok) YA NO pasa igual: TikTok es resultado de
+    hashtag (ver pipeline/relevance.py) y también se filtra por keyword —
+    "Avianca me canceló el vuelo sin avisar" no menciona "LATAM", así que
+    también se descarta por 'sin_keyword' (2 en total: la web y la
+    tiktok), no solo la web."""
     latam = get_brand("LATAM")
     res = seed_excel.seed(excel_v1, tmp_db, latam)
 
-    # La fila social (tiktok) pasa igual: el filtro de keyword solo aplica a
-    # 'web'. La fila web que solo nombra "Avianca" ahora también se descarta.
-    assert res["filter_reasons"].get("sin_keyword", 0) == 1
+    assert res["filter_reasons"].get("sin_keyword", 0) == 2
     assert res["filter_reasons"].get("agregador", 0) == 1
-    assert res["inserted"] == 1
-    assert all(m["brand"] == "LATAM" for m in db.all_mentions(tmp_db))
+    assert res["inserted"] == 0
+    assert db.all_mentions(tmp_db) == []
