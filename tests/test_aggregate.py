@@ -994,6 +994,100 @@ def test_brand_rejection_maneja_quejas_solo_de_rechazo_marca(tmp_db):
     assert rej["top_operational_driver"] is None
 
 
+# ── Tarea 2 (corrección de dashboard): desglose por cuenta de origen ──────
+# payload["account_breakdown"] — volumen y tasa de queja por
+# source_account, SOLO Instagram (la única plataforma con el dato real).
+
+def test_account_breakdown_agrupa_por_cuenta_y_calcula_tasas(tmp_db):
+    _seed(tmp_db, [
+        _m(1, platform="instagram", author="a1", source_account="avianca",
+           is_complaint=1, complaint_driver="equipaje"),
+        _m(2, platform="instagram", author="a2", source_account="avianca",
+           is_complaint=0, complaint_driver=None),
+        _m(3, platform="instagram", author="a3", source_account="avianca",
+           is_complaint=0, complaint_driver=None),
+        _m(4, platform="instagram", author="a4", source_account="avianca",
+           is_complaint=0, complaint_driver=None),
+        _m(5, platform="instagram", author="l1", source_account="latamairlines",
+           is_complaint=1, complaint_driver="rechazo_marca"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    filas = {r["account"]: r for r in p["account_breakdown"]}
+
+    assert filas["avianca"]["count"] == 4
+    assert filas["avianca"]["complaints"] == 1
+    assert filas["avianca"]["complaint_rate"] == 25.0
+    assert filas["avianca"]["pct_of_total"] == 80.0
+
+    assert filas["latamairlines"]["count"] == 1
+    assert filas["latamairlines"]["complaint_rate"] == 100.0
+    assert filas["latamairlines"]["pct_of_total"] == 20.0
+
+    # Ordenado por volumen descendente — la cuenta con más menciones primero.
+    assert [r["account"] for r in p["account_breakdown"]] == ["avianca", "latamairlines"]
+
+
+def test_account_breakdown_incluye_cuenta_desconocida_sin_romper(tmp_db):
+    """source_account=None (menciones anteriores al registro retroactivo,
+    ver pipeline/source_account_backfill.py) se agrupa bajo la clave None
+    — no debe reventar ni perderse del desglose."""
+    _seed(tmp_db, [
+        _m(1, platform="instagram", author="a1", source_account="avianca",
+           is_complaint=1),
+        _m(2, platform="instagram", author="a2", source_account=None,
+           is_complaint=1),
+        _m(3, platform="instagram", author="a3", source_account=None,
+           is_complaint=0, complaint_driver=None),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    sin_cuenta = [r for r in p["account_breakdown"] if r["account"] is None]
+    assert len(sin_cuenta) == 1
+    assert sin_cuenta[0]["count"] == 2
+    assert sin_cuenta[0]["complaints"] == 1
+    assert sin_cuenta[0]["complaint_rate"] == 50.0
+
+
+def test_account_breakdown_solo_instagram_no_mezcla_tiktok_ni_resenas(tmp_db):
+    """TikTok y las reseñas nunca traen source_account (ver store/db.py) —
+    mezclarlas inflaría el grupo de cuenta desconocida con filas que
+    estructuralmente nunca iban a tener cuenta."""
+    _seed(tmp_db, [
+        _m(1, platform="instagram", author="a1", source_account="avianca"),
+        _m(2, platform="tiktok", author="t1", source_account=None),
+        _m(3, platform="resena", author="r1", source_account=None,
+           rating=1),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    assert len(p["account_breakdown"]) == 1
+    assert p["account_breakdown"][0]["account"] == "avianca"
+    assert p["account_breakdown"][0]["count"] == 1
+    assert p["account_breakdown"][0]["pct_of_total"] == 100.0
+
+
+def test_account_breakdown_porcentajes_cuadran(tmp_db):
+    """pct_of_total de todas las cuentas debe sumar 100% del total de
+    Instagram (dentro del redondeo)."""
+    _seed(tmp_db, [
+        _m(1, platform="instagram", author="a1", source_account="avianca"),
+        _m(2, platform="instagram", author="a2", source_account="avianca"),
+        _m(3, platform="instagram", author="a3", source_account="lifemiles"),
+        _m(4, platform="instagram", author="a4", source_account=None),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    total_pct = round(sum(r["pct_of_total"] for r in p["account_breakdown"]), 1)
+    assert total_pct == 100.0
+    total_count = sum(r["count"] for r in p["account_breakdown"])
+    assert total_count == 4
+
+
+def test_account_breakdown_vacio_sin_instagram(tmp_db):
+    """Sin menciones de Instagram (solo TikTok), el desglose es una lista
+    vacía, no revienta con división por cero."""
+    _seed(tmp_db, [_m(1, platform="tiktok")])
+    p = aggregate.build_payload(tmp_db)
+    assert p["account_breakdown"] == []
+
+
 def test_mencion_sin_fecha_sigue_contando_en_totales(tmp_db):
     """Sin published_at no hay fecha con la cual juzgar la ventana — se
     conserva en los totales, como ya hacía antes de esta corrección."""

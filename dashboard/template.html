@@ -180,6 +180,38 @@
   .rep-compare-note{font-size:11.5px;color:var(--txt-3);line-height:1.55;max-width:42ch}
   @media (max-width:640px){ .rep-divider{display:none} }
 
+  /* ── block 1c · desglose por cuenta de origen (Tarea 2, corrección de
+     dashboard) ── El titular (kpis.complaint_rate, arriba) sigue siendo
+     el agregado de todas las cuentas de Instagram; esta tabla es lo que
+     hace visible que ese agregado mezcla canales de naturaleza distinta
+     (una cuenta global de alcance continental frente a cuentas locales),
+     en vez de dejar la anomalía escondida dentro de un solo número. */
+  .acct-card{margin-top:14px}
+  .acct-note{font-size:12px;color:var(--txt-2);line-height:1.6;margin-bottom:14px;max-width:76ch}
+  .acct-table{width:100%;border-collapse:collapse;font-size:12px;min-width:460px}
+  .acct-table th{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--txt-3);text-align:left;padding:0 12px 8px 0;border-bottom:1px solid var(--border);
+  }
+  .acct-table td{padding:10px 12px 10px 0;border-bottom:1px solid var(--border);vertical-align:middle}
+  .acct-table tr:last-child td{border-bottom:none}
+  .acct-name-cell{display:flex;flex-direction:column;gap:2px;min-width:150px}
+  .acct-name{font-size:12.5px;font-weight:600;color:var(--txt)}
+  .acct-tag{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);letter-spacing:.01em}
+  .acct-mono{font-family:var(--mono);color:var(--txt-2);white-space:nowrap}
+  .acct-rate{display:flex;align-items:center;gap:8px;min-width:150px}
+  .acct-rate .track{flex:1;height:6px;background:var(--bg-4);border-radius:3px;overflow:hidden}
+  /* display:block es obligatorio acá (hallazgo de verificación visual con
+     Playwright, Tarea 2): .fill es un <span> — inline por default — anidado
+     DENTRO de .track, que a su vez es flex item de .acct-rate (display:flex)
+     pero NO es, él mismo, un contenedor flex. Sin display:block, el ancho en
+     % del style inline se ignora por completo (la propiedad width no aplica
+     a elementos inline no reemplazados) y la barra queda invisible — se ve
+     el track vacío a ancho completo, nunca el relleno. Mismo fix aplicado a
+     .q-plat-row .fill y .rev-bar-row .fill, más abajo, que comparten
+     exactamente el mismo patrón anidado y el mismo defecto. */
+  .acct-rate .fill{display:block;height:100%;border-radius:3px;background:var(--red)}
+  .acct-rate .val{font-family:var(--mono);min-width:42px;text-align:right;color:var(--txt);font-weight:600}
   .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
 
   /* ── chart chrome ── */
@@ -527,7 +559,12 @@
   .q-block-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
   .q-plat-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--txt-2);margin-bottom:6px}
   .q-plat-row .track{flex:1;height:5px;background:var(--bg-4);border-radius:3px;overflow:hidden}
-  .q-plat-row .fill{height:100%;border-radius:3px}
+  /* display:block obligatorio — ver comentario largo en .acct-rate .fill,
+     mismo defecto (hallazgo de verificación visual con Playwright, Tarea
+     2): sin esto, TODAS las barras que reutilizan esta clase quedaban
+     invisibles — cobertura por plataforma (bloque 8), medios y temas de
+     prensa (bloque 9b) y fuentes citadas por IA (bloque 10b). */
+  .q-plat-row .fill{display:block;height:100%;border-radius:3px}
   .q-plat-row .val{font-family:var(--mono);min-width:34px;text-align:right;color:var(--txt)}
   .q-missing{
     display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;
@@ -575,7 +612,10 @@
   .rev-bar-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--txt-2)}
   .rev-bar-row .rb-lbl{min-width:26px;font-family:var(--mono)}
   .rev-bar-row .track{flex:1;height:6px;background:var(--bg-4);border-radius:3px;overflow:hidden}
-  .rev-bar-row .fill{height:100%;border-radius:3px;background:var(--gold)}
+  /* display:block obligatorio — mismo defecto, ver .acct-rate .fill. Sin
+     esto, la distribución de estrellas de Trustpilot (bloque 9a) se veía
+     como 5 tracks vacíos idénticos, nunca las barras reales. */
+  .rev-bar-row .fill{display:block;height:100%;border-radius:3px;background:var(--gold)}
   .rev-bar-row .val{font-family:var(--mono);min-width:22px;text-align:right;color:var(--txt)}
 
   .press-stats{display:flex;gap:22px;margin-bottom:18px;flex-wrap:wrap}
@@ -678,6 +718,7 @@
   <section id="b1"><h2>Resumen</h2>
     <div id="kpis" class="card"></div>
     <div id="repHealth" class="card rep-card"></div>
+    <div id="accountBreakdown" class="card acct-card"></div>
   </section>
 
   <section id="b2">
@@ -1080,6 +1121,77 @@ function renderRepHealth() {
         </div>
         <div class="rep-compare-note">${fmtInt(op.count)} de ${fmtInt(k.complaints)} quejas — un problema concreto y operativo (se arregla con logística), de naturaleza distinta al rechazo de marca de la izquierda (no se arregla solo con logística).</div>
       ` : `<div class="rep-compare-note">Todas las quejas clasificadas son rechazo de marca — no hay, hoy, ningún driver operativo con volumen propio que contrastar.</div>`}
+    </div>
+  `;
+}
+
+// ── Bloque 1c: desglose por cuenta de origen — Tarea 2 de la corrección
+// de dashboard. El titular (bloque 1, arriba) sigue siendo el agregado
+// de todas las cuentas de Instagram; esta tabla es lo que hace visible
+// que ese agregado mezcla canales de naturaleza distinta, en vez de
+// esconder la anomalía dentro de un solo número. SOLO Instagram — ver
+// docstring de dashboard/aggregate.py `_account_breakdown` (TikTok y las
+// reseñas de Trustpilot nunca traen `source_account`).
+//
+// Etiquetas conocidas, verificadas contra la API real de Apify e
+// Instagram (2026-08-20/22, ver config.py BRANDS): Avianca tiene UNA
+// sola cuenta oficial (aviancacolombia no existe — Instagram devuelve
+// not_found — ver bloque 8); LATAM tiene dos, la global
+// (@latamairlines, 3,2M seguidores, tres idiomas) y la local/regional de
+// Colombia y Perú. Una cuenta que no está en este mapa (comentario real
+// bajo el post de un tercero) cae al fallback "@handle" — dato real,
+// simplemente no es una cuenta oficial de la marca.
+const ACCOUNT_META = {
+  avianca:                { label: 'Avianca',        tag: 'única cuenta oficial' },
+  lifemiles:               { label: 'LifeMiles',      tag: 'programa de fidelidad' },
+  latamairlines:           { label: 'LATAM',          tag: 'global · 3,2M seguidores · 3 idiomas' },
+  latamairlines_colombia:  { label: 'LATAM Colombia', tag: 'local' },
+  latamairlines_peru:      { label: 'LATAM Perú',     tag: 'local' },
+};
+function accountMeta(account) {
+  if (account == null) return { label: 'Cuenta sin registrar', tag: 'histórico — ver bloque 8' };
+  return ACCOUNT_META[account] || { label: '@' + account, tag: 'otra cuenta' };
+}
+
+function renderAccountBreakdown() {
+  const rows = DATA.account_breakdown || [];
+  const el = document.getElementById('accountBreakdown');
+  if (!el) return;
+
+  if (!rows.length) {
+    el.innerHTML = `<p class="block-empty">Todavía no hay menciones de Instagram con cuenta de origen para desglosar.</p>`;
+    return;
+  }
+
+  const body = rows.map(r => {
+    const meta = accountMeta(r.account);
+    return `
+      <tr>
+        <td>
+          <div class="acct-name-cell">
+            <span class="acct-name">${esc(meta.label)}</span>
+            <span class="acct-tag">${esc(meta.tag)}</span>
+          </div>
+        </td>
+        <td class="acct-mono">${fmtInt(r.count)}</td>
+        <td class="acct-mono">${fmtPct(r.pct_of_total)}</td>
+        <td>
+          <div class="acct-rate">
+            <span class="track"><span class="fill" style="width:${r.complaint_rate}%"></span></span>
+            <span class="val">${fmtPct(r.complaint_rate)}</span>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="q-block-title">Tasa de queja por cuenta de origen — Instagram</div>
+    <p class="acct-note">La tasa de quejas del titular (arriba) es el agregado de <b style="color:var(--txt)">todas</b> las cuentas de Instagram de ${esc(BRAND_LABEL)}. Cuando una marca publica desde una cuenta global de alcance continental junto a cuentas locales, promediarlas en un solo número esconde la diferencia real entre canales — por eso se desglosa aquí, junto al titular, no solo en "Calidad de los datos" (bloque 8).</p>
+    <div class="scroll-x">
+      <table class="acct-table">
+        <thead><tr><th>Cuenta</th><th>Menciones</th><th>% de Instagram</th><th>Tasa de queja</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
     </div>
   `;
 }
@@ -2178,7 +2290,7 @@ function renderShareOfVoice() {
 }
 
 [
-  renderKpis, renderRepHealth, renderTimeline,
+  renderKpis, renderRepHealth, renderAccountBreakdown, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
   () => { initFiltros(); initOrden(); initDetalleToggle(); renderTabla(); },

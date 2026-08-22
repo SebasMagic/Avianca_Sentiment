@@ -97,9 +97,8 @@ reporte y antes que cualquier otra:
     "total" del bloque 1 y asuma que incluye prensa.
 
 Corrección de dashboard (objeción del cliente, medida por el cliente
-contra la base real, no re-derivada aquí) — indicador de salud
-reputacional que NO cambia ninguna regla de arriba, solo agrega un
-KPI nuevo:
+contra la base real, no re-derivada aquí) — DOS adiciones que no cambian
+ninguna regla de arriba, solo agregan contexto que faltaba:
 
   - La tasa de queja del bloque 1 (kpis.complaint_rate) mide CUÁNTA gente
     se queja; kpis.brand_rejection mide QUÉ TAN ROTO está el vínculo con
@@ -108,6 +107,13 @@ KPI nuevo:
     el driver operativo #1. Son preguntas distintas: dos marcas pueden
     tener tasas de queja parecidas y una severidad reputacional muy
     distinta (verificado: Avianca 28,1% de rechazo_marca vs. LATAM 10,0%).
+  - kpis.complaint_rate sigue siendo el agregado de TODAS las cuentas de
+    Instagram de la marca — no se descompuso el titular — pero nunca
+    vuelve a mostrarse solo: payload["account_breakdown"] (ver su
+    docstring) desglosa volumen y tasa de queja POR CUENTA de origen,
+    porque una cuenta global de alcance continental y una cuenta local
+    son canales de naturaleza distinta y promediarlos esconde la
+    diferencia real entre ellos.
 """
 import collections
 
@@ -456,6 +462,66 @@ def _dominant_label(m: dict) -> str:
     neu = m.get("sentiment_neutral") or 0
     candidatos = [("negative", neg), ("neutral", neu), ("positive", pos)]
     return max(candidatos, key=lambda par: par[1])[0]
+
+
+def _account_breakdown(mentions: list[dict]) -> list[dict]:
+    """
+    Tarea 2 (corrección de dashboard): tasa de queja y volumen por cuenta
+    de origen de Instagram (`source_account`) — el dato que corrige el
+    titular del bloque 1, que promedia canales de naturaleza distinta.
+    Verificado con el cliente: la cuenta global de LATAM (@latamairlines,
+    3,2M seguidores, tres idiomas) funciona como buzón de reclamos
+    continental y arrastra el promedio de marca a 1 de cada 2, mientras
+    que @avianca (regional) y @latamairlines_colombia (local) están
+    empatadas muy por debajo. El titular (kpis.complaint_rate) NO cambia
+    — se mantiene el agregado — pero nunca vuelve a mostrarse solo: este
+    desglose es lo que hace visible la anomalía en vez de esconderla
+    dentro del promedio.
+
+    SOLO Instagram: es la única plataforma con `source_account` real
+    (TikTok y las reseñas de Trustpilot nunca lo traen — ver store/db.py,
+    columna `source_account`, y dashboard/aggregate.py `_apply_metric`/
+    METRIC_APPLIES para el mismo patrón de "esto no aplica a esta
+    plataforma"). Mezclar TikTok/reseñas aquí solo inflaría el grupo de
+    cuenta desconocida con filas que ESTRUCTURALMENTE nunca iban a tener
+    cuenta, ensuciando la lectura de la asimetría real de Instagram.
+
+    La clave de agrupación es el account tal cual (None para sin
+    registrar — cubre tanto las menciones anteriores al registro
+    retroactivo de source_account, ~1.056 de Avianca, como cualquier fila
+    legítimamente sin dato; el bloque 8 declara el conteo exacto para que
+    este desglose no se lea como incompleto sin explicación, ver Tarea 3).
+    Autores/cuentas de terceros que aparecen con volumen pequeño (un post
+    ajeno donde alguien comentó mencionando la marca) se conservan tal
+    cual — son datos reales y auditables, simplemente quedan al final por
+    volumen.
+
+    Ordenado por volumen descendente. `pct_of_total` es el peso de esa
+    cuenta sobre el total de menciones de Instagram (para dimensionar la
+    asimetría de canales, no solo mostrar tasas sueltas una al lado de la
+    otra sin contexto de cuánto pesa cada una).
+    """
+    ig_mentions = [m for m in mentions if m["platform"] == "instagram"]
+    total_ig = len(ig_mentions)
+
+    groups: "collections.OrderedDict[str | None, list[dict]]" = collections.OrderedDict()
+    for m in ig_mentions:
+        groups.setdefault(m.get("source_account") or None, []).append(m)
+
+    rows = []
+    for account, group in groups.items():
+        n = len(group)
+        n_complaints = sum(1 for m in group if m["is_complaint"])
+        rows.append({
+            "account": account,
+            "count": n,
+            "complaints": n_complaints,
+            "complaint_rate": _pct(n_complaints, n),
+            "pct_of_total": _pct(n, total_ig),
+        })
+
+    rows.sort(key=lambda r: r["count"], reverse=True)
+    return rows
 
 
 def build_payload(conn, brand: str | None = None) -> dict:
@@ -975,6 +1041,12 @@ def build_payload(conn, brand: str | None = None) -> dict:
         "emotions": emotions,
         "mentions": filas,
         "top_complaints": top_complaints,
+        # Tarea 2 (corrección de dashboard): desglose por cuenta de origen
+        # de Instagram — ver docstring de _account_breakdown. Vive en su
+        # propia clave de payload (no dentro de "kpis") porque es una
+        # lista, no un escalar, y varios bloques del dashboard pueden
+        # querer leerla sin acoplarse a la forma del bloque de KPIs.
+        "account_breakdown": _account_breakdown(mentions),
         "data_quality": data_quality,
         # Tarea 3 de prensa/reseñas — ver el corte de press_windowed_mentions
         # al principio de esta función y el docstring del módulo.
