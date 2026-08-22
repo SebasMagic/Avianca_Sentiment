@@ -278,7 +278,9 @@ agregado solo — es lo que hace visible la asimetría en vez de promediarla
 hasta que desaparece.
 
 **El denominador contaminado por campañas de marketing** (el hallazgo que
-motivó el cambio de tasa de queja de este mismo commit). Cuando la marca
+motivó el cambio de tasa de queja del commit `feat: tasa de queja sobre
+conversacion de servicio`, el más reciente en el historial al momento de
+escribir esta guía). Cuando la marca
 corre una campaña activa — un mundial de fútbol, una promoción, lo que
 sea — una parte real y a veces grande del volumen de menciones es gente
 reaccionando al contenido o a la campaña ("¡Genial este contenido!", "Modo
