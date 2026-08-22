@@ -656,8 +656,8 @@ def build_payload(conn, brand: str | None = None) -> dict:
     # el titular histórico (complaint_rate) divide las quejas sobre TODAS las
     # menciones — celebraciones de campaña incluidas ("Maravilloso 👏",
     # "Modo mundial activado 💛💙❤️", gente etiquetando amigos bajo un post de
-    # marketing). Esas menciones nunca opinaron del servicio, así que
-    # infladas el denominador y hunden la tasa artificialmente (verificado:
+    # marketing). Esas menciones nunca opinaron del servicio, así que inflan
+    # el denominador y hunden la tasa artificialmente (verificado:
     # 15,7% sobre el total vs. una tasa mucho más alta sobre quien de verdad
     # habla de volar). is_service_conversation (pipeline/classifier.py)
     # distingue "conversación de servicio" (volar, atención, equipaje,
