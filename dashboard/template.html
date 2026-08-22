@@ -578,6 +578,64 @@
     margin-top:16px;padding-top:14px;border-top:1px solid var(--border);
   }
 
+  /* ── block 10 · visibilidad de marca en IA ──
+     Reutiliza el vocabulario visual ya establecido (bloques 8/9): tracks
+     con fill para magnitud (.q-plat-row), pills gold para "esto es
+     notable" (mismo lenguaje que .repeat-badge — nunca un color nuevo
+     para la misma idea de "presta atención acá"), .press-headline para
+     citas reales con fuente. Solo se agregan las piezas que no existían:
+     una barra de comparación de DOS entidades con etiqueta directa
+     (nosotros vs. competidor) y las pills de aparece/posición/sentimiento
+     de un prompt. */
+  .aiv-vs{display:flex;flex-direction:column;gap:14px}
+  .aiv-vs-row{display:flex;flex-direction:column;gap:4px}
+  .aiv-vs-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px}
+  .aiv-vs-label b{color:var(--txt)}
+  .aiv-vs-label span{font-family:var(--mono);color:var(--txt-3);font-size:10px}
+  .aiv-vs-track{height:10px;background:var(--bg-4);border-radius:5px;overflow:hidden}
+  .aiv-vs-fill{height:100%;border-radius:5px}
+  .aiv-vs-val{font-family:var(--mono);font-weight:700;color:var(--txt)}
+  .aiv-meta{font-size:11px;color:var(--txt-3);margin-top:2px}
+
+  .aiv-badge{
+    display:inline-flex;align-items:center;flex-shrink:0;font-family:var(--mono);font-size:9.5px;
+    font-weight:700;padding:1px 7px;border-radius:99px;color:var(--gold);
+    background:rgba(138,99,0,.10);border:1px solid rgba(138,99,0,.35);
+    white-space:nowrap;letter-spacing:.02em;
+  }
+  .aiv-own-badge{
+    display:inline-flex;align-items:center;flex-shrink:0;font-family:var(--mono);font-size:9.5px;
+    font-weight:700;padding:1px 7px;border-radius:99px;color:var(--txt-2);
+    background:var(--bg-3);border:1px solid var(--border);white-space:nowrap;
+  }
+
+  .aiv-prompt{padding:12px 0;border-bottom:1px solid var(--border)}
+  .aiv-prompt:last-child{border-bottom:none}
+  .aiv-prompt-q{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px}
+  .aiv-prompt-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .aiv-pill{
+    display:inline-flex;align-items:center;font-family:var(--mono);font-size:9.5px;
+    font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;
+  }
+  .aiv-pill.yes{color:var(--green);background:var(--green-dim);border:1px solid rgba(30,142,62,.3)}
+  .aiv-pill.no{color:var(--txt-3);background:var(--bg-3);border:1px solid var(--border)}
+  .aiv-prompt-excerpt{font-size:11.5px;color:var(--txt-2);line-height:1.55}
+
+  .aiv-quote{padding:12px 0;border-bottom:1px solid var(--border)}
+  .aiv-quote:last-child{border-bottom:none}
+  .aiv-quote-q{font-family:var(--mono);font-size:10px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .aiv-quote-a{font-size:12px;color:var(--txt);line-height:1.55;margin-bottom:5px}
+  .aiv-quote-meta{font-size:10.5px;color:var(--txt-3)}
+  .aiv-quote-meta a{color:inherit}
+
+  .sov-engine{margin-bottom:20px}
+  .sov-engine:last-child{margin-bottom:0}
+  .sov-engine-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);margin-bottom:10px}
+  .sov-bar-stack{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:8px}
+  .sov-bar-stack span{height:100%}
+  .sov-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--txt-2)}
+  .sov-legend .lv{font-family:var(--mono);font-weight:700;color:var(--txt);margin-left:4px}
+
   footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
     font-family:var(--mono);font-size:10px;color:var(--txt-3);letter-spacing:.04em}
 </style>
@@ -685,6 +743,42 @@
       <div class="card" id="pressCard"></div>
     </section>
   </div>
+
+  <section id="b10">
+    <h2>Visibilidad en respuestas de IA <span class="h2-sub">— cuando alguien le pregunta a un modelo en vez de a Google</span></h2>
+  </section>
+
+  <div class="two-col">
+    <section id="b10a">
+      <h2>Cuánto nos menciona la IA</h2>
+      <div class="card" id="aivCompare"></div>
+    </section>
+    <section id="b10b">
+      <h2>Fuentes que cita al hablar de nosotros</h2>
+      <div class="card" id="aivSources"></div>
+    </section>
+  </div>
+
+  <div class="two-col">
+    <section id="b10c">
+      <h2>¿Salimos al preguntar por la categoría? <span class="h2-sub">— sin nombrar a nadie</span></h2>
+      <div class="card" id="aivCategory"></div>
+    </section>
+    <section id="b10d">
+      <h2>Le preguntamos directamente</h2>
+      <div class="card" id="aivBrandPrompts"></div>
+    </section>
+  </div>
+
+  <section id="b10e">
+    <h2>Lo que ya le preguntan sobre nosotros <span class="h2-sub">— indexado de forma independiente, no son nuestros prompts</span></h2>
+    <div class="card" id="aivSearchExamples"></div>
+  </section>
+
+  <section id="b11">
+    <h2>Share of voice en búsqueda <span class="h2-sub">— intención de problema vs. intención comercial</span></h2>
+    <div class="card" id="sovCard"></div>
+  </section>
 
   <footer>__BRAND_NAME__ · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
 </div>
@@ -1826,12 +1920,181 @@ function renderPressCard() {
   `;
 }
 
+// ── Bloque 10: visibilidad de marca en respuestas de IA ──────────────────
+// DATA.ai_visibility no viene de `mentions` — sale de tablas propias
+// (store/db.py: ai_brand_metrics, ai_brand_sources, ai_prompt_responses +
+// ai_prompt_brand_mentions, ai_search_mention_examples — ver
+// dashboard/ai_visibility_aggregate.py). Mismo criterio de honestidad que
+// el resto del reporte: si algo no se capturó todavía, se dice, no se
+// rellena con 0 — por eso cada sub-bloque revisa su propio flag
+// (has_metrics/has_prompts/has_search_examples) antes de dibujar nada.
+
+// Formatea un volumen grande (ai_search_volume puede llegar a cientos de
+// miles) sin decimales de más — mismo fmtInt que el resto del dashboard,
+// esta función solo existe para dejar explícito que es a propósito el
+// mismo formateador (no uno nuevo para "números de IA").
+const fmtVol = fmtInt;
+
+function renderAIVisibilityCompare() {
+  const av = DATA.ai_visibility;
+  const el = document.getElementById('aivCompare');
+
+  if (!av || !av.has_metrics) {
+    el.innerHTML = `<p class="block-empty">Todavía no se capturó visibilidad en IA para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    return;
+  }
+
+  const entidades = [
+    { brand: av.own.brand, mentions: av.own.mentions, vol: av.own.ai_search_volume, own: true },
+    ...av.competitors.map(c => ({ brand: c.brand, mentions: c.mentions, vol: c.ai_search_volume, own: false })),
+  ];
+  const maxMentions = Math.max(...entidades.map(e => e.mentions), 1);
+
+  const filas = entidades.map(e => `
+    <div class="aiv-vs-row">
+      <div class="aiv-vs-label">
+        <b>${e.own ? esc(e.brand) : `${esc(e.brand)} <span style="color:var(--txt-3);font-weight:400">(competidor)</span>`}</b>
+        <span class="aiv-vs-val" style="color:${e.own ? BRAND : 'var(--blue)'}">${fmtInt(e.mentions)} menciones</span>
+      </div>
+      <div class="aiv-vs-track"><div class="aiv-vs-fill" style="width:${e.mentions / maxMentions * 100}%;background:${e.own ? BRAND : 'var(--blue)'}"></div></div>
+      <div class="aiv-meta">volumen de búsqueda en IA asociado: ${fmtVol(e.vol)}/mes</div>
+    </div>`).join('');
+
+  const faltantes = av.missing_competitors.length
+    ? `<div class="aiv-meta" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">Sin captura todavía para: ${av.missing_competitors.map(esc).join(', ')} — no se muestra como 0, se declara sin dato.</div>`
+    : '';
+
+  el.innerHTML = `
+    <div class="aiv-vs">${filas}</div>
+    ${faltantes}
+    <div class="aiv-meta" style="margin-top:10px">Capturado ${fmtDate(av.captured_at)} · ${esc(av.own.domain)} · fuente: ${av.own.source_endpoint === 'multi_target_metrics' ? 'comparación directa' : 'métricas de marca'} (DataForSEO AI Optimization)</div>
+  `;
+}
+
+function renderAIVisibilitySources() {
+  const av = DATA.ai_visibility;
+  const el = document.getElementById('aivSources');
+
+  if (!av || !av.has_metrics || !av.own.sources.length) {
+    el.innerHTML = `<p class="block-empty">${!av || !av.has_metrics ? `Todavía no se capturó visibilidad en IA para ${esc(BRAND_LABEL)}.` : 'La captura no trajo fuentes citadas.'}</p>`;
+    return;
+  }
+
+  const max = Math.max(...av.own.sources.map(s => s.mentions), 1);
+  const filas = av.own.sources.map(s => `
+    <div class="q-plat-row">
+      <span style="min-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.domain)}</span>
+      <span class="track"><span class="fill" style="width:${s.mentions / max * 100}%;background:${s.is_competitor_domain ? 'var(--gold)' : BRAND}"></span></span>
+      <span class="val">${fmtInt(s.mentions)}</span>
+      ${s.is_competitor_domain ? '<span class="aiv-badge">cita a un competidor</span>' : ''}
+      ${s.is_own_domain ? '<span class="aiv-own-badge">propio</span>' : ''}
+    </div>`).join('');
+
+  const hallazgo = av.own.sources.some(s => s.is_competitor_domain)
+    ? `<div class="aiv-meta" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">Hallazgo: el modelo se apoya en la web de un <b style="color:var(--txt)">competidor</b> para hablar de ${esc(BRAND_LABEL)}.</div>`
+    : '';
+
+  el.innerHTML = `<div>${filas}</div>${hallazgo}`;
+}
+
+function _aivPromptCard(p) {
+  return `
+    <div class="aiv-prompt">
+      <div class="aiv-prompt-q">${esc(p.prompt)}</div>
+      <div class="aiv-prompt-pills">
+        <span class="aiv-pill ${p.appears ? 'yes' : 'no'}">${p.appears ? '✓ aparece' : '✗ no aparece'}</span>
+        ${p.appears && p.position ? `<span class="aiv-pill yes">posición ${p.position}</span>` : ''}
+        ${p.sentiment ? `<span class="aiv-pill ${p.sentiment === 'positive' ? 'yes' : 'no'}" style="${p.sentiment === 'negative' ? 'color:' + TONE_COLOR.neg + ';background:' + TONE_COLOR.neg + '14;border-color:' + TONE_COLOR.neg + '55' : ''}">${{ positive: 'positivo', negative: 'negativo', neutral: 'neutral' }[p.sentiment]}</span>` : ''}
+      </div>
+      <div class="aiv-prompt-excerpt">${esc(p.excerpt)}</div>
+    </div>`;
+}
+
+function renderAIVisibilityCategory() {
+  const av = DATA.ai_visibility;
+  const el = document.getElementById('aivCategory');
+
+  if (!av || !av.category_prompts.length) {
+    el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas de categoría al modelo para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    return;
+  }
+  el.innerHTML = av.category_prompts.map(_aivPromptCard).join('');
+}
+
+function renderAIVisibilityBrandPrompts() {
+  const av = DATA.ai_visibility;
+  const el = document.getElementById('aivBrandPrompts');
+
+  if (!av || !av.brand_prompts.length) {
+    el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas propias al modelo sobre ${esc(BRAND_LABEL)}.</p>`;
+    return;
+  }
+  el.innerHTML = av.brand_prompts.map(_aivPromptCard).join('');
+}
+
+function renderAIVisibilitySearchExamples() {
+  const av = DATA.ai_visibility;
+  const el = document.getElementById('aivSearchExamples');
+
+  if (!av || !av.has_search_examples) {
+    el.innerHTML = `<p class="block-empty">Sin ejemplos indexados todavía para ${esc(BRAND_LABEL)}.</p>`;
+    return;
+  }
+
+  el.innerHTML = av.search_examples.map(q => `
+    <div class="aiv-quote">
+      <div class="aiv-quote-q">${esc(q.question || '—')}</div>
+      <div class="aiv-quote-a">${esc(q.answer)}</div>
+      <div class="aiv-quote-meta">${q.source_domain ? `fuente citada: <a href="${esc(q.source_url || '#')}" target="_blank" rel="noopener">${esc(q.source_domain)}</a> · ` : ''}${fmtVol(q.ai_search_volume)} búsquedas/mes · ${esc(q.platform || 'IA')}</div>
+    </div>`).join('');
+}
+
+// ── Bloque 11: share of voice en búsqueda (problema vs. comercial) ──────
+function renderShareOfVoice() {
+  const s = DATA.share_of_voice;
+  const el = document.getElementById('sovCard');
+
+  if (!s || !s.has_data) {
+    el.innerHTML = `<p class="block-empty">Todavía no se capturó share of voice para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    return;
+  }
+
+  const ENGINE_LABEL = { google_ads: 'Búsqueda en Google', ai_search: 'Uso en herramientas de IA' };
+  const engines = Object.entries(s.by_engine);
+
+  const bloques = engines.map(([engine, d]) => {
+    const total = d.problema + d.comercial;
+    const pctProblema = total ? d.problema / total * 100 : 0;
+    const pctComercial = 100 - pctProblema;
+    return `
+      <div class="sov-engine">
+        <div class="sov-engine-title">${esc(ENGINE_LABEL[engine] || engine)}</div>
+        <div class="sov-bar-stack">
+          ${pctProblema > 0 ? `<span style="width:${pctProblema}%;background:${TONE_COLOR.neg}"></span>` : ''}
+          ${pctComercial > 0 ? `<span style="width:${pctComercial}%;background:${TONE_COLOR.neu}"></span>` : ''}
+        </div>
+        <div class="sov-legend">
+          <span><span class="dot" style="background:${TONE_COLOR.neg}"></span>Problema (demanda, reclamo, queja...) <span class="lv">${fmtVol(d.problema)}/mes${d.problem_pct != null ? ` · ${d.problem_pct}%` : ''}</span></span>
+          <span><span class="dot" style="background:${TONE_COLOR.neu}"></span>Comercial (vuelos, ofertas, check in...) <span class="lv">${fmtVol(d.comercial)}/mes</span></span>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    ${bloques}
+    <div class="aiv-meta" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--border)">Capturado ${fmtDate(s.captured_at)} · cuanto más alta la proporción de problema, más pesa la reputación negativa en lo que la gente busca sobre ${esc(BRAND_LABEL)}.</div>
+  `;
+}
+
 [
   renderKpis, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
   () => { initFiltros(); initOrden(); initDetalleToggle(); renderTabla(); },
   renderTopQuejas, renderCalidad, renderReviewsCard, renderPressCard,
+  renderAIVisibilityCompare, renderAIVisibilitySources,
+  renderAIVisibilityCategory, renderAIVisibilityBrandPrompts,
+  renderAIVisibilitySearchExamples, renderShareOfVoice,
 ].forEach(fn => fn());
 </script>
 </body>

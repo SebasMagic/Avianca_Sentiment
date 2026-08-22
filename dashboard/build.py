@@ -18,6 +18,9 @@ from pathlib import Path
 
 from config import DEFAULT_BRAND, get_brand
 from dashboard.aggregate import build_payload
+from dashboard.ai_visibility_aggregate import (
+    build_ai_visibility_payload, build_share_of_voice_payload,
+)
 from store import db
 
 TEMPLATE = Path(__file__).parent / "template.html"
@@ -203,6 +206,12 @@ def build(db_path: str | None = None, out_dir: str = "dashboard", conn=None,
 
     try:
         payload = build_payload(conn, brand=brand)
+        # Visibilidad de marca en IA + share of voice (bloques nuevos) —
+        # tablas propias (store/db.py), nunca `mentions`; payload aparte,
+        # fusionado acá para que template.html reciba un solo JSON. Ver
+        # dashboard/ai_visibility_aggregate.py.
+        payload["ai_visibility"] = build_ai_visibility_payload(conn, brand)
+        payload["share_of_voice"] = build_share_of_voice_payload(conn, brand)
     finally:
         if own_conn:
             conn.close()

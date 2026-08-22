@@ -841,3 +841,26 @@ def search_share_of_voice_for_brand(conn, brand: str) -> list[dict]:
         (brand,),
     ).fetchall()
     return [_to_dict(r) for r in rows]
+
+
+def latest_completed_run(conn, brand: str, mode: str) -> dict | None:
+    """
+    La corrida más reciente que TERMINÓ (finished_at IS NOT NULL) para
+    `brand` y `mode` exactos, o None si no hay ninguna.
+
+    Usado por dashboard/ai_visibility_aggregate.py para agrupar las filas
+    de una misma captura: dentro de UNA corrida de
+    pipeline.ai_visibility.run() (mode="ai_visibility"), cada prompt
+    propio (scrapers/dataforseo_ai_prompts.py) recibe su propio
+    `captured_at` — son varias llamadas HTTP secuenciales, no
+    instantáneas — así que agrupar por igualdad exacta de `captured_at`
+    no agruparía bien las filas de una misma corrida. `run_id` sí es
+    constante para TODA una corrida (se genera una vez, al empezar) y por
+    eso es el criterio correcto para "la captura más reciente".
+    """
+    row = conn.execute(
+        "SELECT * FROM runs WHERE finished_at IS NOT NULL AND brand = ? AND mode = ? "
+        "ORDER BY started_at DESC LIMIT 1",
+        (brand, mode),
+    ).fetchone()
+    return dict(row) if row else None
