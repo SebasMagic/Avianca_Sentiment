@@ -13,6 +13,8 @@ main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
   python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
   python main.py --backfill-cuenta-origen --brand LATAM  # cuenta de origen para IG ya en la DB (gasta poco Apify)
   python main.py --solo-instagram --since 2026-01-01  # re-corre SOLO Instagram, sin re-pagar TikTok
+  python main.py --solo-prensa --brand LATAM     # re-corre SOLO prensa (Google News, gasta poco)
+  python main.py --solo-resenas --brand LATAM    # re-corre SOLO reseñas (Trustpilot, gasta poco)
   python main.py --limpiar-relevancia-social --brand LATAM  # aplica el filtro de hashtag a TikTok ya en la DB (no gasta API)
   python main.py --retirar-canal-web --brand LATAM  # marca las menciones web ya en la DB como excluidas (no gasta API)
   python main.py --schedule                     # semanal, lunes 8am
@@ -53,6 +55,16 @@ config.INSTAGRAM_POSTS_LIMIT (o cualquier otro cambio que solo afecte a
 ese scraper) sin volver a pagar TikTok, que ya corrió y cuyos resultados
 ya están en la DB. El dedup por fingerprint hace que re-correr sea
 seguro: lo ya visto se ignora (INSERT OR IGNORE), solo se suma lo nuevo.
+
+`--solo-prensa`/`--solo-resenas`: mismo patrón que `--solo-instagram`,
+para scrapers/dataforseo_news.py y scrapers/dataforseo_reviews.py
+respectivamente. Prensa y reseñas NO están en el SCRAPERS por defecto
+(igual que "web" — ver el comentario de DataForSEO más abajo, aunque acá
+la razón es otra: cuestan poco pero cuestan, y una corrida `weekly`
+normal no debería gastar en ellas sin que alguien lo pida explícitamente;
+a diferencia del canal web, esta decisión no es "las descartamos", es
+"las corremos a propósito, no de rebote"). Se corren con estos flags
+(o llamando run_pipeline con scrapers=[...] a mano) para las dos marcas.
 """
 import argparse
 import collections
@@ -69,7 +81,7 @@ from pipeline import (
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
 from pipeline.relevance import is_relevant
-from scrapers import apify_instagram, apify_tiktok
+from scrapers import apify_instagram, apify_tiktok, dataforseo_news, dataforseo_reviews
 from store import db, seed_excel
 
 SCRAPERS = [
@@ -218,6 +230,14 @@ def main():
     parser.add_argument("--solo-instagram", action="store_true",
                         help="corrida (backfill o weekly) que ejecuta SOLO el scraper de "
                              "Instagram — no re-scrapea TikTok, ya pagado")
+    parser.add_argument("--solo-prensa", action="store_true",
+                        help="corrida que ejecuta SOLO el scraper de prensa (Google News vía "
+                             "DataForSEO, scrapers/dataforseo_news.py) — gasta poco (~$0,004 "
+                             "por marca), ver --brand")
+    parser.add_argument("--solo-resenas", action="store_true",
+                        help="corrida que ejecuta SOLO el scraper de reseñas (Trustpilot vía "
+                             "DataForSEO, scrapers/dataforseo_reviews.py) — gasta poco "
+                             "(~$0,00075 por marca), ver --brand")
     parser.add_argument("--backfill-cuenta-origen", action="store_true",
                         help="backfill de source_account (cuenta de Instagram del post) para "
                              "menciones YA en la DB que quedaron NULL — 1 llamada de Fase 1 a "
@@ -293,7 +313,14 @@ def main():
             time.sleep(60)
         return
 
-    scrapers_activos = [("Instagram", apify_instagram.scrape)] if args.solo_instagram else None
+    if args.solo_instagram:
+        scrapers_activos = [("Instagram", apify_instagram.scrape)]
+    elif args.solo_prensa:
+        scrapers_activos = [("Prensa", dataforseo_news.scrape)]
+    elif args.solo_resenas:
+        scrapers_activos = [("Reseñas", dataforseo_reviews.scrape)]
+    else:
+        scrapers_activos = None
 
     if args.backfill:
         run_pipeline("backfill", args.since or BACKFILL_SINCE, brand_name=args.brand,

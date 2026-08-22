@@ -537,6 +537,47 @@
   .q-coverage td .frac-total{color:var(--txt-3);font-weight:400}
   .q-coverage td.na{color:var(--txt-3);font-family:var(--sans);font-style:italic;font-weight:400}
 
+  /* ── block 9 · reseñas + prensa (Tarea de prensa/reseñas) ──
+     Misma estructura de dos columnas que bloques 3+4 (.two-col con dos
+     <section> propias, cada una con su h2) — reutiliza esa grilla sin
+     agregar una nueva. Las barras de "medios" y "temas" reutilizan el
+     patrón .q-plat-row (track+fill) del bloque 8 en vez de definir un
+     nuevo componente de barra horizontal. */
+  .rev-hero{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  .rev-hero .rev-star{font-family:var(--mono);font-size:34px;font-weight:700;color:var(--txt);line-height:1}
+  .rev-hero .rev-of5{font-family:var(--sans);font-size:13px;color:var(--txt-3)}
+  .rev-sub{font-size:11.5px;color:var(--txt-2);margin-bottom:18px}
+  .rev-bars{display:flex;flex-direction:column;gap:6px}
+  .rev-bar-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--txt-2)}
+  .rev-bar-row .rb-lbl{min-width:26px;font-family:var(--mono)}
+  .rev-bar-row .track{flex:1;height:6px;background:var(--bg-4);border-radius:3px;overflow:hidden}
+  .rev-bar-row .fill{height:100%;border-radius:3px;background:var(--gold)}
+  .rev-bar-row .val{font-family:var(--mono);min-width:22px;text-align:right;color:var(--txt)}
+
+  .press-stats{display:flex;gap:22px;margin-bottom:18px;flex-wrap:wrap}
+  .press-stat{display:flex;flex-direction:column;gap:3px}
+  .press-stat .ps-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3)}
+  .press-stat .ps-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--txt)}
+  .press-sent-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;min-width:140px}
+  .press-sent-bar span{height:100%}
+  .press-cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:18px}
+  @media (max-width:520px){ .press-cols{grid-template-columns:1fr} }
+  .press-headlines{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--border)}
+  .press-headline{
+    display:flex;gap:10px;align-items:flex-start;padding:10px 0;
+    border-bottom:1px solid var(--border);font-size:12px;
+  }
+  .press-headline:last-child{border-bottom:none}
+  .press-headline .dot{margin-top:5px;flex-shrink:0}
+  .press-headline .ph-title{color:var(--txt);line-height:1.4}
+  .press-headline .ph-title a{color:inherit;text-decoration:none}
+  .press-headline .ph-title a:hover{text-decoration:underline}
+  .press-headline .ph-meta{font-family:var(--mono);font-size:10px;color:var(--txt-3);margin-top:3px}
+  .press-scope-note{
+    display:flex;gap:10px;font-size:11.5px;color:var(--txt-2);line-height:1.6;
+    margin-top:16px;padding-top:14px;border-top:1px solid var(--border);
+  }
+
   footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
     font-family:var(--mono);font-size:10px;color:var(--txt-3);letter-spacing:.04em}
 </style>
@@ -634,6 +675,17 @@
     <div id="calidad" class="card"></div>
   </section>
 
+  <div class="two-col">
+    <section id="b9a">
+      <h2>Reseñas <span class="h2-sub">— Trustpilot, suman a la conversación de usuarios</span></h2>
+      <div class="card" id="reviewsCard"></div>
+    </section>
+    <section id="b9b">
+      <h2>Cobertura de prensa <span class="h2-sub">— fuera de la tasa de quejas del bloque 1</span></h2>
+      <div class="card" id="pressCard"></div>
+    </section>
+  </div>
+
   <footer>__BRAND_NAME__ · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
 </div>
 
@@ -645,11 +697,18 @@ const DATA = __DASHBOARD_DATA__;
 // de esa plataforma llega al payload (ver dashboard/aggregate.py:
 // PLATFORMS y la exclusión por exclusion_reason), así que no necesita
 // color ni etiqueta. PLT_COLOR/PLT_LABEL solo cubren lo que de verdad
-// puede aparecer en un dato — nunca una plataforma retirada, para no
-// dejar una entrada muerta que alguien tenga que recordar que ya no
-// se usa.
-const PLT_COLOR = { instagram:'#C13584', tiktok:'#0E8C96' };
-const PLT_LABEL = { instagram:'Instagram', tiktok:'TikTok' };
+// puede aparecer en DATA.mentions/DATA.data_quality.by_platform — nunca
+// una plataforma retirada, para no dejar una entrada muerta que alguien
+// tenga que recordar que ya no se usa.
+//
+// "resena" (Trustpilot) SÍ entra acá — suma a la tabla (bloque 6), al
+// timeline y a "por plataforma" (bloque 1) igual que instagram/tiktok.
+// "prensa" NUNCA entra acá: no vive en DATA.mentions en absoluto (se
+// separó en dashboard/aggregate.py antes de armar ese arreglo) — tiene
+// su propio color solo dentro de renderPressCard(), más abajo, para su
+// dona de sentimiento y sus titulares.
+const PLT_COLOR = { instagram:'#C13584', tiktok:'#0E8C96', resena:'#B0862B' };
+const PLT_LABEL = { instagram:'Instagram', tiktok:'TikTok', resena:'Reseñas' };
 const DRIVER_LABEL = {
   equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
   atencion_cliente:'Atención al cliente', cobros_tarifas:'Cobros y tarifas',
@@ -1413,7 +1472,7 @@ function renderTabla() {
         (m.published_at ? fmtDate(m.published_at, { day: '2-digit', month: 'long', year: 'numeric' }) : 'Sin fecha');
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" data-label="Fecha" title="${esc(fechaTitle)}">${fmtDateShort(m.published_at)}${unknown ? ' *' : ''}</td>
-        <td data-label="Plataforma"><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span></td>
+        <td data-label="Plataforma"><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}${m.rating != null ? ` <span style="color:var(--gold)">★${m.rating}</span>` : ''}</span></td>
         <td class="author-text" data-label="Autor / Texto">
           <span class="at-author"><span class="at-name">${esc(m.author) || '—'}</span>${repeatBadge}</span>
           <span class="at-text" title="${esc(m.text)}">${esc(m.text)}</span>
@@ -1520,8 +1579,11 @@ function renderCalidad() {
     return;
   }
 
-  // "web" fuera (Cambio 1) — ver PLT_COLOR/PLT_LABEL arriba.
-  const platforms = ['instagram', 'tiktok'];
+  // "web" fuera (Cambio 1); "resena" adentro (Tarea de prensa/reseñas —
+  // suma a la conversación de usuarios); "prensa" NUNCA aparece en
+  // q.by_platform (se separó antes de calcular `mentions`, ver
+  // dashboard/aggregate.py) — ver PLT_COLOR/PLT_LABEL arriba.
+  const platforms = ['instagram', 'tiktok', 'resena'].filter(p => q.by_platform[p]);
   const maxPlat = Math.max(...Object.values(q.by_platform), 1);
   const months = Object.entries(q.by_month);
 
@@ -1553,6 +1615,14 @@ function renderCalidad() {
       <span>menciones aún no han sido clasificadas por el modelo de sentimiento y <b style="color:var(--txt)">se excluyen de los promedios de sentimiento</b>.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--green)">0</span>
       <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
+    q.press_total > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.press_total)}</span>
+      <span>notas de prensa dentro de la ventana <b style="color:var(--txt)">no cuentan en la tasa de quejas ni en ningún número de este bloque ni de los bloques 1-7</b> — un periodista reportando una demanda o una cancelación masiva es cobertura, no una queja de un usuario. Se agregan por su cuenta, con su propio sentimiento, medios y temas, en <b style="color:var(--txt)">"Cobertura de prensa"</b> más abajo.</span></div>`
+      : '',
+    q.reviews_total > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.reviews_total)}</span>
+      <span>de las menciones de arriba son <b style="color:var(--txt)">reseñas de Trustpilot</b> — sí cuentan en la tasa de quejas y en todos los bloques 1-7, con el mismo criterio que un comentario social: una reseña de 1 estrella es una queja real. Su estrella promedio vive en "Cobertura de prensa" → Reseñas, más abajo.</span></div>`
+      : '',
     q.last_run_at
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
       <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con ${esc(BRAND_LABEL)}. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
@@ -1656,12 +1726,112 @@ function renderMetricCoverage(coverage, applies) {
   `;
 }
 
+// ── Bloque 9a: reseñas de Trustpilot — estrella promedio + distribución ──
+function renderReviewsCard() {
+  const r = DATA.reviews;
+  const el = document.getElementById('reviewsCard');
+
+  if (!r || r.total === 0) {
+    el.innerHTML = `<p class="block-empty">Todavía no hay reseñas de Trustpilot recolectadas para ${esc(BRAND_LABEL)}.</p>`;
+    return;
+  }
+
+  const maxRating = Math.max(...Object.values(r.rating_counts), 1);
+  const bars = [5, 4, 3, 2, 1].map(n => {
+    const c = r.rating_counts[n] || 0;
+    return `
+      <div class="rev-bar-row">
+        <span class="rb-lbl">${n}★</span>
+        <span class="track"><span class="fill" style="width:${c / maxRating * 100}%"></span></span>
+        <span class="val">${fmtInt(c)}</span>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rev-hero">
+      <span class="rev-star" style="color:var(--gold)">★</span>
+      <span class="rev-star">${r.avg_rating != null ? r.avg_rating.toFixed(1) : '—'}</span>
+      <span class="rev-of5">/ 5</span>
+    </div>
+    <div class="rev-sub">${fmtInt(r.total)} reseñas${r.domain ? ` en <b style="color:var(--txt)">${esc(r.domain)}</b>` : ''} · suman a la tasa de quejas y al resto del reporte (bloques 1-7) como cualquier mención de usuario</div>
+    <div class="rev-bars">${bars}</div>
+  `;
+}
+
+// ── Bloque 9b: cobertura de prensa — por derecho propio ─────────────────
+function renderPressCard() {
+  const p = DATA.press;
+  const el = document.getElementById('pressCard');
+
+  if (!p || p.total === 0) {
+    el.innerHTML = `<p class="block-empty">Todavía no hay cobertura de prensa recolectada para ${esc(BRAND_LABEL)}.</p>`;
+    return;
+  }
+
+  const sentSegs = ['positive', 'negative', 'neutral']
+    .map(k => ({ key: k, color: TONE_COLOR[k === 'positive' ? 'pos' : k === 'negative' ? 'neg' : 'neu'], pct: p.sentiment.pct[k] }))
+    .filter(s => s.pct > 0);
+
+  const maxOutlet = Math.max(...p.outlets.map(o => o.count), 1);
+  const outlets = p.outlets.map(o => `
+    <div class="q-plat-row">
+      <span style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.domain)}</span>
+      <span class="track"><span class="fill" style="width:${o.count / maxOutlet * 100}%;background:${BRAND}"></span></span>
+      <span class="val">${fmtInt(o.count)}</span>
+    </div>`).join('') || `<p class="muted" style="font-size:11.5px">Sin medios identificados todavía.</p>`;
+
+  const maxTopic = Math.max(...p.topics.map(t => t.count), 1);
+  const topics = p.topics.map(t => `
+    <div class="q-plat-row">
+      <span style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(DRIVER_LABEL[t.driver] || t.driver)}</span>
+      <span class="track"><span class="fill" style="width:${t.count / maxTopic * 100}%;background:${TONE_COLOR.neg}"></span></span>
+      <span class="val">${fmtInt(t.count)}</span>
+    </div>`).join('') || `<p class="muted" style="font-size:11.5px">Ninguna nota se clasificó con un tema operativo específico.</p>`;
+
+  const headlines = (p.headlines || []).map(h => `
+    <div class="press-headline">
+      <span class="dot" style="background:${h.sentiment ? TONE_COLOR[h.sentiment === 'positive' ? 'pos' : h.sentiment === 'negative' ? 'neg' : 'neu'] : '#8B8378'}"></span>
+      <div style="min-width:0">
+        <div class="ph-title">${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)}</div>
+        <div class="ph-meta">${esc(h.outlet || '—')}${h.published_at ? ' · ' + fmtDate(h.published_at, { day: '2-digit', month: 'short', year: 'numeric' }) : ''}${h.complaint_driver ? ' · ' + esc(DRIVER_LABEL[h.complaint_driver] || h.complaint_driver) : ''}</div>
+      </div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="press-stats">
+      <div class="press-stat">
+        <span class="ps-lbl">Notas</span>
+        <span class="ps-val">${fmtInt(p.total)}</span>
+      </div>
+      <div class="press-stat">
+        <span class="ps-lbl">Tono de la cobertura</span>
+        <div class="press-sent-bar">${sentSegs.map(s => `<span style="width:${s.pct}%;background:${s.color}"></span>`).join('')}</div>
+      </div>
+    </div>
+    <div class="press-cols">
+      <div>
+        <div class="q-block-title">Medios que más publican</div>
+        ${outlets}
+      </div>
+      <div>
+        <div class="q-block-title">Temas</div>
+        ${topics}
+      </div>
+    </div>
+    <div class="q-block-title">Titulares recientes</div>
+    <div class="press-headlines">${headlines || '<p class="muted" style="font-size:11.5px">Sin titulares.</p>'}</div>
+    <div class="press-scope-note">
+      <span>Estas ${fmtInt(p.total)} notas <b style="color:var(--txt)">no suman</b> a la tasa de quejas, al total de menciones ni a ningún gráfico de los bloques 1-7 — un periodista reportando una demanda o una cancelación no es un cliente quejándose. Ver el bloque 8 ("Calidad de los datos") para el desglose completo del alcance.</span>
+    </div>
+  `;
+}
+
 [
   renderKpis, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
   () => { initFiltros(); initOrden(); initDetalleToggle(); renderTabla(); },
-  renderTopQuejas, renderCalidad,
+  renderTopQuejas, renderCalidad, renderReviewsCard, renderPressCard,
 ].forEach(fn => fn());
 </script>
 </body>

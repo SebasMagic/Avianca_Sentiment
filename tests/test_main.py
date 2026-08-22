@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 import main
-from scrapers import apify_instagram
+from scrapers import apify_instagram, dataforseo_news, dataforseo_reviews
 from store import db as store_db
 
 
@@ -227,6 +227,55 @@ def test_cli_solo_instagram_pasa_solo_instagram_a_run_pipeline(monkeypatch):
     assert llamada["since"] == "2026-01-01"
     assert llamada["brand_name"] == "LATAM"
     assert llamada["scrapers"] == [("Instagram", apify_instagram.scrape)]
+
+
+# ── --solo-prensa / --solo-resenas (prensa/reseñas, mismo patrón) ──────
+
+def test_cli_solo_prensa_pasa_solo_prensa_a_run_pipeline(monkeypatch):
+    """La flag --solo-prensa debe acotar run_pipeline() a
+    [('Prensa', dataforseo_news.scrape)] — nada de Instagram, TikTok ni reseñas."""
+    llamada = {}
+
+    def fake_run_pipeline(mode, since, brand_name=main.DEFAULT_BRAND, scrapers=None):
+        llamada["scrapers"] = scrapers
+        llamada["brand_name"] = brand_name
+        return {}
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr("sys.argv", ["main.py", "--solo-prensa", "--brand", "LATAM"])
+
+    main.main()
+
+    assert llamada["brand_name"] == "LATAM"
+    assert llamada["scrapers"] == [("Prensa", dataforseo_news.scrape)]
+
+
+def test_cli_solo_resenas_pasa_solo_resenas_a_run_pipeline(monkeypatch):
+    """La flag --solo-resenas debe acotar run_pipeline() a
+    [('Reseñas', dataforseo_reviews.scrape)] — nada de las demás fuentes."""
+    llamada = {}
+
+    def fake_run_pipeline(mode, since, brand_name=main.DEFAULT_BRAND, scrapers=None):
+        llamada["scrapers"] = scrapers
+        llamada["brand_name"] = brand_name
+        return {}
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr("sys.argv", ["main.py", "--solo-resenas", "--brand", "Avianca"])
+
+    main.main()
+
+    assert llamada["brand_name"] == "Avianca"
+    assert llamada["scrapers"] == [("Reseñas", dataforseo_reviews.scrape)]
+
+
+def test_scrapers_por_defecto_no_incluye_prensa_ni_resenas():
+    """Prensa y reseñas gastan poco pero gastan — no deben colarse en una
+    corrida `weekly`/`backfill` normal sin que alguien las pida
+    explícitamente (--solo-prensa/--solo-resenas). SCRAPERS sigue siendo
+    solo Instagram y TikTok."""
+    nombres = [nombre for nombre, _ in main.SCRAPERS]
+    assert nombres == ["Instagram", "TikTok"]
 
 
 # ── Cambio 1 (retiro del canal web): DataForSEO fuera del pipeline activo ──
