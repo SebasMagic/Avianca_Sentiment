@@ -1875,6 +1875,15 @@ function renderCalidad() {
     .map(([r, c]) => `${fmtInt(c)} ${EXCLUSION_REASON_LABEL[r] || r}`)
     .join(', ');
 
+  // Tarea 3 (corrección de dashboard): cuántas menciones de Instagram de
+  // ESTA marca quedaron sin cuenta de origen asignada (account === null
+  // en payload["account_breakdown"], ver dashboard/aggregate.py) — para
+  // Avianca son las ~1.056 anteriores al registro retroactivo de
+  // source_account; para LATAM, hoy, ninguna. Calculado del dato real del
+  // payload, nunca hardcodeado, para que la cifra no se desactualice.
+  const filaSinCuentaIG = (DATA.account_breakdown || []).find(r => r.account === null);
+  const nSinCuentaIG = filaSinCuentaIG ? filaSinCuentaIG.count : 0;
+
   const notes = [
     q.outside_window > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.outside_window)}</span>
@@ -1887,6 +1896,19 @@ function renderCalidad() {
     q.excluded_web_retired > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_web_retired)}</span>
       <span>menciones del <b style="color:var(--txt)">canal web se retiraron de este reporte</b> — no por un error puntual, sino por decisión: esas menciones (páginas, blogs y foros indexados por DataForSEO) produjeron solo 2 quejas reales entre las dos marcas, y el resto era en su mayoría agregadores de vuelos, además de contenido sin relación con el servicio (un casino online, una página de registro de eventos, un directorio de empresas, spam SEO y granjas de teléfonos falsos suplantando el call center). El canal web ya no se scrapea y estas filas siguen en la base, auditables, pero no cuentan en ningún bloque de este reporte.</span></div>`
+      : '',
+    // Tarea 3 (corrección de dashboard): la asimetría de canales entre
+    // marcas es real, no un hueco de captura — se declara en palabras
+    // para que el desglose por cuenta (bloque 1) no se lea como
+    // incompleto o mal armado cuando una marca tiene más filas que la
+    // otra. Nota simétrica: es cierta se esté viendo el reporte de
+    // Avianca o el de LATAM, así que nombra a las dos marcas explícitamente
+    // en vez de depender de BRAND_LABEL.
+    `<div class="q-note"><span class="q-num" style="font-size:13px">1 : 2</span>
+      <span>Avianca tiene <b style="color:var(--txt)">una sola cuenta oficial de Instagram</b> (@avianca) — @aviancacolombia, un segundo perfil que en algún momento se asumió activo, <b style="color:var(--txt)">no existe</b> (Instagram la devuelve como <span style="font-family:var(--mono)">not_found</span>, verificado contra la API real). LATAM sí tiene dos cuentas oficiales registradas: @latamairlines (global) y @latamairlines_colombia (local). Esta asimetría de canales entre las dos marcas es real, no un error de captura — es la razón por la que el desglose por cuenta (bloque 1) tiene más filas comparables para LATAM que para Avianca.</span></div>`,
+    nSinCuentaIG > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(nSinCuentaIG)}</span>
+      <span>menciones de Instagram de ${esc(BRAND_LABEL)} son anteriores a que se empezara a registrar la cuenta de origen (<span style="font-family:var(--mono)">source_account</span>) y aparecen como <b style="color:var(--txt)">"Cuenta sin registrar"</b> en el desglose por cuenta (bloque 1) — no es un hueco en la captura actual, es contenido scrapeado antes de que ese campo existiera en la base.</span></div>`
       : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
