@@ -795,3 +795,100 @@ def test_set_exclusion_reason_es_reversible(tmp_db):
     assert tmp_db.execute(
         "SELECT exclusion_reason FROM mentions WHERE id = 'm-1'"
     ).fetchone()["exclusion_reason"] is None
+
+
+# ── rating (prensa/reseñas): migración aditiva de la estrella ──────────
+
+def test_migracion_agrega_rating_sin_perder_filas():
+    """
+    Migración aditiva de `rating` (Tarea 1, prensa/reseñas): una DB con
+    el schema viejo de `mentions` (sin esa columna) debe ganarla al pasar
+    por init_db, sin perder ninguna fila existente. Las filas viejas
+    quedan NULL — ninguna mención de instagram/tiktok/web tenía estrella,
+    y no se inventa una.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            brand                 TEXT NOT NULL DEFAULT 'Avianca',
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT,
+            exclusion_reason      TEXT
+        );
+    """)
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, text, "
+        "date_confidence, classification_status, author) "
+        "VALUES ('m1', 'fp1', 'tiktok', 'hola', 'exact', 'classified', 'usuario1')"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar la columna sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert "rating" in cols
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila["id"] == "m1"
+    assert fila["text"] == "hola"  # dato viejo intacto
+    assert fila["rating"] is None  # fila vieja: sin estrella, no inventada
+
+    # Idempotente: correrlo dos veces no falla ni duplica la columna.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("rating") == 1
+    conn.close()
+
+
+def test_upsert_mentions_persiste_rating_de_una_resena():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.init_db(conn)
+
+    resena = _mention(mid="r-1", url="https://www.trustpilot.com/reviews/x",
+                       author="Karol Jey", text="Reseña de una estrella, pésimo servicio")
+    resena["platform"] = "resena"
+    resena["rating"] = 1
+
+    inserted, duplicates = db.upsert_mentions(conn, [resena], run_id="run-1")
+    assert inserted == 1
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'r-1'").fetchone()
+    assert fila["rating"] == 1
+    conn.close()
+
+
+def test_upsert_mentions_deja_rating_null_para_no_resenas():
+    """instagram/tiktok/prensa nunca traen `rating` en el dict — debe
+    quedar NULL, no un 0 ni cualquier default inventado."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.init_db(conn)
+
+    mencion = _mention(mid="m-99")  # platform="tiktok" por defecto, sin "rating"
+    db.upsert_mentions(conn, [mencion], run_id="run-1")
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm-99'").fetchone()
+    assert fila["rating"] is None
+    conn.close()

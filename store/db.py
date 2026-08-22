@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS mentions (
     raw                   TEXT,
     fetched_at            TEXT,
     run_id                TEXT,
-    exclusion_reason      TEXT
+    exclusion_reason      TEXT,
+    rating                INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_mentions_published ON mentions(published_at);
@@ -80,7 +81,7 @@ _FIELDS = [
     "comments_count", "saves", "views", "reach_source",
     "sentiment_positive", "sentiment_negative",
     "sentiment_neutral", "emotion", "is_complaint", "complaint_driver",
-    "classification_status", "raw", "fetched_at", "run_id",
+    "classification_status", "raw", "fetched_at", "run_id", "rating",
 ]
 
 # Columnas de engagement/alcance que update_engagement() tiene permitido tocar.
@@ -152,6 +153,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # ningún bloque del dashboard la cuenta.
     if "exclusion_reason" not in mention_cols:
         conn.execute("ALTER TABLE mentions ADD COLUMN exclusion_reason TEXT")
+        conn.commit()
+
+    # rating: estrella (1-5) de una reseña (platform='resena', ver
+    # scrapers/dataforseo_reviews.py) — dato que no existía en el schema
+    # hasta la incorporación de prensa/reseñas. Sin DEFAULT: NULL para
+    # toda fila que no sea una reseña (instagram, tiktok, prensa) y para
+    # las reseñas de corridas futuras que aún no se clasificaron — nunca
+    # se inventa una estrella para lo que no la tiene.
+    if "rating" not in mention_cols:
+        conn.execute("ALTER TABLE mentions ADD COLUMN rating INTEGER")
         conn.commit()
 
     # Índice sobre brand — se crea acá y no dentro de SCHEMA porque en una

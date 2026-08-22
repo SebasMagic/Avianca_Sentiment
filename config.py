@@ -35,6 +35,18 @@ LIMIT_INSTAGRAM = 50
 LIMIT_TIKTOK = 50
 LIMIT_TWITTER = 100
 
+# Prensa (scrapers/dataforseo_news.py) y reseñas (scrapers/
+# dataforseo_reviews.py) — "depth" que se pide en cada llamada.
+# Verificado con datos reales (2026-08-21/22): depth=20 en Google News
+# devuelve ~20 noticias repartidas entre un bloque top_stories y
+# elementos news_search sueltos, por $0,004; depth=20 en Trustpilot
+# reviews trae hasta 20 reseñas por $0,00075 (task_post — el task_get
+# posterior es gratis). Ninguno de los dos soporta paginar por fecha del
+# lado del servidor — el filtro por `since` se aplica del lado del
+# cliente en ambos scrapers, igual que ya hace apify_tiktok.py.
+LIMIT_NEWS = 20
+LIMIT_REVIEWS = 20
+
 # Perfiles de marca — capa de datos multi-marca.
 #
 # Un solo diccionario reemplaza la config dispersa que existía antes
@@ -56,6 +68,14 @@ BRANDS = {
             "newsroom.avianca.com", "blog.avianca.com",
             "lifemiles.com", "www.lifemiles.com",
         },
+        # Dominio propio en Trustpilot — scrapers/dataforseo_reviews.py
+        # (business_data/trustpilot/reviews/task_post). Verificado contra
+        # la API real (2026-08-21): avianca.com tiene 1.884 reseñas en
+        # Trustpilot, rating agregado 1,2/5. Explícito en el perfil (no
+        # derivado de `domains`, que trae variantes con www/subdominios)
+        # para que el scraper nunca tenga que adivinar cuál de esas
+        # entradas es el dominio raíz que Trustpilot espera.
+        "review_domain": "avianca.com",
         "tiktok_hashtags": ["avianca", "aviancacolombia"],
         # Cuentas oficiales de TikTok — comparadas en minúsculas contra
         # authorMeta.name del video (ver pipeline/relevance.py, filtro de
@@ -92,6 +112,11 @@ BRANDS = {
             "multiplus.com.br", "latampass.com",
             "newsroom.latamairlines.com",
         },
+        # Dominio propio en Trustpilot — ver comentario equivalente en
+        # Avianca. Verificado contra la API real (2026-08-21):
+        # latamairlines.com tiene 48 reseñas en Trustpilot, rating
+        # agregado 1,6/5.
+        "review_domain": "latamairlines.com",
         # "latam" a secas queda FUERA a propósito: es la abreviatura de
         # Latinoamérica, no solo el nombre de la aerolínea. En el backfill se
         # revisaron a mano los videos que trajo y solo 1 de 29 hablaba de la
@@ -338,6 +363,44 @@ AVIATION_CONTEXT_SUBSTRING_TERMS = {
     "cancelacion", "cancelled", "canceled", "cancelamento",
     "terminal",
     "puerta", "portao",
+}
+
+# Medios reconocidos — usado por pipeline/relevance.py para la rama
+# "prensa" de is_relevant(). Match por etiqueta de dominio (misma técnica
+# que BLACKLIST_DOMAIN_ROOTS): "eltiempo" atrapa www.eltiempo.com sin
+# atrapar nada más.
+#
+# Regla completa (pedida por el usuario, calcada de la de hashtag de
+# TikTok): una nota de prensa es relevante si (a) viene de uno de estos
+# dominios, SIN exigir además contexto aeronáutico en el texto — igual
+# que una cuenta oficial de TikTok no necesita esa palabra — o (b) el
+# texto menciona la marca Y contiene contexto aeronáutico.
+#
+# Por qué la rama (a) es necesaria y no basta con (b): verificado con
+# datos reales (2026-08-21/22, ver .superpowers/prensa-resenas.md). Para
+# "Avianca" (nombre propio sin ambigüedad) la keyword sola casi nunca
+# falla. Para "LATAM" SÍ hay ambigüedad real — es también la abreviatura
+# de Latinoamérica — y una búsqueda de noticias por "LATAM" trajo, el
+# mismo día, tanto cobertura real de la aerolínea (Portafolio: "Latam
+# fija precios máximos"; Blu Radio: "LATAM transporta ayuda al Chocó")
+# como ruido total sin relación (3tres3.com sobre porcicultura, ONU
+# Mujeres, un sindicato). Algunas notas genuinas sobre la aerolínea
+# (Blu Radio, Valora Analitik) no usan ninguna palabra de
+# AVIATION_CONTEXT_WORDS en su título/snippet ("transporta ayuda",
+# "transporta... mango") — sin la rama de dominio reconocido, esas notas
+# reales se habrían descartado como si no dijeran nada de la aerolínea.
+#
+# Deliberadamente NO es "cualquier medio nacional grande": en la misma
+# corrida de LATAM, forbes.co trajo una nota sobre IA antifraude sin
+# relación con la aerolínea. Un dominio entra a esta lista solo si, en
+# los datos verificados, sus notas SOBRE la marca fueron genuinamente
+# sobre la aerolínea — no basta con ser un medio serio en general. Un
+# dominio que hoy no está aquí simplemente cae a la rama (b): sigue
+# pudiendo pasar si su texto trae contexto aeronáutico explícito.
+RECOGNIZED_MEDIA_DOMAINS = {
+    "eltiempo", "caracol", "elespectador", "semana", "portafolio",
+    "elcolombiano", "infobae", "elheraldo", "publimetro",
+    "asuntoslegales", "bluradio", "reportur",
 }
 
 # Instagram: cuántos posts del perfil recorrer, por marca, en la Fase 1.
