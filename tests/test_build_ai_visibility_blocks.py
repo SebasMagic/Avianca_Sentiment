@@ -80,3 +80,14 @@ def test_marcadores_de_marca_sin_sustituir_no_quedan_en_el_html():
     parezca un marcador __BRAND_...__ sin reemplazar."""
     html = build.render(PAYLOAD)
     assert "__BRAND_" not in html
+
+
+def test_search_examples_marca_preguntas_que_no_nombran_la_marca():
+    """Hallazgo real (LATAM, 2026-08-22): search_mentions puede devolver
+    preguntas de viajes genéricas ("aruba", "miami") donde el dominio de
+    la marca solo aparece CITADO, no PREGUNTADO — el JS debe poder
+    detectar esto (brandNeedle sobre BRAND_LABEL) para no mostrarlas como
+    si fueran preguntas sobre la marca."""
+    html = build.render(PAYLOAD)
+    assert "no nombra la marca" in html
+    assert "const brandNeedle = BRAND_LABEL.toLowerCase();" in html

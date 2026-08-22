@@ -26,6 +26,8 @@ vino de --visibilidad-ia (source_endpoint="target_metrics") o de
 --comparar-marcas-ia (source_endpoint="multi_target_metrics"): cualquiera
 de las dos sirve como "el número vigente".
 """
+import re
+
 from config import get_brand
 from store import db
 
@@ -41,8 +43,36 @@ MAX_QUOTES = 6
 EXCERPT_LEN = 380
 
 
+# Los modelos (chat_gpt) y Google AI Overview devuelven markdown real:
+# **negrita**, [texto](url), ![alt](url) (imagen — verificado en un
+# ejemplo real de search_mentions para LATAM, ver .superpowers/
+# visibilidad-ia.md), `código`, encabezados "### Título". Mostrado tal
+# cual en una tarjeta de texto plano, el markdown sin renderizar es ruido
+# visual (asteriscos, corchetes y backticks literales) que no aporta
+# nada — se limpia acá, antes de truncar, para que la cita se lea como
+# prosa. Esto es limpieza de FORMATO, no de contenido: no se toca ni una
+# palabra del texto real, solo la sintaxis de marcado que ningún visor
+# va a renderizar. El orden importa: la imagen (con "!") se resuelve
+# ANTES que el link genérico, o el "!" se quedaría colgando sin su
+# corchete.
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_MD_CODE = re.compile(r"`([^`]+)`")
+_MD_HEADING = re.compile(r"^#{1,6}\s*", flags=re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    text = _MD_IMAGE.sub(r"\1", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_BOLD.sub(r"\1", text)
+    text = _MD_CODE.sub(r"\1", text)
+    text = _MD_HEADING.sub("", text)
+    return text
+
+
 def _excerpt(text: str | None) -> str:
-    text = (text or "").strip()
+    text = _strip_markdown((text or "").strip())
     if len(text) <= EXCERPT_LEN:
         return text
     return text[:EXCERPT_LEN].rsplit(" ", 1)[0] + "…"

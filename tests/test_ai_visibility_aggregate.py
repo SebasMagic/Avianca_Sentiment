@@ -4,7 +4,56 @@ visibilidad en IA y de share of voice. Regla dura: sin datos capturados,
 el payload lo declara (own=None, has_data=False) — nunca rellena con 0.
 """
 from dashboard import ai_visibility_aggregate as agg
+from dashboard.ai_visibility_aggregate import _excerpt
 from store import db
+
+
+# ── _excerpt: limpia markdown crudo (chat_gpt/Google AI Overview lo
+# devuelven real) antes de mostrarlo como texto plano en una tarjeta ────
+
+def test_excerpt_quita_negrita_markdown():
+    assert _excerpt("Avianca tiene **buen servicio**.") == "Avianca tiene buen servicio."
+
+
+def test_excerpt_quita_enlaces_markdown_dejando_solo_el_texto():
+    texto = "Revisa el [check-in online](https://www.avianca.com/checkin) antes de viajar."
+    assert _excerpt(texto) == "Revisa el check-in online antes de viajar."
+
+
+def test_excerpt_quita_imagenes_markdown_dejando_el_alt():
+    """Grabado real (LATAM, 2026-08-22): search_mentions devolvió una
+    respuesta con "![Todo lo que necesitas...](url)" — sin la rama de
+    imagen, un link normal deja el "!" colgando sin su corchete."""
+    texto = "![Vacaciones en Aruba](https://x.com/img.png) es un buen destino."
+    assert _excerpt(texto) == "Vacaciones en Aruba es un buen destino."
+    assert "!" not in _excerpt(texto)
+
+
+def test_excerpt_quita_backticks_de_codigo_inline():
+    assert _excerpt("Aruba es una `isla caribeña soleada`.") == "Aruba es una isla caribeña soleada."
+
+
+def test_excerpt_quita_encabezados_al_inicio_de_linea():
+    texto = "### Avianca\n- Ruta: fuerte en Colombia."
+    assert _excerpt(texto) == "Avianca\n- Ruta: fuerte en Colombia."
+
+
+def test_excerpt_no_toca_el_contenido_real_solo_la_sintaxis():
+    """La limpieza es de FORMATO, no de contenido — ninguna palabra real
+    del texto debe perderse, solo los símbolos de marcado."""
+    texto = "Avianca ha mantenido un **buen historial de seguridad** según [Skytrax](https://skytrax.com)."
+    resultado = _excerpt(texto)
+    assert "buen historial de seguridad" in resultado
+    assert "Skytrax" in resultado
+    assert "**" not in resultado
+    assert "[" not in resultado and "](" not in resultado
+
+
+def test_excerpt_trunca_respetando_el_limite_tras_limpiar_markdown():
+    texto = "**" + ("palabra " * 200) + "**"
+    resultado = _excerpt(texto)
+    assert len(resultado) <= agg.EXCERPT_LEN + 1  # +1 por el "…" final
+    assert resultado.endswith("…")
 
 
 def _seed_metrics_and_sources(conn, brand, captured_at, mentions=1000,

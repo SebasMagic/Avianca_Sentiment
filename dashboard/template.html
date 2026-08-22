@@ -2041,12 +2041,25 @@ function renderAIVisibilitySearchExamples() {
     return;
   }
 
-  el.innerHTML = av.search_examples.map(q => `
+  // Este endpoint devuelve preguntas ya indexadas que CITAN el dominio de
+  // la marca entre sus fuentes — no necesariamente preguntas SOBRE la
+  // marca. Verificado con datos reales de LATAM (2026-08-22): "aruba",
+  // "copacabana", "miami" citan latamairlines.com como una fuente de
+  // viajes más, sin preguntar nada sobre la aerolínea — el mismo tipo de
+  // ambigüedad que ya documenta config.py para "latam" como hashtag. Se
+  // muestra igual (es un dato real, no se oculta) pero marcado, para que
+  // nadie lea "miami" como si alguien le hubiera preguntado a la IA por
+  // LATAM.
+  const brandNeedle = BRAND_LABEL.toLowerCase();
+  el.innerHTML = av.search_examples.map(q => {
+    const mencionaMarca = (q.question || '').toLowerCase().includes(brandNeedle);
+    return `
     <div class="aiv-quote">
-      <div class="aiv-quote-q">${esc(q.question || '—')}</div>
+      <div class="aiv-quote-q">${esc(q.question || '—')}${!mencionaMarca ? ' <span class="aiv-own-badge" title="La pregunta no nombra la marca — el dominio solo aparece entre las fuentes citadas">no nombra la marca</span>' : ''}</div>
       <div class="aiv-quote-a">${esc(q.answer)}</div>
       <div class="aiv-quote-meta">${q.source_domain ? `fuente citada: <a href="${esc(q.source_url || '#')}" target="_blank" rel="noopener">${esc(q.source_domain)}</a> · ` : ''}${fmtVol(q.ai_search_volume)} búsquedas/mes · ${esc(q.platform || 'IA')}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── Bloque 11: share of voice en búsqueda (problema vs. comercial) ──────
