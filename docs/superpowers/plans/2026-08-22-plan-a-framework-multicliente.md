@@ -20,6 +20,8 @@
 - **`--client` es obligatorio** en todo comando que toque datos, a partir de la Tarea 10. No se conserva compatibilidad hacia atrás.
 - **Nombres exactos de los tres diccionarios de perfil:** `MARKET`, `SECTOR`, `CLIENT` (mayúsculas, a nivel de módulo).
 - **Fuera de alcance en Plan A:** el marcador `__DRIVER_LABELS__` del dashboard, el scraper de Google Business, la columna `branch` y toda captura real. Eso es Plan B (fases 5-7 del spec).
+- **El repo tiene trabajo concurrente.** Este plan se escribió mientras `dashboard/template.html`, `dashboard/aggregate.py`, `pipeline/classifier.py` y `store/db.py` recibían cambios en paralelo. Por eso: **localizar todo símbolo con `grep`, nunca por número de línea**, y correr la suite completa al empezar para fijar el conteo base real en vez de asumir 389. Si un bloque descrito acá no coincide con lo que hay en el archivo, gana el archivo — reportarlo antes de improvisar.
+- **Documento hermano:** `docs/guia-nueva-marca.md` cubre levantar una marca nueva de aerolínea colombiana sobre el código **actual**. Este plan es lo que hace falta para que esa guía valga también fuera de aerolíneas/Colombia. No se contradicen; la guía ya apunta al spec.
 
 ---
 
@@ -68,13 +70,18 @@
 
 El criterio del spec §10 exige comparar contra el dashboard **anterior a todo el refactor**. Ese archivo existe en disco pero **no está versionado** (`.gitignore` tiene `dashboard/avianca_dashboard_*.html`), así que se perdería. Congelarlo ahora, con el código todavía intacto:
 
+**Regenerar primero, no confiar en el archivo en disco.** El HTML de `dashboard/` puede ser más viejo que el código (el dashboard se regenera a mano, y `template.html`/`aggregate.py` cambian seguido). Congelar un archivo obsoleto haría fallar la primera verificación de regresión por una causa ajena al refactor.
+
 ```bash
 mkdir -p tests/fixtures
-cp dashboard/avianca_dashboard_2026-08-22.html tests/fixtures/avianca_dashboard_referencia.html
+PYTHONIOENCODING=utf-8 python -m dashboard.build
+cp "$(ls -t dashboard/avianca_dashboard_*.html | head -1)" tests/fixtures/avianca_dashboard_referencia.html
 printf '\n# Referencia de regresion del spec §10 — SI se versiona\n!tests/fixtures/avianca_dashboard_referencia.html\n' >> .gitignore
 git add -f tests/fixtures/avianca_dashboard_referencia.html .gitignore
 git commit -m "test: congela el dashboard de Avianca como referencia de regresion"
 ```
+
+(En este punto `dashboard.build` todavía no tiene `--client`: se lo agrega la Tarea 10.)
 
 Expected: el archivo queda versionado. Verificar con `git show --stat HEAD | head`.
 
@@ -580,7 +587,7 @@ Claves que **no** existían y se crean con estos valores exactos:
     "asientos_comida", "atencion_cliente", "rechazo_marca", "otro",
 ],
 
-# Etiquetas legibles. Copiadas VERBATIM de dashboard/template.html:875 —
+# Etiquetas legibles. Copiadas VERBATIM del literal JS de template.html —
 # cualquier diferencia cambia el dashboard de Avianca y rompe el criterio
 # de regresión del spec §10. En Plan A nadie las consume todavía (el
 # template sigue con su literal JS); el marcador __DRIVER_LABELS__ es
@@ -602,7 +609,7 @@ Claves que **no** existían y se crean con estos valores exactos:
 "has_loyalty_program": True,
 ```
 
-**Antes de escribir `driver_labels`**, leer `dashboard/template.html:875` y copiar los valores literalmente. Si alguno difiere de lo de arriba, gana el template y hay que corregir el plan.
+**Antes de escribir `driver_labels`**, leer `dashboard/template.html` (hoy ~línea 894 — **localizarla con `grep -n "equipaje:'Equipaje'" dashboard/template.html`**, no por número: el template cambia seguido) y copiar los valores literalmente. Si alguno difiere de lo de arriba, gana el template y hay que corregir el plan.
 
 - [ ] **Step 4: Reexportar desde `config.py`**
 
