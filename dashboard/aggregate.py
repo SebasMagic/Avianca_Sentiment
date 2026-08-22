@@ -95,6 +95,19 @@ reporte y antes que cualquier otra:
   - data_quality declara explícitamente el alcance (kpi_platforms,
     press_excluded_from_kpis) para que nadie lea "tasa de quejas" o
     "total" del bloque 1 y asuma que incluye prensa.
+
+Corrección de dashboard (objeción del cliente, medida por el cliente
+contra la base real, no re-derivada aquí) — indicador de salud
+reputacional que NO cambia ninguna regla de arriba, solo agrega un
+KPI nuevo:
+
+  - La tasa de queja del bloque 1 (kpis.complaint_rate) mide CUÁNTA gente
+    se queja; kpis.brand_rejection mide QUÉ TAN ROTO está el vínculo con
+    la marca — el peso de "rechazo_marca" (rechazo/insulto genérico a la
+    marca, sin causa operativa) sobre el total de quejas, contrastado con
+    el driver operativo #1. Son preguntas distintas: dos marcas pueden
+    tener tasas de queja parecidas y una severidad reputacional muy
+    distinta (verificado: Avianca 28,1% de rechazo_marca vs. LATAM 10,0%).
 """
 import collections
 
@@ -524,6 +537,35 @@ def build_payload(conn, brand: str | None = None) -> dict:
     # ── KPIs
     fechas = sorted(m["published_at"][:10] for m in dated)
 
+    # Salud reputacional (Tarea 1, corrección de dashboard pedida por el
+    # cliente): la tasa de quejas mide CUÁNTA gente se queja; esto mide
+    # QUÉ TAN ROTO está el vínculo con la marca — dos preguntas distintas
+    # que el dashboard nunca había separado. "rechazo_marca" es el driver
+    # que el clasificador asigna cuando la queja es rechazo o insulto
+    # genérico a la marca SIN una causa operativa concreta (ver
+    # config.COMPLAINT_DRIVERS) — "DELINCUENTES", "no deberían existir",
+    # "#noavianca". Una queja de equipaje es un fallo puntual, arreglable;
+    # una de rechazo_marca es la persona rechazando la marca misma. El
+    # peso de rechazo_marca sobre el total de quejas es la señal —
+    # verificado con el cliente: 28,1% en Avianca contra 10,0% en LATAM,
+    # mientras que la tasa de queja de ambas está mucho más cerca. Se
+    # contrasta con el driver operativo #1 (el más frecuente que SÍ tiene
+    # causa concreta, es decir cualquiera menos "rechazo_marca") para que
+    # se lea la naturaleza del problema de cada marca, no solo su tamaño:
+    # un problema de equipaje se arregla con logística; un rechazo de
+    # marca no.
+    #
+    # _pct() ya devuelve 0.0 sobre un total de 0 (ver su propia
+    # implementación), así que sin ninguna queja esto no revienta —
+    # simplemente no hay nada que reportar y top_operational_driver queda
+    # None (most_common(1) sobre un Counter vacío es una lista vacía).
+    n_rechazo_marca = sum(1 for m in complaints if m["complaint_driver"] == "rechazo_marca")
+    conteo_driver_operativo = collections.Counter(
+        m["complaint_driver"] for m in complaints
+        if m["complaint_driver"] and m["complaint_driver"] != "rechazo_marca"
+    )
+    top_operativo = conteo_driver_operativo.most_common(1)
+
     kpis = {
         "total": total,
         "complaints": len(complaints),
@@ -534,6 +576,18 @@ def build_payload(conn, brand: str | None = None) -> dict:
         "date_from": fechas[0] if fechas else None,
         "date_to": fechas[-1] if fechas else None,
         "sources": len({m["platform"] for m in mentions}),
+        "brand_rejection": {
+            "count": n_rechazo_marca,
+            "pct_of_complaints": _pct(n_rechazo_marca, len(complaints)),
+            "top_operational_driver": (
+                {
+                    "driver": top_operativo[0][0],
+                    "count": top_operativo[0][1],
+                    "pct_of_complaints": _pct(top_operativo[0][1], len(complaints)),
+                }
+                if top_operativo else None
+            ),
+        },
     }
 
     # ── Timeline (solo fechas confiables)

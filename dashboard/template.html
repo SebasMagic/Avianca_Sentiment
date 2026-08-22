@@ -156,6 +156,30 @@
   }
   @media (max-width:420px){ #kpis{grid-template-columns:1fr} }
   .kpi-platrow{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--txt-2)}
+
+  /* ── block 1b · salud reputacional (Tarea 1, corrección de dashboard) ──
+     Card propia, separada del grid de KPIs a propósito: no es "un KPI
+     más" — es una lectura distinta de la tasa de quejas (qué tan roto
+     está el vínculo, no cuánta gente se queja) y necesita su propio
+     espacio para no perderse como una quinta celda chica. Dos mitades:
+     la cifra de rechazo de marca (izquierda, mismo peso tipográfico que
+     el héroe de arriba) y el contraste con el driver operativo #1
+     (derecha) — para que se lea en dos segundos que son dos preguntas
+     distintas sobre la marca. */
+  .rep-card{margin-top:14px;display:flex;gap:30px;flex-wrap:wrap;align-items:stretch}
+  .rep-stat{flex:1 1 280px;min-width:220px}
+  .rep-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
+  .rep-val{font-family:var(--mono);font-size:36px;font-weight:700;color:var(--red);line-height:1}
+  .rep-sentence{margin-top:9px;font-size:12.5px;color:var(--txt-2);line-height:1.6;max-width:40ch}
+  .rep-sentence b{color:var(--txt)}
+  .rep-divider{width:1px;align-self:stretch;background:var(--border)}
+  .rep-compare{flex:1 1 260px;min-width:220px;display:flex;flex-direction:column;justify-content:center}
+  .rep-compare-row{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+  .rep-compare-row .rc-name{font-size:13px;color:var(--txt);font-weight:600}
+  .rep-compare-row .rc-val{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--txt)}
+  .rep-compare-note{font-size:11.5px;color:var(--txt-3);line-height:1.55;max-width:42ch}
+  @media (max-width:640px){ .rep-divider{display:none} }
+
   .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
 
   /* ── chart chrome ── */
@@ -651,7 +675,10 @@
     <p id="rango" class="muted"></p>
   </header>
 
-  <section id="b1"><h2>Resumen</h2><div id="kpis" class="card"></div></section>
+  <section id="b1"><h2>Resumen</h2>
+    <div id="kpis" class="card"></div>
+    <div id="repHealth" class="card rep-card"></div>
+  </section>
 
   <section id="b2">
     <h2>Volumen y sentimiento en el tiempo</h2>
@@ -1002,6 +1029,57 @@ function renderKpis() {
             ${esc(PLT_LABEL[p] || p)} · ${fmtInt(c)}
           </div>`).join('')}
       </div>
+    </div>
+  `;
+}
+
+// ── Bloque 1b: salud reputacional — Tarea 1 de la corrección de dashboard
+// pedida por el cliente. Distinto de la tasa de quejas de arriba: esto
+// mide QUÉ TAN ROTO está el vínculo con la marca (el peso de
+// "rechazo_marca" — rechazo o insulto genérico, sin causa operativa
+// concreta — sobre el total de quejas), no cuánta gente se queja. Se
+// contrasta con el driver operativo #1 (kpis.brand_rejection.
+// top_operational_driver, ya excluye rechazo_marca — ver
+// dashboard/aggregate.py) para que se lea la naturaleza del problema de
+// cada marca: un driver operativo se arregla con logística; el rechazo
+// de marca no.
+function renderRepHealth() {
+  const k = DATA.kpis;
+  const el = document.getElementById('repHealth');
+  if (!el) return;
+
+  // Mismo degradado que el resto del dashboard: sin menciones no hay
+  // nada que reportar. Sin ninguna queja tampoco — "0% de las quejas son
+  // rechazo de marca" sobre cero quejas es cierto pero engañoso (lee
+  // como "buena noticia" cuando en realidad no hay quejas que juzgar).
+  if (k.total === 0 || !k.brand_rejection) {
+    el.innerHTML = '';
+    return;
+  }
+  if (k.complaints === 0) {
+    el.innerHTML = `<p class="block-empty">Sin quejas registradas todavía para ${esc(BRAND_LABEL)} — este indicador se activa en cuanto haya al menos una queja clasificada.</p>`;
+    return;
+  }
+
+  const r = k.brand_rejection;
+  const op = r.top_operational_driver;
+
+  el.innerHTML = `
+    <div class="rep-stat">
+      <div class="rep-lbl">Salud reputacional — no es lo mismo que la tasa de quejas</div>
+      <div class="rep-val">${fmtPct(r.pct_of_complaints)}</div>
+      <div class="rep-sentence">de las quejas <b>no son sobre un fallo puntual — son rechazo a la marca</b> (${fmtInt(r.count)} de ${fmtInt(k.complaints)} quejas clasificadas como <b>${esc(DRIVER_LABEL.rechazo_marca)}</b>: insultos o rechazo genérico, sin una causa operativa concreta detrás).</div>
+    </div>
+    <div class="rep-divider"></div>
+    <div class="rep-compare">
+      <div class="rep-lbl">Para contraste — el problema operativo #1</div>
+      ${op ? `
+        <div class="rep-compare-row">
+          <span class="rc-name">${esc(DRIVER_LABEL[op.driver] || op.driver)}</span>
+          <span class="rc-val">${fmtPct(op.pct_of_complaints)}</span>
+        </div>
+        <div class="rep-compare-note">${fmtInt(op.count)} de ${fmtInt(k.complaints)} quejas — un problema concreto y operativo (se arregla con logística), de naturaleza distinta al rechazo de marca de la izquierda (no se arregla solo con logística).</div>
+      ` : `<div class="rep-compare-note">Todas las quejas clasificadas son rechazo de marca — no hay, hoy, ningún driver operativo con volumen propio que contrastar.</div>`}
     </div>
   `;
 }
@@ -2100,7 +2178,7 @@ function renderShareOfVoice() {
 }
 
 [
-  renderKpis, renderTimeline,
+  renderKpis, renderRepHealth, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
   renderHeatmap, renderSentiment,
   () => { initFiltros(); initOrden(); initDetalleToggle(); renderTabla(); },

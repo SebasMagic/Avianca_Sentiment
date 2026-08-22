@@ -928,6 +928,72 @@ def test_last_run_no_se_cruza_entre_marcas(tmp_db):
     assert p_latam["data_quality"]["last_run_mode"] is None
 
 
+# ── Tarea 1 (corrección de dashboard): indicador reputacional ─────────────
+# kpis.brand_rejection — el peso de "rechazo_marca" sobre el total de
+# quejas, distinto de la tasa de queja — y su contraste con el driver
+# operativo #1 (el más frecuente de los que SÍ tienen causa concreta).
+
+def test_brand_rejection_calcula_bien(tmp_db):
+    _seed(tmp_db, [
+        _m(1, complaint_driver="rechazo_marca"),
+        _m(2, complaint_driver="rechazo_marca"),
+        _m(3, complaint_driver="equipaje"),
+        _m(4, complaint_driver="equipaje"),
+        _m(5, complaint_driver="equipaje"),
+        _m(6, complaint_driver="demora"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    rej = p["kpis"]["brand_rejection"]
+    assert rej["count"] == 2
+    assert rej["pct_of_complaints"] == 33.3  # 2 de 6 quejas
+    assert rej["top_operational_driver"]["driver"] == "equipaje"
+    assert rej["top_operational_driver"]["count"] == 3
+    assert rej["top_operational_driver"]["pct_of_complaints"] == 50.0
+
+
+def test_brand_rejection_nunca_cuenta_el_driver_operativo_a_si_mismo(tmp_db):
+    """El driver operativo #1 se calcula EXCLUYENDO rechazo_marca — aunque
+    rechazo_marca sea, en volumen, el driver más frecuente de todos, el
+    contraste debe ser contra un problema operativo real, no contra sí
+    mismo."""
+    _seed(tmp_db, [
+        _m(1, complaint_driver="rechazo_marca"),
+        _m(2, complaint_driver="rechazo_marca"),
+        _m(3, complaint_driver="rechazo_marca"),
+        _m(4, complaint_driver="equipaje"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    rej = p["kpis"]["brand_rejection"]
+    assert rej["top_operational_driver"]["driver"] == "equipaje"
+    assert rej["top_operational_driver"]["driver"] != "rechazo_marca"
+
+
+def test_brand_rejection_maneja_el_caso_sin_quejas(tmp_db):
+    """Sin ninguna queja, _pct() ya devuelve 0.0 (no ZeroDivisionError) y
+    top_operational_driver debe quedar None, no reventar con un
+    IndexError sobre una lista vacía."""
+    _seed(tmp_db, [_m(1, is_complaint=0, complaint_driver=None)])
+    p = aggregate.build_payload(tmp_db)
+    rej = p["kpis"]["brand_rejection"]
+    assert rej["count"] == 0
+    assert rej["pct_of_complaints"] == 0.0
+    assert rej["top_operational_driver"] is None
+
+
+def test_brand_rejection_maneja_quejas_solo_de_rechazo_marca(tmp_db):
+    """Todas las quejas son rechazo_marca: no hay ningún driver operativo
+    que contrastar — top_operational_driver queda None, no revienta."""
+    _seed(tmp_db, [
+        _m(1, complaint_driver="rechazo_marca"),
+        _m(2, complaint_driver="rechazo_marca"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    rej = p["kpis"]["brand_rejection"]
+    assert rej["count"] == 2
+    assert rej["pct_of_complaints"] == 100.0
+    assert rej["top_operational_driver"] is None
+
+
 def test_mencion_sin_fecha_sigue_contando_en_totales(tmp_db):
     """Sin published_at no hay fecha con la cual juzgar la ventana — se
     conserva en los totales, como ya hacía antes de esta corrección."""
