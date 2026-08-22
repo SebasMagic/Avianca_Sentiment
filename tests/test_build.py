@@ -121,14 +121,18 @@ def test_render_footer_y_encabezado_usan_el_nombre_de_marca():
     assert "LATAM · Social Listening" in html_latam
 
 
-def test_render_web_platform_color_no_cambia_por_marca():
-    """El azul de la plataforma "web" en los gráficos es un identificador
-    de plataforma, no de marca — debe quedar igual para las dos marcas,
-    incluida LATAM (cuyo color de marca también es azul)."""
+def test_render_ya_no_declara_color_ni_marcador_para_web():
+    """Cambio 1 (retiro del canal web): el marcador __BRAND_WEB_COLOR__ y
+    la entrada 'web' de PLT_COLOR salieron de la plantilla — no queda
+    ningún color declarado para una plataforma que ya no se reporta, ni
+    en Avianca ni en LATAM (cuyo color de marca también es azul, el
+    motivo original por el que 'web' necesitaba un azul propio)."""
     html_avianca = build.render(PAYLOAD)
     html_latam = build.render(PAYLOAD, brand_name="LATAM")
-    assert "web:'#2A78D6'" in html_avianca
-    assert "web:'#2A78D6'" in html_latam
+    assert "__BRAND_WEB_COLOR__" not in html_avianca
+    assert "__BRAND_WEB_COLOR__" not in html_latam
+    assert "web:" not in html_avianca
+    assert "web:" not in html_latam
 
 
 def test_driver_label_programa_fidelidad_reemplaza_a_lifemiles():

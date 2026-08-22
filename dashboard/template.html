@@ -641,13 +641,15 @@
 <script>
 const DATA = __DASHBOARD_DATA__;
 
-// "web" es un identificador de PLATAFORMA, estable entre marcas — nunca
-// sale del perfil. Verificado con el validador del skill dataviz (ver
-// build.py, _WEB_PLATFORM_COLOR): este azul y el azul de marca de LATAM
-// separan por ΔE 24–28 (muy por encima del piso CVD de 8), así que no
-// colisionan pese a que ambos son "azules" — no se recolorea por marca.
-const PLT_COLOR = { web:'__BRAND_WEB_COLOR__', instagram:'#C13584', tiktok:'#0E8C96' };
-const PLT_LABEL = { web:'Web', instagram:'Instagram', tiktok:'TikTok' };
+// "web" ya no aparece aquí (Cambio 1, retiro del canal web) — ninguna voz
+// de esa plataforma llega al payload (ver dashboard/aggregate.py:
+// PLATFORMS y la exclusión por exclusion_reason), así que no necesita
+// color ni etiqueta. PLT_COLOR/PLT_LABEL solo cubren lo que de verdad
+// puede aparecer en un dato — nunca una plataforma retirada, para no
+// dejar una entrada muerta que alguien tenga que recordar que ya no
+// se usa.
+const PLT_COLOR = { instagram:'#C13584', tiktok:'#0E8C96' };
+const PLT_LABEL = { instagram:'Instagram', tiktok:'TikTok' };
 const DRIVER_LABEL = {
   equipaje:'Equipaje', cancelacion:'Cancelaciones', demora:'Demoras',
   atencion_cliente:'Atención al cliente', cobros_tarifas:'Cobros y tarifas',
@@ -656,14 +658,25 @@ const DRIVER_LABEL = {
   // Pass. La etiqueta del gráfico se queda neutra a propósito; el nombre
   // concreto del programa vive en el perfil (config.BRANDS), no acá.
   programa_fidelidad:'Programa de fidelidad', asientos_comida:'Asientos y comida',
-  reembolsos:'Reembolsos', otro:'Otro',
+  reembolsos:'Reembolsos',
+  // mascotas / fraude_publicidad / rechazo_marca (Cambio 2 — descubrimiento
+  // sobre "otro", ver config.COMPLAINT_DRIVERS y
+  // .superpowers/otro-y-web.md): "otro" era el driver #1 en Avianca (202
+  // quejas, 28,7%) — una caja negra que no respondía su propia pregunta.
+  mascotas:'Mascotas a bordo', fraude_publicidad:'Fraude y publicidad engañosa',
+  rechazo_marca:'Rechazo a la marca',
+  otro:'Otro',
 };
 const DRIVER_ORDER = Object.keys(DRIVER_LABEL);
 const EMO_LABEL = { happiness:'Felicidad', anger:'Enojo', love:'Amor',
                     sadness:'Tristeza', neutral:'Neutral', surprise:'Sorpresa', fear:'Miedo' };
 const SOURCE_LABEL = { twitter:'Twitter/X' };
 // Razones de exclusión por irrelevancia (Tarea 3) — las mismas que
-// devuelve pipeline/relevance.py para el filtro de hashtag de TikTok.
+// devuelve pipeline/relevance.py para el filtro de hashtag de TikTok. El
+// retiro del canal web (Cambio 1) usa un motivo distinto
+// (config.WEB_CHANNEL_RETIREMENT_REASON) que se cuenta y se explica aparte
+// — ver data_quality.excluded_web_retired y su párrafo propio en
+// renderCalidad(), no esta tabla.
 const EXCLUSION_REASON_LABEL = {
   sin_keyword: 'no mencionan la marca',
   sin_contexto_aeronautico: 'mencionan la marca pero no hablan de volar con ella',
@@ -855,7 +868,8 @@ function renderTimeline() {
   }
 
   const labels = rows.map(r => r.date);
-  const platforms = ['web', 'instagram', 'tiktok'];
+  // "web" fuera (Cambio 1) — ver PLT_COLOR/PLT_LABEL arriba.
+  const platforms = ['instagram', 'tiktok'];
 
   document.getElementById('legendTimeline').innerHTML = platforms.map(p => `
     <div class="leg-item"><span class="leg-swatch" style="background:${PLT_COLOR[p]}"></span>${PLT_LABEL[p]}</div>
@@ -1062,7 +1076,8 @@ function renderHeatmap() {
     return;
   }
 
-  const platforms = ['web', 'instagram', 'tiktok'];
+  // "web" fuera (Cambio 1) — ver PLT_COLOR/PLT_LABEL arriba.
+  const platforms = ['instagram', 'tiktok'];
   const grid = {};
   DATA.driver_by_platform.forEach(r => { grid[r.driver + '|' + r.platform] = r.count; });
 
@@ -1505,7 +1520,8 @@ function renderCalidad() {
     return;
   }
 
-  const platforms = ['web', 'instagram', 'tiktok'];
+  // "web" fuera (Cambio 1) — ver PLT_COLOR/PLT_LABEL arriba.
+  const platforms = ['instagram', 'tiktok'];
   const maxPlat = Math.max(...Object.values(q.by_platform), 1);
   const months = Object.entries(q.by_month);
 
@@ -1521,6 +1537,10 @@ function renderCalidad() {
     q.excluded_irrelevant > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_irrelevant)}</span>
       <span>menciones de TikTok dentro de la ventana son resultado de una búsqueda por <b style="color:var(--txt)">hashtag sin relación real con la marca</b> (${esc(exclusionReasonsTxt)}) — caso real: el hashtag "#latam" trajo videos de memes de Latinoamérica, geografía y K-pop que mencionaban "latam" sin hablar de la aerolínea. Se excluyen de todos los bloques del reporte, igual que las de fuera de ventana — la fila sigue en la base para poder auditar la decisión.</span></div>`
+      : '',
+    q.excluded_web_retired > 0
+      ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_web_retired)}</span>
+      <span>menciones del <b style="color:var(--txt)">canal web se retiraron de este reporte</b> — no por un error puntual, sino por decisión: esas menciones (páginas, blogs y foros indexados por DataForSEO) produjeron solo 2 quejas reales entre las dos marcas, y el resto era en su mayoría agregadores de vuelos, además de contenido sin relación con el servicio (un casino online, una página de registro de eventos, un directorio de empresas, spam SEO y granjas de teléfonos falsos suplantando el call center). El canal web ya no se scrapea y estas filas siguen en la base, auditables, pero no cuentan en ningún bloque de este reporte.</span></div>`
       : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
@@ -1588,7 +1608,11 @@ const METRIC_COLS = [
 
 function renderMetricCoverage(coverage, applies) {
   if (!coverage || !Object.keys(coverage).length) return '';
-  const platforms = ['tiktok', 'instagram', 'web'].filter(p => coverage[p]);
+  // "web" fuera (Cambio 1) — el .filter() ya lo hubiera excluido en la
+  // práctica (aggregate.py nunca produce cobertura para una plataforma sin
+  // voces), pero se quita también de la lista literal para no declarar una
+  // plataforma retirada.
+  const platforms = ['tiktok', 'instagram'].filter(p => coverage[p]);
 
   const cell = (p, metric) => {
     const c = coverage[p];

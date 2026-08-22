@@ -17,14 +17,26 @@ aplican:
     juzgarlas contra la ventana, y ya tienen su propio tratamiento (la
     regla del timeline, más abajo, y se cuentan en data_quality.unknown_date).
   - Sobre lo que queda dentro de la ventana, se descartan las menciones con
-    `exclusion_reason` — filas de TikTok (resultado de búsqueda por
-    hashtag) que pipeline/relevance.py o el backfill retroactivo
-    (pipeline/social_relevance_backfill.py, Tarea 3) marcaron como
-    irrelevantes: mencionan la marca por coincidencia pero no hablan de
-    ella (caso real: "#latam" trajo 29 videos, 28 eran memes de
-    Latinoamérica sin relación con la aerolínea). Igual que con la
-    ventana de reporte, la fila SIGUE en la DB — auditable, reversible si
-    la regla resulta mal calibrada — pero no cuenta en ningún bloque.
+    `exclusion_reason` — dos motivos distintos, la misma columna:
+      (a) filas de TikTok (resultado de búsqueda por hashtag) que
+          pipeline/relevance.py o el backfill retroactivo
+          (pipeline/social_relevance_backfill.py, Tarea 3) marcaron como
+          irrelevantes: mencionan la marca por coincidencia pero no hablan
+          de ella (caso real: "#latam" trajo 29 videos, 28 eran memes de
+          Latinoamérica sin relación con la aerolínea).
+      (b) filas de platform='web' (Cambio 1, retiro del canal web) que
+          pipeline/web_channel_retirement.py marcó con
+          config.WEB_CHANNEL_RETIREMENT_REASON — decisión de política, no
+          una evaluación caso por caso: 71 menciones web entre las dos
+          marcas producían solo 2 quejas reales, y la capa completa es
+          ~95% agregadores de vuelos y ruido no relacionado (ver el
+          docstring de ese módulo para el detalle).
+    Igual que con la ventana de reporte, la fila SIGUE en la DB —
+    auditable, reversible si la decisión cambia — pero no cuenta en
+    ningún bloque. Los dos motivos se cuentan por separado en
+    data_quality (excluded_irrelevant vs. excluded_web_retired) porque
+    son decisiones de naturaleza distinta y el bloque 8 los explica con
+    textos distintos.
   - Sobre lo que queda, las menciones se colapsan por (author, text) en
     "voces" únicas. Una persona real que pega el mismo comentario 48
     veces (caso medido: alejandra.caicho, 56 filas, 56 source_url de
@@ -58,10 +70,16 @@ voz.
 """
 import collections
 
-from config import REPORT_WINDOW_START
+from config import REPORT_WINDOW_START, WEB_CHANNEL_RETIREMENT_REASON
 from store import db
 
-PLATFORMS = ["web", "instagram", "tiktok"]
+# "web" queda FUERA a propósito (Cambio 1, retiro del canal web) — nunca
+# vuelve a aparecer una voz de esa plataforma en ningún bloque (ver
+# pipeline/web_channel_retirement.py: todas las filas platform='web' ya
+# guardadas quedan con exclusion_reason). Si esta lista siguiera incluyendo
+# "web", el timeline y la cobertura por plataforma (bloque 8) mostrarían una
+# columna "Web" siempre en cero, colgando sin datos.
+PLATFORMS = ["instagram", "tiktok"]
 
 # Qué métricas de engagement tiene sentido mostrar por plataforma —
 # diagnóstico verificado sobre datos reales (2026-08-20, ver
@@ -103,8 +121,16 @@ PLATFORMS = ["web", "instagram", "tiktok"]
 # es cero: una métrica que no aplica se fuerza a None (guion en el
 # dashboard) aunque la columna tenga un 0 heredado del schema — "las que
 # no aplican van con guion, no con cero".
+#
+# "web" ya no tiene entrada (Cambio 1, retiro del canal web) — nunca tuvo
+# ninguna métrica de todos modos (ver el comentario de arriba: DataForSEO
+# nunca entregó engagement). _apply_metric() usa
+# METRIC_APPLIES.get(platform, {}) — la ausencia de "web" aquí produce
+# exactamente el mismo resultado (todo None) que la entrada explícita que
+# había antes, así que quitarla no cambia el comportamiento si alguna vez
+# quedara una fila suelta sin marcar; solo evita declarar una plataforma
+# que ya no se reporta.
 METRIC_APPLIES = {
-    "web":       {"likes": False, "shares": False, "comments_count": False, "saves": False, "views": False, "post_reach": False},
     "tiktok":    {"likes": True,  "shares": True,  "comments_count": True,  "saves": True,  "views": True,  "post_reach": False},
     "instagram": {"likes": True,  "shares": False, "comments_count": False, "saves": False, "views": False, "post_reach": True},
 }
@@ -200,15 +226,29 @@ def _in_report_window(m: dict) -> bool:
     return published_at[:10] >= REPORT_WINDOW_START
 
 
-def _is_excluded_by_relevance(m: dict) -> bool:
+def _is_excluded(m: dict) -> bool:
     """
-    True si la mención tiene `exclusion_reason` (Tarea 3 — corrección de
-    relevancia social): TikTok que ya no pasa el filtro de hashtag de
-    pipeline/relevance.py, marcado por pipeline/social_relevance_backfill.py
-    o por una corrida nueva del pipeline. La fila sigue en la DB, esto solo
-    decide si CUENTA en el reporte.
+    True si la mención tiene CUALQUIER `exclusion_reason` — irrelevancia
+    social (Tarea 3) o retiro del canal web (Cambio 1), ver docstring del
+    módulo. La fila sigue en la DB, esto solo decide si CUENTA en el
+    reporte. Usado para construir `relevant_mentions`; el desglose por
+    motivo (para data_quality) vive en _is_web_retirement()/más abajo, no
+    aquí — este chequeo es deliberadamente ciego al motivo concreto.
     """
     return bool(m.get("exclusion_reason"))
+
+
+def _is_web_retirement(m: dict) -> bool:
+    """
+    True si el motivo de exclusión es específicamente el retiro del canal
+    web (Cambio 1) — distingue esta fila de una excluida por irrelevancia
+    social de TikTok (Tarea 3), que usa otros valores de exclusion_reason
+    ("sin_keyword", "sin_contexto_aeronautico"). Ambas cuentan para
+    `_is_excluded`, pero se reportan por separado en data_quality porque
+    son decisiones de naturaleza distinta y el bloque 8 las explica con
+    textos distintos.
+    """
+    return m.get("exclusion_reason") == WEB_CHANNEL_RETIREMENT_REASON
 
 
 def _collapse_voices(mentions: list[dict]) -> list[dict]:
@@ -360,16 +400,24 @@ def build_payload(conn, brand: str | None = None) -> dict:
     windowed_mentions = [m for m in raw_mentions if _in_report_window(m)]
     outside_window = len(raw_mentions) - len(windowed_mentions)
 
-    # Relevancia social (Tarea 3) — ver docstring del módulo. Se aplica
-    # DESPUÉS de la ventana de reporte (para no cambiar outside_window,
-    # que sigue siendo "cuántas quedan fuera de fecha" tal cual estaba) y
-    # ANTES de colapsar voces — una mención excluida no debe aportar su
+    # Exclusiones por exclusion_reason (relevancia social Tarea 3 + retiro
+    # del canal web Cambio 1) — ver docstring del módulo. Se aplica DESPUÉS
+    # de la ventana de reporte (para no cambiar outside_window, que sigue
+    # siendo "cuántas quedan fuera de fecha" tal cual estaba) y ANTES de
+    # colapsar voces — una mención excluida no debe aportar su
     # repeat_count/engagement a una voz que sí cuenta.
-    relevant_mentions = [m for m in windowed_mentions if not _is_excluded_by_relevance(m)]
-    excluded_irrelevant = len(windowed_mentions) - len(relevant_mentions)
+    relevant_mentions = [m for m in windowed_mentions if not _is_excluded(m)]
+
+    excluded_mentions = [m for m in windowed_mentions if _is_excluded(m)]
+    # Los dos motivos se cuentan por separado — ver _is_web_retirement().
+    excluded_web_retired_mentions = [m for m in excluded_mentions if _is_web_retirement(m)]
+    excluded_irrelevant_mentions = [m for m in excluded_mentions if not _is_web_retirement(m)]
+
+    excluded_irrelevant = len(excluded_irrelevant_mentions)
     excluded_irrelevant_reasons = dict(collections.Counter(
-        m["exclusion_reason"] for m in windowed_mentions if _is_excluded_by_relevance(m)
+        m["exclusion_reason"] for m in excluded_irrelevant_mentions
     ))
+    excluded_web_retired = len(excluded_web_retired_mentions)
 
     mentions = _collapse_voices(relevant_mentions)
     collapsed_repeats = len(relevant_mentions) - len(mentions)
@@ -621,6 +669,15 @@ def build_payload(conn, brand: str | None = None) -> dict:
         # is_relevant() ("sin_keyword", "sin_contexto_aeronautico").
         "excluded_irrelevant": excluded_irrelevant,
         "excluded_irrelevant_reasons": excluded_irrelevant_reasons,
+        # Cambio 1 (retiro del canal web): menciones platform='web', dentro
+        # de la ventana de reporte, que pipeline/web_channel_retirement.py
+        # marcó con exclusion_reason=config.WEB_CHANNEL_RETIREMENT_REASON —
+        # decisión de política (71 menciones web entre las dos marcas
+        # producían solo 2 quejas reales; el resto, agregadores de vuelos y
+        # ruido no relacionado), no una evaluación caso por caso como
+        # excluded_irrelevant. Reales, en la DB, auditables — fuera del
+        # análisis por la misma razón que las demás exclusiones.
+        "excluded_web_retired": excluded_web_retired,
         # Tarea 4: qué métricas de engagement hay y cuáles no, por
         # plataforma, con conteo de filas — para que nadie saque
         # conclusiones de "shares" sin saber cuántas filas lo cubren.

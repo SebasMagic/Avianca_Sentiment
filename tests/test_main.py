@@ -227,3 +227,43 @@ def test_cli_solo_instagram_pasa_solo_instagram_a_run_pipeline(monkeypatch):
     assert llamada["since"] == "2026-01-01"
     assert llamada["brand_name"] == "LATAM"
     assert llamada["scrapers"] == [("Instagram", apify_instagram.scrape)]
+
+
+# ── Cambio 1 (retiro del canal web): DataForSEO fuera del pipeline activo ──
+
+def test_scrapers_por_defecto_ya_no_incluye_dataforseo():
+    """El canal web se retiró del pipeline activo (Cambio 1) — SCRAPERS
+    debe traer solo Instagram y TikTok, en ese orden, sin DataForSEO ni
+    ningún otro scraper web. scrapers/dataforseo_scraper.py se conserva
+    (ver su docstring) pero no debe estar cableado aquí."""
+    nombres = [nombre for nombre, _ in main.SCRAPERS]
+    assert nombres == ["Instagram", "TikTok"]
+    assert "DataForSEO" not in nombres
+
+
+def test_cli_retirar_canal_web_llama_al_modulo_correcto(monkeypatch, tmp_path):
+    """--retirar-canal-web debe invocar pipeline.web_channel_retirement.run
+    con la conexión y la marca pedida — no gasta ninguna API."""
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    llamada = {}
+
+    def fake_run(conn, brand=None):
+        llamada["brand"] = brand
+        return {"evaluated": 0, "marked": 0, "already_marked": 0}
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main.web_channel_retirement, "run", fake_run)
+    monkeypatch.setattr(
+        "sys.argv", ["main.py", "--retirar-canal-web", "--brand", "LATAM"],
+    )
+
+    main.main()
+
+    assert llamada["brand"] == "LATAM"

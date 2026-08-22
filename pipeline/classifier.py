@@ -62,6 +62,10 @@ Reglas:
 - emotion es exactamente uno de: "happiness", "anger", "love", "sadness", "neutral"
 - is_complaint es true SOLO si es una queja real de un usuario sobre el servicio.
   Es false para contenido promocional, noticias, opinión neutral o contenido positivo.
+  También es false para peticiones o sugerencias sin queja de servicio de por
+  medio — p. ej. pedir que abran una ruta nueva, o pedir que la aerolínea
+  done vuelos para una causa humanitaria. Eso es una petición, no una queja
+  sobre el servicio que el usuario recibió.
 - complaint_driver es null cuando is_complaint es false.
   Cuando is_complaint es true, es OBLIGATORIO y debe ser exactamente uno de:
     "equipaje"           — maletas perdidas, dañadas o demoradas (manejo físico del equipaje)
@@ -72,22 +76,55 @@ Reglas:
     "programa_fidelidad" — millas, programa de fidelidad ({loyalty_program}), redenciones
     "asientos_comida"    — asientos, espacio, comida a bordo, entretenimiento
     "reembolsos"         — devoluciones de dinero que no llegan o se demoran
-    "otro"               — queja real que no encaja en ninguna de las anteriores
-- Ante duda sobre la categoría de una queja real, usa "otro".
+    "mascotas"           — mascotas o animales que viajan con el pasajero: pérdida,
+                            maltrato, muerte, o problemas con la política de transporte
+                            de mascotas (bodega o cabina)
+    "fraude_publicidad"  — páginas, perfiles o anuncios FALSOS que suplantan la marca
+                            para estafar, o publicidad/promociones de la propia
+                            aerolínea que el usuario considera engañosas. No es esto
+                            un cobro ya hecho de más (eso es "cobros_tarifas") — es
+                            sobre la promesa o la suplantación, no sobre el cobro.
+    "rechazo_marca"      — rechazo o insulto genérico hacia la marca SIN mencionar
+                            ninguna causa operativa concreta (no aplica ningún driver
+                            anterior). Úsalo en vez de "otro" cuando la queja es pura
+                            negatividad o insulto sin motivo específico — "son lo
+                            peor", "delincuentes", "#noavianca" sin más contexto.
+    "otro"                — queja real que no encaja en NINGUNA de las anteriores,
+                            ni siquiera "rechazo_marca" — reservado para lo que de
+                            verdad no tiene categoría (p. ej. amenazas legales,
+                            fallas puntuales de la app, problemas técnicos del avión).
+- Ante duda entre "otro" y cualquier otra categoría de esta lista (incluida
+  "rechazo_marca"), prefiere la categoría de esta lista — "otro" es el
+  último recurso, no la opción por defecto.
 - Muchas quejas encajan literalmente en más de un driver a la vez (la maleta
   no llegó porque cancelaron el vuelo; cobraron de más y nunca devolvieron
   el dinero; "cobros de equipaje" suena a la vez a equipaje y a tarifas).
   Para esos casos, elige el PRIMERO que aplique en este orden de precedencia,
   no el que te parezca más específico:
-    cancelacion > demora > equipaje > reembolsos > cobros_tarifas
-    > programa_fidelidad > asientos_comida > atencion_cliente > otro
+    cancelacion > demora > equipaje > mascotas > reembolsos > cobros_tarifas
+    > fraude_publicidad > programa_fidelidad > asientos_comida
+    > atencion_cliente > rechazo_marca > otro
   Esta prioridad no es arbitraria:
   (a) las disrupciones de vuelo (cancelacion, demora) van primero porque son
       la causa raíz accionable — si la maleta no llegó porque cancelaron el
       vuelo, lo que hay que arreglar es la cancelación, no el equipaje;
-  (b) atencion_cliente va casi al final a propósito, porque casi toda queja
+  (b) "mascotas" va justo después de "equipaje" por la misma lógica: si el
+      motivo de fondo es el manejo físico de lo que el pasajero llevaba
+      consigo —maleta o mascota—, gana la causa concreta sobre cualquier
+      categoría genérica;
+  (c) "fraude_publicidad" va junto a las categorías de dinero (después de
+      "cobros_tarifas") porque comparte el mismo terreno — promesas y
+      confianza sobre precios y ofertas — pero es una causa distinta de un
+      cobro ya hecho, así que tiene su propio lugar en vez de perderse
+      dentro de "cobros_tarifas";
+  (d) atencion_cliente va casi al final a propósito, porque casi toda queja
       incluye "y nadie me ayudó" — si fuera prioritario se tragaría el resto
-      de las categorías y perderíamos la causa real del problema.
+      de las categorías y perderíamos la causa real del problema;
+  (e) "rechazo_marca" va al final, justo antes de "otro", porque es la
+      categoría MÁS genérica de todas — solo aplica cuando NINGUNA causa
+      operativa concreta está presente. Si hay aunque sea un indicio de
+      causa concreta (equipaje, demora, cobro, etc.), esa causa gana sobre
+      "rechazo_marca", igual que gana sobre "otro".
 - Sé preciso con el español coloquial colombiano."""
 
 

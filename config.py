@@ -145,18 +145,55 @@ BACKFILL_SINCE = "2026-04-19"
 # 41 meses con el 98% de los datos concentrados en 6.
 REPORT_WINDOW_START = "2026-01-01"
 
+# Razón de exclusion_reason (store/db.py) para el retiro del canal web
+# (Cambio 1) — ver scrapers/dataforseo_scraper.py y pipeline/
+# web_channel_retirement.py. Constante compartida entre el módulo que marca
+# las filas y dashboard/aggregate.py, que la usa para separar el conteo de
+# "canal retirado" del de "irrelevancia social" (exclusion_reason de TikTok)
+# en el bloque 8 — son dos motivos de exclusión distintos y el reporte los
+# explica por separado, no mezclados bajo un solo texto.
+WEB_CHANNEL_RETIREMENT_REASON = "canal_web_retirado"
+
 # Drivers operativos de queja — el LLM debe devolver exactamente uno de estos.
 # El ORDEN de esta lista es solo de declaración/validación (normalize_result
 # comprueba pertenencia, no precedencia) y NO es el orden de desempate cuando
 # una queja encaja en varios drivers a la vez. Ese orden de precedencia vive
 # en build_system_prompt(), en pipeline/classifier.py, y es distinto de este:
-# cancelacion > demora > equipaje > reembolsos > cobros_tarifas >
-# programa_fidelidad > asientos_comida > atencion_cliente > otro.
+# cancelacion > demora > equipaje > mascotas > reembolsos > cobros_tarifas >
+# fraude_publicidad > programa_fidelidad > asientos_comida > atencion_cliente
+# > rechazo_marca > otro.
 #
 # "programa_fidelidad" (antes "lifemiles"): renombrado porque el driver es
 # genérico entre marcas — Avianca tiene LifeMiles, LATAM tiene LATAM Pass.
 # El nombre del programa que ve el LLM sale de brand["loyalty_program"],
 # inyectado en el prompt por build_system_prompt().
+#
+# "mascotas", "fraude_publicidad", "rechazo_marca" (nuevos — descubrimiento
+# sobre "otro", ver .superpowers/otro-y-web.md): "otro" era el driver #1 en
+# Avianca (202 quejas, 28,7% en el reporte) — una caja negra. Se pasaron las
+# ~368 quejas de "otro" de ambas marcas (305 Avianca + 63 LATAM) por
+# DeepSeek en lotes, pidiéndole que descubriera y nombrara los temas sin
+# categorías predefinidas (codebook evolutivo entre lotes, para converger en
+# nombres consistentes). Resultado, con volumen verificado:
+#   - Rechazo/insultos a la marca sin causa operativa (248/368, 67%): el
+#     grupo más grande, confirma la hipótesis del usuario — es legítimamente
+#     inespecífico, pero merece nombre propio en vez de perderse en "otro".
+#     → "rechazo_marca".
+#   - Mascotas/animales a bordo (~28/368): pérdida, maltrato o política de
+#     transporte de mascotas — volumen propio, causa identificable y
+#     accionable (política de mascotas). → "mascotas".
+#   - Fraude/publicidad engañosa (~21/368): páginas o perfiles falsos que
+#     suplantan la marca para estafar, y publicidad propia que el usuario
+#     considera engañosa — accionable (seguridad de marca / comunicaciones).
+#     → "fraude_publicidad".
+# Temas insinuados en el vistazo manual que SÍ se verificaron pero NO
+# alcanzaron volumen propio (se quedan en "otro", no ganan driver): amenazas
+# legales (~7/368), fallas de app/canales digitales (~6/368), solicitudes de
+# rutas nuevas o de vuelos de ayuda humanitaria (~30/368 — más bien
+# peticiones que quejas de servicio, ver build_system_prompt). "Denegación
+# de embarque", también insinuada, se buscó explícitamente en TODAS las
+# quejas (no solo "otro") y no apareció con volumen real (1-2 voces únicas)
+# — la hipótesis inicial no se sostuvo, y no se crea driver para ella.
 COMPLAINT_DRIVERS = [
     "equipaje",
     "cancelacion",
@@ -166,6 +203,9 @@ COMPLAINT_DRIVERS = [
     "programa_fidelidad",
     "asientos_comida",
     "reembolsos",
+    "mascotas",
+    "fraude_publicidad",
+    "rechazo_marca",
     "otro",
 ]
 

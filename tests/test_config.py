@@ -13,7 +13,7 @@ cuenta verificada y posts recientes) son @latamairlines (global) y
 @latamairlines_colombia (Colombia). Este test fija esos valores para que
 un futuro cambio accidental de config no repita el mismo fallo silencioso.
 """
-from config import get_brand
+from config import COMPLAINT_DRIVERS, get_brand
 
 LATAM = get_brand("LATAM")
 
@@ -23,3 +23,17 @@ def test_perfiles_instagram_latam_son_los_handles_reales():
         "https://www.instagram.com/latamairlines/",
         "https://www.instagram.com/latamairlines_colombia/",
     ]
+
+
+# ── Cambio 2: drivers nuevos descubiertos sobre "otro" ──────────────────
+
+def test_complaint_drivers_incluye_los_tres_nuevos():
+    for driver in ("mascotas", "fraude_publicidad", "rechazo_marca"):
+        assert driver in COMPLAINT_DRIVERS
+
+
+def test_otro_sigue_siendo_el_ultimo_de_la_lista():
+    """'otro' es el último recurso — declarativamente, al final de la
+    lista de validación (el orden de PRECEDENCIA real vive en
+    pipeline/classifier.build_system_prompt, ver test_classifier.py)."""
+    assert COMPLAINT_DRIVERS[-1] == "otro"

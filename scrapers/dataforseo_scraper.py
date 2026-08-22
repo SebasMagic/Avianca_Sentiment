@@ -2,6 +2,27 @@
 DataForSEO Content Analysis scraper.
 Retorna menciones web/blogs/Reddit con sentiment nativo incluido.
 Excluye dominios oficiales de la marca y filtra por fecha (`since`).
+
+Fuera del pipeline activo (Cambio 1, retiro del canal web): este módulo se
+conserva pero no está en la lista SCRAPERS de main.py — mismo tratamiento
+que scrapers/apify_twitter.py. Decisión del usuario, con evidencia:
+
+  - 71 menciones web entre Avianca y LATAM producen solo 2 quejas reales.
+  - Desde el diagnóstico inicial, esta capa es ~95% agregadores de vuelos
+    (Kayak, Despegar, Skyscanner, etc. — ver config.BLACKLIST_DOMAIN_ROOTS,
+    que ya los descarta, y aun así lo que queda no es mejor).
+  - Una revisión manual de la muestra que SÍ pasa el filtro encontró: un
+    casino online ("vbet latam"), una página de registro de eventos
+    (luma.com), un directorio de empresas (emis.com), spam SEO
+    (diskgrafica.com, con "latam sigla" repetido) y granjas de teléfonos
+    falsos suplantando el call center (id.carousell.com).
+
+No es conversación de aerolíneas. Las menciones web YA guardadas en la DB
+no se borran — quedan marcadas con exclusion_reason (ver
+pipeline/web_channel_retirement.py) y las agregaciones del dashboard las
+omiten, igual que se hizo con la irrelevancia social de TikTok. El módulo
+no se borra por si en el futuro se justifica retomarlo con un filtro más
+estricto que el de config.BLACKLIST_DOMAIN_ROOTS.
 """
 import uuid
 import requests

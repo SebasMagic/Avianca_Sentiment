@@ -1,4 +1,4 @@
-from config import REPORT_WINDOW_START
+from config import REPORT_WINDOW_START, WEB_CHANNEL_RETIREMENT_REASON
 from dashboard import aggregate
 from store import db
 
@@ -339,6 +339,14 @@ def test_metricas_que_no_aplican_a_la_plataforma_quedan_none_no_cero(tmp_db):
     web no tiene NINGUNA métrica de engagement — DataForSEO nunca la
     entrega. Deben quedar None (guion en el dashboard), no 0, aunque el
     schema por defecto guarde 0 en likes/shares/comments_count.
+
+    Nota (Cambio 1, retiro del canal web): esta mención se sembró SIN
+    exclusion_reason, así que sigue apareciendo en p["mentions"] tal cual
+    — este test verifica _apply_metric()/METRIC_APPLIES en aislamiento,
+    no el retiro del canal (ver pipeline/web_channel_retirement.py, que
+    marca con exclusion_reason cada fila real platform='web' de la DB, y
+    test_una_mencion_web_sin_marcar_no_revienta_metric_coverage, que cubre
+    el caso de una fila así llegando a build_payload sin marcar).
     """
     _seed(tmp_db, [_m(1, platform="web", likes=0, shares=0, comments_count=0)])
     p = aggregate.build_payload(tmp_db)
@@ -555,7 +563,6 @@ def test_metric_coverage_cuenta_filas_reales_por_plataforma(tmp_db):
         _m(2, platform="tiktok", author="b", saves=None, views=None),  # legacy sin raw
         _m(3, platform="instagram", author="c", likes=7, views=32600, reach_source="post",
            raw={"postUrl": "https://www.instagram.com/p/ABC/"}),
-        _m(4, platform="web", author="d"),
     ])
     p = aggregate.build_payload(tmp_db)
     cov = p["data_quality"]["metric_coverage"]
@@ -571,10 +578,31 @@ def test_metric_coverage_cuenta_filas_reales_por_plataforma(tmp_db):
     assert cov["instagram"]["views"] == 0         # instagram nunca tiene alcance propio
     assert cov["instagram"]["post_reach"] == 1    # esta sí tiene visibilidad heredada
 
-    assert cov["web"]["total"] == 1
-    assert cov["web"]["likes"] == 0
-    assert cov["web"]["views"] == 0
-    assert cov["web"]["post_reach"] == 0
+    # "web" ya no aparece en metric_coverage (Cambio 1, retiro del canal
+    # web): aggregate.PLATFORMS ya no lo incluye, así que ni siquiera una
+    # voz platform="web" que llegara sin excluir (no debería, ver
+    # test_una_mencion_web_sin_marcar_no_revienta_metric_coverage) produce
+    # una entrada — el bloque 8 nunca muestra una columna "Web" vacía.
+    assert "web" not in cov
+
+
+def test_una_mencion_web_sin_marcar_no_revienta_metric_coverage(tmp_db):
+    """
+    Salvavidas: si por algún motivo quedara una fila platform='web' SIN
+    exclusion_reason (la migración de retiro no debería dejar ninguna,
+    ver pipeline/web_channel_retirement.py), build_payload no debe
+    reventar — la voz aparece en p["mentions"] con métricas en None
+    (_apply_metric cae al default de METRIC_APPLIES.get(platform, {})),
+    pero metric_coverage/metric_applies simplemente no la reportan, porque
+    "web" ya no está en aggregate.PLATFORMS.
+    """
+    _seed(tmp_db, [_m(1, platform="web", author="d", likes=0, shares=0, comments_count=0)])
+    p = aggregate.build_payload(tmp_db)
+    assert len(p["mentions"]) == 1
+    voz = p["mentions"][0]
+    assert voz["likes"] is None
+    assert voz["views"] is None
+    assert "web" not in p["data_quality"]["metric_coverage"]
 
 
 def test_metric_applies_declara_que_metricas_existen_por_plataforma(tmp_db):
@@ -589,9 +617,12 @@ def test_metric_applies_declara_que_metricas_existen_por_plataforma(tmp_db):
     p = aggregate.build_payload(tmp_db)
     applies = p["data_quality"]["metric_applies"]
 
-    assert applies["web"]["likes"] is False
-    assert applies["web"]["views"] is False
-    assert applies["web"]["post_reach"] is False
+    # "web" ya no tiene entrada (Cambio 1, retiro del canal web) — nunca
+    # tuvo ninguna métrica de todos modos, y aggregate._apply_metric()
+    # cae a METRIC_APPLIES.get(platform, {}) para cualquier plataforma
+    # ausente, así que el comportamiento para una fila "web" perdida
+    # sigue siendo "ninguna métrica aplica" aunque la clave ya no exista.
+    assert "web" not in applies
     assert applies["tiktok"]["saves"] is True
     assert applies["tiktok"]["views"] is True
     assert applies["tiktok"]["post_reach"] is False
@@ -718,6 +749,72 @@ def test_exclusion_no_afecta_outside_window(tmp_db):
     assert p["data_quality"]["outside_window"] == 1
     assert p["data_quality"]["excluded_irrelevant"] == 1
     assert p["kpis"]["total"] == 0
+
+
+# ── Cambio 1 (retiro del canal web): exclusion_reason con un motivo
+# distinto al de irrelevancia social — se cuenta aparte, no se mezcla.
+
+def test_mencion_web_retirada_no_aparece_en_ningun_bloque(tmp_db):
+    _seed(tmp_db, [
+        _m(1, platform="web", author="dominio.com"),
+        _m(2, author="autor_real", is_complaint=1, complaint_driver="demora"),
+    ])
+    db.set_exclusion_reason(tmp_db, "m-1", WEB_CHANNEL_RETIREMENT_REASON)
+
+    p = aggregate.build_payload(tmp_db)
+
+    assert p["kpis"]["total"] == 1
+    assert len(p["mentions"]) == 1
+    assert p["mentions"][0]["author"] == "autor_real"
+    assert p["data_quality"]["total"] == 1
+    assert "web" not in p["data_quality"]["by_platform"]
+
+
+def test_excluded_web_retired_se_cuenta_separado_de_excluded_irrelevant(tmp_db):
+    """Los dos motivos de exclusion_reason (retiro del canal web vs.
+    irrelevancia social de TikTok) son decisiones de naturaleza distinta
+    y el bloque 8 los explica con textos distintos — no deben mezclarse
+    en el mismo contador ni en el mismo desglose de razones."""
+    _seed(tmp_db, [
+        _m(1, platform="web", author="a"),
+        _m(2, platform="web", author="b"),
+        _m(3, author="c"),  # tiktok, irrelevante por hashtag
+    ])
+    db.set_exclusion_reason(tmp_db, "m-1", WEB_CHANNEL_RETIREMENT_REASON)
+    db.set_exclusion_reason(tmp_db, "m-2", WEB_CHANNEL_RETIREMENT_REASON)
+    db.set_exclusion_reason(tmp_db, "m-3", "sin_contexto_aeronautico")
+
+    p = aggregate.build_payload(tmp_db)
+    q = p["data_quality"]
+
+    assert q["excluded_web_retired"] == 2
+    assert q["excluded_irrelevant"] == 1
+    assert q["excluded_irrelevant_reasons"] == {"sin_contexto_aeronautico": 1}
+    # El motivo del retiro web NUNCA aparece mezclado en el desglose de
+    # irrelevancia social.
+    assert WEB_CHANNEL_RETIREMENT_REASON not in q["excluded_irrelevant_reasons"]
+
+
+def test_excluded_web_retired_es_cero_sin_exclusiones(tmp_db):
+    _seed(tmp_db, [_m(1, author="a")])
+    p = aggregate.build_payload(tmp_db)
+    assert p["data_quality"]["excluded_web_retired"] == 0
+
+
+def test_platforms_ya_no_incluye_web(tmp_db):
+    """aggregate.PLATFORMS es la lista de plataformas activas — 'web' no
+    debe volver a aparecer ahí (Cambio 1) ni colgar como columna en
+    ningún bloque derivado de ella (timeline, cobertura por plataforma)."""
+    assert "web" not in aggregate.PLATFORMS
+    assert aggregate.PLATFORMS == ["instagram", "tiktok"]
+
+
+def test_timeline_nunca_trae_la_clave_web(tmp_db):
+    _seed(tmp_db, [_m(1, platform="tiktok")])
+    p = aggregate.build_payload(tmp_db)
+    assert p["timeline"], "debía haber al menos un punto de timeline"
+    for punto in p["timeline"]:
+        assert "web" not in punto["counts"]
 
 
 # ── Multi-marca (Tarea 1): build_payload(conn, brand=...) ─────────────────

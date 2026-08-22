@@ -42,9 +42,6 @@ BRAND_COLOR_MARKER = "__BRAND_COLOR__"
 BRAND_INK_MARKER = "__BRAND_INK__"
 BRAND_DIM_MARKER = "__BRAND_DIM__"
 BRAND_MID_MARKER = "__BRAND_MID__"
-# "web" colisiona con el color de marca cuando la marca es azul (LATAM) —
-# ver _platform_web_color() y la nota en template.html junto a PLT_COLOR.
-BRAND_WEB_COLOR_MARKER = "__BRAND_WEB_COLOR__"
 
 
 # ── Color: --brand-ink/--brand-dim/--brand-mid salen SIEMPRE del `color`
@@ -127,20 +124,6 @@ def _brand_mid(color: str) -> str:
     return f"rgba({r},{g},{b},.45)"
 
 
-# Azul "web" de los gráficos (PLT_COLOR.web en template.html) — estable
-# entre marcas por defecto: es un identificador de PLATAFORMA, no de
-# marca, y debe leerse igual en cualquier reporte. Verificado con el
-# validador del skill dataviz (scripts/validate_palette.js) que este azul
-# (#2A78D6, hue ~212°) y el azul de marca de LATAM (#1B0088, hue ~252°,
-# ~40° de separación) dan ΔE 24–28 entre sí — muy por encima del piso
-# CVD (8) y del piso de visión normal (15): NO son la misma señal, ni para
-# un lector con daltonismo ni sin él. Los reemplazos alternativos
-# probados (grises/ocres cercanos al dorado de tendencia) fallaban el piso
-# de croma del validador o colisionaban con --gold (línea de tendencia,
-# hue ~43°) — así que "web" se deja intacto para AMBAS marcas.
-_WEB_PLATFORM_COLOR = "#2A78D6"
-
-
 def _brand_logo_html(profile: dict) -> str:
     """
     Bloque HTML del logo del encabezado, a partir del perfil de marca.
@@ -206,9 +189,6 @@ def render(payload: dict, template_path: str = str(TEMPLATE),
 
     if BRAND_MID_MARKER in html:
         html = html.replace(BRAND_MID_MARKER, _brand_mid(profile["color"]))
-
-    if BRAND_WEB_COLOR_MARKER in html:
-        html = html.replace(BRAND_WEB_COLOR_MARKER, _WEB_PLATFORM_COLOR)
 
     return html
 

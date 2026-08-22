@@ -12,8 +12,9 @@ main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
   python main.py --enriquecer-engagement         # puebla saves/views desde el raw ya guardado
   python main.py --enriquecer-instagram-reach    # backfill de alcance de posts de Instagram (gasta Apify)
   python main.py --backfill-cuenta-origen --brand LATAM  # cuenta de origen para IG ya en la DB (gasta poco Apify)
-  python main.py --solo-instagram --since 2026-01-01  # re-corre SOLO Instagram, sin re-pagar DataForSEO/TikTok
+  python main.py --solo-instagram --since 2026-01-01  # re-corre SOLO Instagram, sin re-pagar TikTok
   python main.py --limpiar-relevancia-social --brand LATAM  # aplica el filtro de hashtag a TikTok ya en la DB (no gasta API)
+  python main.py --retirar-canal-web --brand LATAM  # marca las menciones web ya en la DB como excluidas (no gasta API)
   python main.py --schedule                     # semanal, lunes 8am
 
 `--brand` (default: config.DEFAULT_BRAND = "Avianca") acota TODO el
@@ -27,23 +28,31 @@ Twitter/X queda fuera de v2: el actor de Apify con búsqueda histórica
 por rango de fechas es de pago. scrapers/apify_twitter.py se conserva
 pero no está en SCRAPERS.
 
+DataForSEO (canal web) queda fuera también (Cambio 1, decisión del
+usuario): 71 menciones web entre Avianca y LATAM producen solo 2 quejas
+reales, y desde el diagnóstico inicial esta capa es ~95% agregadores de
+vuelos — el resto de la muestra revisada a mano trajo un casino online,
+una página de registro de eventos, un directorio de empresas, spam SEO y
+granjas de teléfonos falsos suplantando el call center. No es conversación
+de aerolíneas. scrapers/dataforseo_scraper.py se conserva (ver su
+docstring) pero no está en SCRAPERS; las menciones web YA guardadas se
+retiraron con --retirar-canal-web (pipeline/web_channel_retirement.py),
+que las marca con exclusion_reason sin borrarlas.
+
 Corrida `weekly` (sin --since explícito): NO usa un rolling fijo de 7
 días. `since` se calcula como la fecha de inicio de la última corrida
 TERMINADA menos un día de margen (para no perder nada en el borde); si
 no hay corrida previa, cae a 7 días atrás. Ver compute_weekly_since().
-Sin esto, DataForSEO reconsultaría siempre la misma ventana creciente
-desde BACKFILL_SINCE y el filtro de fecha de Instagram quedaría
-deshabilitado por completo (since=None) — cada corrida "semanal" se
-comportaría como un mini-backfill repetido, pagando el costo completo
-de Apify cada vez.
+Sin esto, el filtro de fecha de Instagram quedaría deshabilitado por
+completo (since=None) — cada corrida "semanal" se comportaría como un
+mini-backfill repetido, pagando el costo completo de Apify cada vez.
 
 `--solo-instagram`: acota `SCRAPERS` a un único elemento (Instagram) antes
 de llamar a run_pipeline(). Existe para re-correr Instagram tras subir
 config.INSTAGRAM_POSTS_LIMIT (o cualquier otro cambio que solo afecte a
-ese scraper) sin volver a pagar DataForSEO ni TikTok, que ya corrieron y
-cuyos resultados ya están en la DB. El dedup por fingerprint hace que
-re-correr sea seguro: lo ya visto se ignora (INSERT OR IGNORE), solo se
-suma lo nuevo.
+ese scraper) sin volver a pagar TikTok, que ya corrió y cuyos resultados
+ya están en la DB. El dedup por fingerprint hace que re-correr sea
+seguro: lo ya visto se ignora (INSERT OR IGNORE), solo se suma lo nuevo.
 """
 import argparse
 import collections
@@ -55,16 +64,15 @@ import schedule
 from config import BACKFILL_SINCE, DEFAULT_BRAND, get_brand
 from pipeline import (
     classify_pending, engagement_enrichment, instagram_reach_backfill,
-    social_relevance_backfill, source_account_backfill,
+    social_relevance_backfill, source_account_backfill, web_channel_retirement,
 )
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
 from pipeline.relevance import is_relevant
-from scrapers import apify_instagram, apify_tiktok, dataforseo_scraper
+from scrapers import apify_instagram, apify_tiktok
 from store import db, seed_excel
 
 SCRAPERS = [
-    ("DataForSEO", dataforseo_scraper.scrape),
     ("Instagram", apify_instagram.scrape),
     ("TikTok", apify_tiktok.scrape),
 ]
@@ -209,7 +217,7 @@ def main():
                         help="corre cada lunes a las 8am")
     parser.add_argument("--solo-instagram", action="store_true",
                         help="corrida (backfill o weekly) que ejecuta SOLO el scraper de "
-                             "Instagram — no re-scrapea DataForSEO ni TikTok, ya pagados")
+                             "Instagram — no re-scrapea TikTok, ya pagado")
     parser.add_argument("--backfill-cuenta-origen", action="store_true",
                         help="backfill de source_account (cuenta de Instagram del post) para "
                              "menciones YA en la DB que quedaron NULL — 1 llamada de Fase 1 a "
@@ -218,6 +226,10 @@ def main():
                         help="aplica retroactivamente el filtro de relevancia de hashtag "
                              "(pipeline/relevance.py) a las menciones de TikTok YA en la DB — "
                              "no borra filas, marca exclusion_reason; no gasta API (ver --brand)")
+    parser.add_argument("--retirar-canal-web", action="store_true",
+                        help="marca las menciones platform='web' YA en la DB como excluidas "
+                             "(pipeline/web_channel_retirement.py) — no borra filas, marca "
+                             "exclusion_reason; no gasta API (ver --brand)")
     args = parser.parse_args()
 
     # Falla temprano y con mensaje claro si --brand no existe en config.BRANDS,
@@ -264,6 +276,12 @@ def main():
     if args.limpiar_relevancia_social:
         conn = db.connect()
         print(f"[SocialRelevanceBackfill] {social_relevance_backfill.run(conn, brand=args.brand)}")
+        conn.close()
+        return
+
+    if args.retirar_canal_web:
+        conn = db.connect()
+        print(f"[WebChannelRetirement] {web_channel_retirement.run(conn, brand=args.brand)}")
         conn.close()
         return
 

@@ -92,6 +92,79 @@ def test_driver_programa_fidelidad_es_valido():
     assert out["complaint_driver"] == "programa_fidelidad"
 
 
+# ── Cambio 2: drivers nuevos descubiertos sobre "otro" (ver
+# .superpowers/otro-y-web.md) — se validan igual que los viejos.
+
+def test_driver_mascotas_es_valido():
+    out = classifier.normalize_result({**OK, "complaint_driver": "mascotas"})
+    assert out["complaint_driver"] == "mascotas"
+
+
+def test_driver_fraude_publicidad_es_valido():
+    out = classifier.normalize_result({**OK, "complaint_driver": "fraude_publicidad"})
+    assert out["complaint_driver"] == "fraude_publicidad"
+
+
+def test_driver_rechazo_marca_es_valido():
+    out = classifier.normalize_result({**OK, "complaint_driver": "rechazo_marca"})
+    assert out["complaint_driver"] == "rechazo_marca"
+
+
+def test_system_prompt_incluye_los_drivers_nuevos_y_su_precedencia():
+    """Los tres drivers nuevos (mascotas, fraude_publicidad, rechazo_marca)
+    deben estar declarados en el prompt Y en el orden de precedencia
+    correcto — cancelacion > demora > equipaje > mascotas > reembolsos >
+    cobros_tarifas > fraude_publicidad > programa_fidelidad >
+    asientos_comida > atencion_cliente > rechazo_marca > otro."""
+    prompt = classifier.build_system_prompt(AVIANCA)
+
+    for driver in ("mascotas", "fraude_publicidad", "rechazo_marca"):
+        assert f'"{driver}"' in prompt
+
+    precedencia = (
+        "cancelacion > demora > equipaje > mascotas > reembolsos > cobros_tarifas"
+        "\n    > fraude_publicidad > programa_fidelidad > asientos_comida"
+        "\n    > atencion_cliente > rechazo_marca > otro"
+    )
+    assert precedencia in prompt
+
+
+def test_precedencia_mascotas_gana_sobre_reembolsos_en_orden_del_prompt():
+    """No se puede simular el juicio del LLM en un test unitario — lo que
+    sí se puede verificar es que el orden declarado en el prompt (la
+    única fuente de precedencia real, ver build_system_prompt) ubica cada
+    driver nuevo donde el diseño dice: mascotas antes que reembolsos,
+    fraude_publicidad antes que programa_fidelidad, rechazo_marca después
+    de atencion_cliente y antes de otro."""
+    prompt = classifier.build_system_prompt(AVIANCA)
+    linea_precedencia = next(
+        l for l in prompt.splitlines() if l.strip().startswith("cancelacion > demora")
+    )
+    orden_completo = linea_precedencia
+    # La línea de precedencia se parte en dos líneas físicas en el prompt
+    # (ver build_system_prompt) — se reconstruye buscando también la
+    # continuación, que empieza con ">".
+    idx = prompt.splitlines().index(linea_precedencia)
+    siguiente = prompt.splitlines()[idx + 1].strip()
+    if siguiente.startswith(">"):
+        orden_completo += " " + siguiente
+    otra_siguiente = prompt.splitlines()[idx + 2].strip()
+    if otra_siguiente.startswith(">"):
+        orden_completo += " " + otra_siguiente
+
+    posiciones = {
+        d: orden_completo.index(d)
+        for d in (
+            "equipaje", "mascotas", "reembolsos", "cobros_tarifas",
+            "fraude_publicidad", "programa_fidelidad", "atencion_cliente",
+            "rechazo_marca", "otro",
+        )
+    }
+    assert posiciones["equipaje"] < posiciones["mascotas"] < posiciones["reembolsos"]
+    assert posiciones["cobros_tarifas"] < posiciones["fraude_publicidad"] < posiciones["programa_fidelidad"]
+    assert posiciones["atencion_cliente"] < posiciones["rechazo_marca"] < posiciones["otro"]
+
+
 def test_system_prompt_incluye_marca_y_programa_de_fidelidad_correctos():
     """El prompt ya no dice 'Avianca'/'LifeMiles' fijos — sale del perfil
     de la marca que se le pase (Tarea 3)."""
