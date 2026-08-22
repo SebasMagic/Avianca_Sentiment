@@ -15,3 +15,6 @@ deploy/index.html
 # Respaldos locales de la base — nunca al repo
 data/backups/
 deploy/latam.html
+
+# Estado local de Claude Code, incluye worktrees anidados
+.claude/
