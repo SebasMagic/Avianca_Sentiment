@@ -149,6 +149,16 @@
   .kpi.hero::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand)}
   .kpi.hero .kpi-lbl{color:var(--brand-ink)}
   .kpi-val.hero-val{font-size:42px;white-space:nowrap}
+  /* Tasa de queja sobre conversación de servicio (principal) — la tasa
+     vieja, sobre el total de menciones, se conserva DENTRO de la misma
+     tarjeta héroe como línea secundaria subordinada (línea punteada +
+     texto muted), en vez de una segunda tarjeta — comparabilidad con lo
+     ya reportado sin sumar un sexto elemento a un bloque que el cliente
+     pidió compactar. */
+  .kpi-hero-secondary{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:10.5px;color:var(--txt-3);line-height:1.4}
+  /* Explica la diferencia entre las dos tasas en una sola línea, sin
+     jerga — fila propia de ancho completo, debajo de las 5 tarjetas. */
+  .kpis-note{grid-column:1/-1;padding:10px 22px 14px;font-size:10.5px;color:var(--txt-3);border-top:1px solid var(--border);line-height:1.4}
   .kpi-platlist{display:flex;flex-direction:column;gap:5px;margin-top:2px}
   @media (max-width:820px){
     #kpis{grid-template-columns:1fr 1fr}
@@ -1038,13 +1048,26 @@ function renderKpis() {
   const platEntries = Object.entries(DATA.data_quality.by_platform)
     .sort((a, b) => b[1] - a[1]);
 
-  const ratio = k.complaints > 0 ? Math.round(k.total / k.complaints) : null;
+  // Tasa de queja sobre el denominador correcto: la PRINCIPAL ahora es
+  // sobre conversación de servicio (k.complaint_rate_service /
+  // k.service_conversation_total), no sobre el total de menciones — ver
+  // dashboard/aggregate.py. La vieja se conserva como secundaria, dentro
+  // de la misma tarjeta, para no perder comparabilidad con lo ya
+  // reportado. Sin quejas o sin ninguna conversación de servicio medida
+  // todavía, el ratio no tiene sentido como "1 de cada N": 's/d'.
+  const ratioService = (k.complaints > 0 && k.service_conversation_total > 0)
+    ? `1 de cada ${fmtInt(Math.round(k.service_conversation_total / k.complaints))}`
+    : 's/d';
+  const ratioTotal = k.complaints > 0
+    ? `1 de cada ${fmtInt(Math.round(k.total / k.complaints))}`
+    : 's/d';
 
   kpisEl.innerHTML = `
     <div class="kpi hero">
-      <div class="kpi-lbl">Tasa de quejas</div>
-      <div class="kpi-val hero-val">${ratio ? `1 de cada ${fmtInt(ratio)}` : '—'}</div>
-      <div class="kpi-sub">${fmtInt(k.complaints)} quejas de ${fmtInt(k.total)} menciones · ${fmtPct(k.complaint_rate)}</div>
+      <div class="kpi-lbl">Tasa de queja: conversación de servicio</div>
+      <div class="kpi-val hero-val">${ratioService}</div>
+      <div class="kpi-sub">${fmtInt(k.complaints)} quejas de ${fmtInt(k.service_conversation_total)} menciones de servicio · ${fmtPct(k.complaint_rate_service)}</div>
+      <div class="kpi-hero-secondary">Sobre el total de menciones (incluye reacciones a campañas): ${ratioTotal} · ${fmtPct(k.complaint_rate)}</div>
     </div>
     <div class="kpi">
       <div class="kpi-lbl">Menciones totales</div>
@@ -1071,6 +1094,7 @@ function renderKpis() {
           </div>`).join('')}
       </div>
     </div>
+    <div class="kpis-note">Esta tasa cuenta solo a quienes hablan del servicio: vuelos, atención, equipaje, precios. No cuenta reacciones a publicaciones o campañas de marketing, como celebrar un video o un gol.</div>
   `;
 }
 

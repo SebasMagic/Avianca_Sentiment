@@ -892,3 +892,132 @@ def test_upsert_mentions_deja_rating_null_para_no_resenas():
     fila = conn.execute("SELECT * FROM mentions WHERE id = 'm-99'").fetchone()
     assert fila["rating"] is None
     conn.close()
+
+
+# ── is_service_conversation: tasa de queja sobre el denominador correcto ──
+
+def test_migracion_agrega_is_service_conversation_sin_perder_filas():
+    """
+    Migración aditiva: una DB con el schema viejo de `mentions` (sin esa
+    columna) debe ganarla al pasar por init_db, sin perder ninguna fila
+    existente. Las filas viejas quedan en 0 (nunca evaluadas con el prompt
+    nuevo) hasta que la reclasificación las vuelva a pasar por el modelo.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE mentions (
+            id                    TEXT PRIMARY KEY,
+            fingerprint           TEXT NOT NULL UNIQUE,
+            brand                 TEXT NOT NULL DEFAULT 'Avianca',
+            platform              TEXT NOT NULL,
+            source_url            TEXT,
+            text                  TEXT NOT NULL,
+            author                TEXT,
+            published_at          TEXT,
+            date_confidence       TEXT NOT NULL,
+            country               TEXT,
+            likes                 INTEGER DEFAULT 0,
+            shares                INTEGER DEFAULT 0,
+            comments_count        INTEGER DEFAULT 0,
+            sentiment_positive    REAL,
+            sentiment_negative    REAL,
+            sentiment_neutral     REAL,
+            emotion               TEXT,
+            is_complaint          INTEGER DEFAULT 0,
+            complaint_driver      TEXT,
+            classification_status TEXT NOT NULL,
+            raw                   TEXT,
+            fetched_at            TEXT,
+            run_id                TEXT,
+            exclusion_reason      TEXT,
+            rating                INTEGER
+        );
+    """)
+    conn.execute(
+        "INSERT INTO mentions (id, fingerprint, platform, text, "
+        "date_confidence, classification_status, author) "
+        "VALUES ('m1', 'fp1', 'tiktok', 'hola', 'exact', 'classified', 'usuario1')"
+    )
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+
+    db.init_db(conn)  # debe agregar la columna sin tocar el resto del schema
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()}
+    assert "is_service_conversation" in cols
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm1'").fetchone()
+    assert fila["id"] == "m1"
+    assert fila["text"] == "hola"  # dato viejo intacto
+    assert fila["is_service_conversation"] == 0  # fila vieja: no reevaluada aún
+
+    # Idempotente: correrlo dos veces no falla ni duplica la columna.
+    db.init_db(conn)
+    cols_2 = [row[1] for row in conn.execute("PRAGMA table_info(mentions)").fetchall()]
+    assert cols_2.count("is_service_conversation") == 1
+    conn.close()
+
+
+def test_update_classification_persiste_is_service_conversation(tmp_db):
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+    pendientes = db.pending_classification(tmp_db)
+
+    db.update_classification(tmp_db, pendientes[0]["id"], {
+        "sentiment_positive": 0.9, "sentiment_negative": 0.0,
+        "sentiment_neutral": 0.1, "emotion": "happiness",
+        "is_complaint": False, "complaint_driver": None,
+        "is_service_conversation": True,
+    })
+
+    fila = db.all_mentions(tmp_db)[0]
+    assert fila["is_service_conversation"] == 1
+
+
+def test_update_classification_sin_is_service_conversation_no_revienta(tmp_db):
+    """Un `result` armado a mano sin la clave nueva (compatibilidad hacia
+    atrás con llamadores viejos) no debe lanzar KeyError — debe quedar en
+    False, no inventar un True."""
+    run_id = db.start_run(tmp_db, "seed", None)
+    db.upsert_mentions(tmp_db, [_mention()], run_id)
+    pendientes = db.pending_classification(tmp_db)
+
+    db.update_classification(tmp_db, pendientes[0]["id"], {
+        "sentiment_positive": 0.0, "sentiment_negative": 0.9,
+        "sentiment_neutral": 0.1, "emotion": "anger",
+        "is_complaint": True, "complaint_driver": "equipaje",
+    })
+
+    fila = db.all_mentions(tmp_db)[0]
+    assert fila["is_service_conversation"] == 0
+
+
+def test_upsert_mentions_persiste_is_service_conversation_explicito():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.init_db(conn)
+
+    mencion = _mention(mid="m-sc")
+    mencion["is_service_conversation"] = 1
+    db.upsert_mentions(conn, [mencion], run_id="run-1")
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm-sc'").fetchone()
+    assert fila["is_service_conversation"] == 1
+    conn.close()
+
+
+def test_upsert_mentions_is_service_conversation_default_cero():
+    """Una mención recién scrapeada, sin clasificar todavía, nunca debe
+    quedar NULL en is_service_conversation — mismo patrón que is_complaint:
+    0 explícito, no NULL, para que los chequeos booleanos del agregador
+    (dashboard/aggregate.py) no tengan que distinguir NULL de False."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.init_db(conn)
+
+    mencion = _mention(mid="m-100")  # sin "is_service_conversation" en el dict
+    db.upsert_mentions(conn, [mencion], run_id="run-1")
+
+    fila = conn.execute("SELECT * FROM mentions WHERE id = 'm-100'").fetchone()
+    assert fila["is_service_conversation"] == 0
+    conn.close()

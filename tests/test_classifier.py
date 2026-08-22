@@ -242,6 +242,55 @@ def test_fallo_total_devuelve_none_no_neutral(mock_post, mock_sleep):
     assert out == [None]
 
 
+# ── is_service_conversation: conversación de servicio vs. reacción a
+# campaña (tasa de queja sobre el denominador correcto) ──────────────────
+
+def test_service_conversation_true_se_preserva():
+    out = classifier.normalize_result({**OK, "is_service_conversation": True})
+    assert out["is_service_conversation"] is True
+
+
+def test_service_conversation_false_se_preserva_si_no_es_queja():
+    out = classifier.normalize_result({
+        **OK, "is_complaint": False, "complaint_driver": None,
+        "is_service_conversation": False,
+    })
+    assert out["is_service_conversation"] is False
+
+
+def test_service_conversation_ausente_por_defecto_false_si_no_es_queja():
+    raw = {**OK, "is_complaint": False, "complaint_driver": None}
+    raw.pop("is_service_conversation", None)  # no está en la respuesta del modelo
+    out = classifier.normalize_result(raw)
+    assert out["is_service_conversation"] is False
+
+
+def test_queja_fuerza_service_conversation_true_aunque_el_modelo_diga_false():
+    """Invariante no negociable: toda queja es, por definición, conversación
+    de servicio — se fuerza en el código, no solo se le pide al modelo, para
+    que el denominador de complaint_rate_service nunca excluya una queja real
+    por una inconsistencia puntual del LLM."""
+    out = classifier.normalize_result({**OK, "is_service_conversation": False})
+    assert out["is_complaint"] is True
+    assert out["is_service_conversation"] is True
+
+
+def test_system_prompt_explica_conversacion_de_servicio_vs_reaccion_a_campana():
+    prompt = classifier.build_system_prompt(AVIANCA)
+    assert "is_service_conversation" in prompt
+    assert "La mejor aerolínea en mi opinión" in prompt
+    assert "Genial este contenido" in prompt
+    assert "necesito visa" in prompt
+    # La precedencia de drivers (test aparte) no debe verse afectada por
+    # esta inserción — se agrega después de esa explicación, no en medio.
+    precedencia = (
+        "cancelacion > demora > equipaje > mascotas > reembolsos > cobros_tarifas"
+        "\n    > fraude_publicidad > programa_fidelidad > asientos_comida"
+        "\n    > atencion_cliente > rechazo_marca > otro"
+    )
+    assert precedencia in prompt
+
+
 @patch("pipeline.classifier.requests.post")
 def test_classify_texts_envia_el_prompt_de_la_marca_correcta(mock_post):
     """Extremo a extremo: classify_texts(texts, LATAM) debe mandar a

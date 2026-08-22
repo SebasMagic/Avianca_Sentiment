@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS mentions (
     emotion               TEXT,
     is_complaint          INTEGER DEFAULT 0,
     complaint_driver      TEXT,
+    is_service_conversation INTEGER DEFAULT 0,
     classification_status TEXT NOT NULL,
     raw                   TEXT,
     fetched_at            TEXT,
@@ -237,6 +238,7 @@ _FIELDS = [
     "comments_count", "saves", "views", "reach_source",
     "sentiment_positive", "sentiment_negative",
     "sentiment_neutral", "emotion", "is_complaint", "complaint_driver",
+    "is_service_conversation",
     "classification_status", "raw", "fetched_at", "run_id", "rating",
 ]
 
@@ -319,6 +321,24 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # se inventa una estrella para lo que no la tiene.
     if "rating" not in mention_cols:
         conn.execute("ALTER TABLE mentions ADD COLUMN rating INTEGER")
+        conn.commit()
+
+    # is_service_conversation: distingue si el texto expresa una experiencia
+    # u opinión real sobre el SERVICIO de la aerolínea (volar, atención,
+    # equipaje, precios, la marca como proveedor) de una simple reacción a
+    # contenido o campaña de marketing (celebrar un video, un gol, etiquetar
+    # a un amigo, elogiar la pieza publicitaria) — ver pipeline/classifier.py
+    # (build_system_prompt/normalize_result) y dashboard/aggregate.py
+    # (kpis.complaint_rate_service). Mismo patrón que is_complaint: default 0
+    # y forzado a 0/1 explícito en upsert_mentions/update_classification,
+    # nunca NULL, para que las comprobaciones booleanas del agregador no
+    # tengan que distinguir NULL de False. Aditiva sobre bases existentes:
+    # toda fila ya guardada queda en 0 hasta que la reclasificación (marcar
+    # classification_status='unclassified' y correr --classify) la vuelva a
+    # evaluar con el prompt nuevo — no se inventa el valor para lo que ya
+    # estaba clasificado con el prompt viejo.
+    if "is_service_conversation" not in mention_cols:
+        conn.execute("ALTER TABLE mentions ADD COLUMN is_service_conversation INTEGER DEFAULT 0")
         conn.commit()
 
     # Índice sobre brand — se crea acá y no dentro de SCHEMA porque en una
@@ -467,6 +487,7 @@ def upsert_mentions(conn, mentions: list[dict], run_id: str) -> tuple[int, int]:
             "raw": json.dumps(m.get("raw") or {}, ensure_ascii=False),
             "run_id": run_id,
             "is_complaint": int(bool(m.get("is_complaint", 0))),
+            "is_service_conversation": int(bool(m.get("is_service_conversation", 0))),
             "classification_status": m.get("classification_status", "unclassified"),
         }
         placeholders = ", ".join("?" for _ in _FIELDS)
@@ -518,7 +539,8 @@ def update_classification(conn, mention_id: str, result: dict) -> None:
         """UPDATE mentions
            SET sentiment_positive = ?, sentiment_negative = ?,
                sentiment_neutral = ?, emotion = ?, is_complaint = ?,
-               complaint_driver = ?, classification_status = 'classified'
+               complaint_driver = ?, is_service_conversation = ?,
+               classification_status = 'classified'
            WHERE id = ?""",
         (
             result["sentiment_positive"],
@@ -527,6 +549,11 @@ def update_classification(conn, mention_id: str, result: dict) -> None:
             result["emotion"],
             int(bool(result["is_complaint"])),
             result.get("complaint_driver"),
+            # Default False si el resultado no trae la clave (p.ej. un
+            # `result` armado a mano en un test viejo que no la conoce) —
+            # nunca revienta con KeyError; normalize_result() siempre la
+            # incluye en el camino real (ver pipeline/classifier.py).
+            int(bool(result.get("is_service_conversation", False))),
             mention_id,
         ),
     )

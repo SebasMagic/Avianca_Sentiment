@@ -17,6 +17,7 @@ def _m(idx, **kw):
         "sentiment_positive": 0.1, "sentiment_negative": 0.8,
         "sentiment_neutral": 0.1, "emotion": "anger",
         "is_complaint": 1, "complaint_driver": "equipaje",
+        "is_service_conversation": 1,
         "classification_status": "classified",
         "raw": {}, "fetched_at": "2026-08-19T00:00:00+00:00",
     }
@@ -35,6 +36,79 @@ def test_kpis_basicos(tmp_db):
     assert p["kpis"]["total"] == 2
     assert p["kpis"]["complaints"] == 1
     assert p["kpis"]["complaint_rate"] == 50.0
+
+
+# ── Tasa de queja sobre conversación de servicio (denominador correcto) ──
+
+def test_complaint_rate_service_excluye_reacciones_a_campana(tmp_db):
+    """Caso real que motiva el cambio: 1 queja entre 4 menciones da 25%
+    sobre el total, pero solo 2 de esas 4 son conversación de servicio
+    (las otras 2 son gente celebrando una campaña) — sobre ese
+    denominador correcto, la tasa real es 50%."""
+    _seed(tmp_db, [
+        _m(1),  # queja real (is_complaint=1, is_service_conversation=1 por defecto)
+        _m(2, is_complaint=0, complaint_driver=None,
+           is_service_conversation=1, text="La mejor aerolínea en mi opinión"),
+        _m(3, is_complaint=0, complaint_driver=None, is_service_conversation=0,
+           text="Modo mundial activado 💛💙❤️"),
+        _m(4, is_complaint=0, complaint_driver=None, is_service_conversation=0,
+           text="Genial este contenido!🙌🫶❤️"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    k = p["kpis"]
+    assert k["total"] == 4
+    assert k["complaint_rate"] == 25.0  # secundaria, sin cambios
+    assert k["service_conversation_total"] == 2
+    assert k["service_conversation_pct"] == 50.0
+    assert k["complaint_rate_service"] == 50.0  # nueva, principal
+
+
+def test_complaint_rate_service_sin_conversacion_de_servicio_no_divide_por_cero(tmp_db):
+    """Caso límite del enunciado: si NADA es conversación de servicio
+    (todo reacción a campaña), el denominador nuevo es 0 — no debe
+    reventar, debe devolver 0.0 igual que _pct() en cualquier otro caso
+    de denominador vacío."""
+    _seed(tmp_db, [
+        _m(1, is_complaint=0, complaint_driver=None, is_service_conversation=0,
+           text="Ver esa bandera 😍"),
+        _m(2, is_complaint=0, complaint_driver=None, is_service_conversation=0,
+           text="Con la camiseta puesta 🇨🇴🇨🇴🇨🇴"),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    k = p["kpis"]
+    assert k["service_conversation_total"] == 0
+    assert k["complaint_rate_service"] == 0.0
+    assert k["complaint_rate"] == 0.0
+
+
+def test_complaint_rate_service_coincide_con_complaint_rate_cuando_todo_es_servicio(tmp_db):
+    """Cuando el 100% de las menciones son conversación de servicio (nada
+    de ruido de campaña en el dataset), las dos tasas deben coincidir
+    exactamente — mismo numerador, mismo denominador."""
+    _seed(tmp_db, [_m(1), _m(2, is_complaint=0, complaint_driver=None)])
+    p = aggregate.build_payload(tmp_db)
+    k = p["kpis"]
+    assert k["service_conversation_total"] == k["total"]
+    assert k["complaint_rate_service"] == k["complaint_rate"]
+
+
+def test_toda_queja_cuenta_como_conversacion_de_servicio_en_el_agregado(tmp_db):
+    """Invariante del clasificador (is_complaint => is_service_conversation)
+    reflejada en el agregado: una queja marcada is_service_conversation=0
+    en la fila (dato heredado antes de reclasificar, o inconsistencia)
+    igual debe entrar al numerador de complaint_rate_service — el
+    denominador se calcula solo sobre is_service_conversation, así que
+    una queja "huérfana" como esta no debería existir tras reclasificar,
+    pero si existiera, la tasa nunca debe dar negativa ni reventar."""
+    _seed(tmp_db, [
+        _m(1, is_service_conversation=0),  # queja "huérfana": dato heredado
+        _m(2, is_complaint=0, complaint_driver=None, is_service_conversation=1),
+    ])
+    p = aggregate.build_payload(tmp_db)
+    k = p["kpis"]
+    assert k["complaints"] == 1
+    assert k["service_conversation_total"] == 1
+    assert k["complaint_rate_service"] == 100.0
 
 
 def test_timeline_excluye_fechas_desconocidas(tmp_db):

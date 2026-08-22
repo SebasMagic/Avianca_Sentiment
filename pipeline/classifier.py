@@ -2,7 +2,13 @@
 Clasificador de menciones. Único módulo que habla con DeepSeek.
 
 Un solo llamado devuelve sentiment, emoción, si es queja y el driver
-operativo — el driver sale gratis, va en el mismo prompt.
+operativo — el driver sale gratis, va en el mismo prompt. También devuelve
+is_service_conversation: si el texto habla del SERVICIO de la aerolínea
+(volar, atención, equipaje, precios) o solo reacciona a una publicación o
+campaña de marketing sin decir nada del servicio (ver build_system_prompt
+y el docstring de dashboard/aggregate.py, kpis.complaint_rate_service) —
+el campo que separa "conversación de servicio" de "ruido de campaña" en el
+denominador de la tasa de queja.
 
 Diferencias clave con el sentiment_engine del v1:
   - TODAS las plataformas pasan por aquí, incluida 'web'. DataForSEO
@@ -53,6 +59,7 @@ Para cada texto retorna ÚNICAMENTE un JSON con este formato exacto:
   "sentiment_negative": 0.0,
   "sentiment_neutral": 1.0,
   "emotion": "happiness",
+  "is_service_conversation": true,
   "is_complaint": false,
   "complaint_driver": null
 }}
@@ -60,6 +67,25 @@ Para cada texto retorna ÚNICAMENTE un JSON con este formato exacto:
 Reglas:
 - Los tres valores de sentiment deben sumar 1.0
 - emotion es exactamente uno de: "happiness", "anger", "love", "sadness", "neutral"
+- is_service_conversation distingue si el texto habla del SERVICIO de {keyword}
+  (volar con la aerolínea, atención recibida, equipaje, precios/tarifas, la
+  marca como proveedor de un vuelo, o una consulta práctica sobre volar con
+  ella) de si solo REACCIONA a una publicación o campaña de marketing sin decir
+  nada sobre el servicio mismo (celebrar un video, un gol, etiquetar a un
+  amigo, elogiar la pieza publicitaria, ánimo genérico de una campaña como un
+  mundial de fútbol: banderas, "vamos con todo", "qué lindo contenido").
+    true  -> el texto opina, describe o pregunta algo sobre EL SERVICIO,
+             aunque sea en una sola palabra o sea muy positivo. Ejemplos:
+             "La mejor aerolínea en mi opinión" (opinión de servicio, aunque
+             sea positiva); "Para viajar a EEUU necesito visa?" (consulta
+             práctica sobre volar con la marca, no una reacción a contenido).
+    false -> el texto reacciona al POST/CAMPAÑA, no al servicio. Ejemplos:
+             "Genial este contenido!"; "Modo mundial activado"; etiquetar a
+             un amigo sin más comentario; emojis de bandera o de celebración
+             sin mencionar volar, atención, equipaje o precio.
+  Toda queja (is_complaint=true) es SIEMPRE is_service_conversation=true —
+  no existe una queja real de servicio que no sea, por definición,
+  conversación de servicio.
 - is_complaint es true SOLO si es una queja real de un usuario sobre el servicio.
   Es false para contenido promocional, noticias, opinión neutral o contenido positivo.
   También es false para peticiones o sugerencias sin queja de servicio de por
@@ -177,6 +203,15 @@ def normalize_result(raw: dict) -> dict | None:
     elif driver not in COMPLAINT_DRIVERS:
         driver = "otro"
 
+    # Toda queja es, por definición, conversación de servicio (ver el
+    # prompt más arriba) — se fuerza acá, no solo se le pide al modelo, para
+    # que una inconsistencia puntual del LLM (marcar una queja real como
+    # "reacción a campaña") nunca contamine el denominador de
+    # kpis.complaint_rate_service (dashboard/aggregate.py): una queja jamás
+    # puede quedar fuera de la conversación de servicio que ella misma prueba
+    # que existe.
+    is_service_conversation = is_complaint or _to_bool(raw.get("is_service_conversation", False))
+
     return {
         "sentiment_positive": round(pos, 4),
         "sentiment_negative": round(neg, 4),
@@ -184,6 +219,7 @@ def normalize_result(raw: dict) -> dict | None:
         "emotion": emotion,
         "is_complaint": is_complaint,
         "complaint_driver": driver,
+        "is_service_conversation": is_service_conversation,
     }
 
 

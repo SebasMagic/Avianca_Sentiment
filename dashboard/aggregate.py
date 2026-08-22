@@ -96,6 +96,26 @@ reporte y antes que cualquier otra:
     press_excluded_from_kpis) para que nadie lea "tasa de quejas" o
     "total" del bloque 1 y asuma que incluye prensa.
 
+Tasa de queja sobre el denominador correcto (objeción del cliente,
+verificada por él contra la base real): el denominador histórico de
+kpis.complaint_rate es TODA mención dentro de la ventana de reporte,
+incluidas las que nunca opinaron del servicio — Avianca corría una campaña
+de mundial de fútbol y una parte real del volumen es gente celebrando un
+gol o etiquetando amigos bajo el post de marketing ("Maravilloso 👏",
+"Modo mundial activado 💛💙❤️", "Se viene la fiesta mundialista con AV!"),
+no clientes evaluando la aerolínea. Mezclar esas menciones con quienes sí
+hablan del servicio hunde la tasa artificialmente (medido: 15,7% sobre el
+total). pipeline/classifier.py agrega is_service_conversation por mención
+(volar, atención, equipaje, precios, la marca como proveedor, o una
+consulta práctica sobre volar = sí; celebrar contenido o campaña sin decir
+nada del servicio = no) y este módulo expone DOS métricas en kpis:
+complaint_rate_service (NUEVA, principal — "de quienes hablan del
+servicio, cuántos se quejan") y complaint_rate (se conserva tal cual,
+ahora secundaria, para no perder comparabilidad con lo ya reportado). Ver
+build_payload más abajo para el cálculo y las tres claves nuevas
+(service_conversation_total, service_conversation_pct,
+complaint_rate_service).
+
 Corrección de dashboard (objeción del cliente, medida por el cliente
 contra la base real, no re-derivada aquí) — DOS adiciones que no cambian
 ninguna regla de arriba, solo agregan contexto que faltaba:
@@ -632,10 +652,43 @@ def build_payload(conn, brand: str | None = None) -> dict:
     )
     top_operativo = conteo_driver_operativo.most_common(1)
 
+    # Tasa de queja sobre el denominador correcto (Cambio "tasa de servicio"):
+    # el titular histórico (complaint_rate) divide las quejas sobre TODAS las
+    # menciones — celebraciones de campaña incluidas ("Maravilloso 👏",
+    # "Modo mundial activado 💛💙❤️", gente etiquetando amigos bajo un post de
+    # marketing). Esas menciones nunca opinaron del servicio, así que
+    # infladas el denominador y hunden la tasa artificialmente (verificado:
+    # 15,7% sobre el total vs. una tasa mucho más alta sobre quien de verdad
+    # habla de volar). is_service_conversation (pipeline/classifier.py)
+    # distingue "conversación de servicio" (volar, atención, equipaje,
+    # precios, la marca como proveedor, o una consulta práctica sobre volar)
+    # de "reacción a contenido/campaña" (celebrar un video, un gol, etiquetar
+    # a un amigo, elogiar la pieza publicitaria) — ver el prompt para los
+    # casos límite ya decididos: una opinión positiva sobre el servicio SÍ
+    # cuenta ("la mejor aerolínea en mi opinión"), una consulta práctica de
+    # viaje SÍ cuenta ("¿necesito visa?"), un elogio al contenido NO cuenta.
+    # Toda queja es, por definición, conversación de servicio (forzado en
+    # normalize_result) — así que complaints es siempre un subconjunto de
+    # service_mentions una vez reclasificado, y complaint_rate_service nunca
+    # puede superar el 100% en datos consistentes.
+    #
+    # complaint_rate (arriba) se conserva EXACTAMENTE como estaba —
+    # comparabilidad con lo ya reportado — pero pasa a ser la métrica
+    # SECUNDARIA. complaint_rate_service es la nueva PRINCIPAL: responde "de
+    # quienes hablan del servicio, cuántos se quejan", no "de todo lo que se
+    # publicó bajo el nombre de la marca, cuánto es queja". _pct() ya
+    # devuelve 0.0 sobre un denominador de 0 (sin conversación de servicio
+    # todavía) — no hay división por cero.
+    service_mentions = [m for m in mentions if m.get("is_service_conversation")]
+    service_conversation_total = len(service_mentions)
+
     kpis = {
         "total": total,
         "complaints": len(complaints),
         "complaint_rate": _pct(len(complaints), total),
+        "service_conversation_total": service_conversation_total,
+        "service_conversation_pct": _pct(service_conversation_total, total),
+        "complaint_rate_service": _pct(len(complaints), service_conversation_total),
         # Neto sobre etiquetas dominantes, coherente con lo que se muestra
         # en todo el resto del dashboard (ya no promedio de probabilidades).
         "net_sentiment": round(sent_pct["positive"] - sent_pct["negative"], 1),
