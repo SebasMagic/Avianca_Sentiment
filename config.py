@@ -91,6 +91,15 @@ BRANDS = {
         "loyalty_program": "LifeMiles",
         "color": "#F62839",
         "logo": "Logo_wordmark_Avianca_(Colombia).png",
+        # Visibilidad en IA (bloque nuevo) — nombre(s) de marca competidora,
+        # tal cual aparecen como `name`/`keyword` de otra entrada de BRANDS.
+        # Usado por config.get_ai_prompts() para rellenar la plantilla
+        # "¿{brand} o {competitor}?" sin que ningún módulo de captura tenga
+        # que hardcodear "LATAM" en ningún lado — y por
+        # scrapers/dataforseo_ai_visibility.py para marcar qué dominios
+        # citados en las respuestas de IA pertenecen a un competidor
+        # conocido (is_competitor_domain) en vez de a un tercero cualquiera.
+        "competitors": ["LATAM"],
     },
     "LATAM": {
         "name": "LATAM",
@@ -136,6 +145,8 @@ BRANDS = {
         "loyalty_program": "LATAM Pass",
         "color": "#1B0088",
         "logo": None,
+        # Ver comentario equivalente en Avianca.
+        "competitors": ["Avianca"],
     },
 }
 
@@ -157,6 +168,131 @@ def get_brand(name: str) -> dict:
         raise ValueError(
             f"Marca desconocida: {name!r}. Marcas disponibles: {', '.join(BRANDS)}"
         ) from None
+
+
+# ── Visibilidad de marca en respuestas de IA ─────────────────────────────
+#
+# Preguntas que un cliente potencial realmente le haría a un modelo de IA
+# antes de volar — no términos de búsqueda, PREGUNTAS completas en español
+# coloquial, tal como se le pasan a ai_optimization/{platform}/llm_responses
+# (scrapers/dataforseo_ai_prompts.py). Dos categorías:
+#
+#   - AI_VISIBILITY_CATEGORY_PROMPTS: preguntas de CATEGORÍA, sin nombrar
+#     ninguna marca — "¿cuál es la mejor aerolínea...?". La respuesta se
+#     evalúa contra TODAS las marcas de BRANDS a la vez (¿aparece cada una?,
+#     ¿en qué posición?) — es la pregunta que de verdad decide si salimos
+#     "primero o de pasada" cuando nadie nos nombró primero.
+#   - AI_VISIBILITY_BRAND_PROMPT_TEMPLATES: plantillas con {brand} (y,
+#     opcionalmente, {competitor}/{loyalty_program}) que se rellenan por
+#     marca — get_ai_prompts() hace el relleno. Una plantilla con
+#     "{competitor}" se expande una vez POR CADA competidor listado en
+#     brand["competitors"] (hoy: uno por marca, pero el código no asume
+#     que sea exactamente uno).
+#
+# Deliberadamente NO viven acá hardcodeadas por marca ("¿Es confiable
+# Avianca?" / "¿Es confiable LATAM?" como dos entradas separadas) — el set
+# es el mismo para cualquier marca que tenga keyword/loyalty_program en su
+# perfil; una marca nueva en BRANDS queda cubierta sin tocar este archivo
+# más que agregar su propia entrada.
+AI_VISIBILITY_CATEGORY_PROMPTS = [
+    "¿Cuál es la mejor aerolínea para volar dentro de Colombia?",
+    "¿Cuál es la mejor aerolínea para volar desde Colombia hacia otros países de Latinoamérica?",
+]
+
+AI_VISIBILITY_BRAND_PROMPT_TEMPLATES = [
+    "¿Es confiable {brand}?",
+    "¿{brand} o {competitor}?",
+    "Problemas comunes al volar con {brand}",
+    "¿Vale la pena {loyalty_program}?",
+]
+
+
+def get_ai_prompts(brand_name: str) -> list[dict]:
+    """
+    Set completo de prompts a evaluar para `brand_name`: las preguntas de
+    categoría (una sola vez, scope="category", sin `brand` propio — se
+    evalúan contra todas las marcas) más las plantillas de marca ya
+    rellenadas (scope="brand", con `brand`=brand_name).
+
+    Cada entrada: {"prompt": str, "scope": "category"|"brand"}.
+
+    Una plantilla que menciona "{competitor}" se expande una vez por cada
+    nombre en brand["competitors"] (lista vacía o ausente -> esa plantilla
+    no se genera para esta marca, en vez de reventar con un KeyError de
+    formato). Plantillas sin "{competitor}" se expanden una sola vez.
+    """
+    brand = get_brand(brand_name)
+    prompts = [{"prompt": p, "scope": "category"} for p in AI_VISIBILITY_CATEGORY_PROMPTS]
+
+    competitors = brand.get("competitors") or []
+    for template in AI_VISIBILITY_BRAND_PROMPT_TEMPLATES:
+        if "{competitor}" in template:
+            for competitor in competitors:
+                prompts.append({
+                    "prompt": template.format(
+                        brand=brand["keyword"], competitor=competitor,
+                        loyalty_program=brand.get("loyalty_program", ""),
+                    ),
+                    "scope": "brand",
+                })
+        else:
+            prompts.append({
+                "prompt": template.format(
+                    brand=brand["keyword"], competitor="",
+                    loyalty_program=brand.get("loyalty_program", ""),
+                ),
+                "scope": "brand",
+            })
+    return prompts
+
+
+# Modelo usado por scrapers/dataforseo_ai_prompts.py para el endpoint
+# ai_optimization/chat_gpt/llm_responses/live — gpt-4o-mini es el más
+# barato de la lista con soporte completo (ver ai_optimization/chat_gpt/
+# llm_responses/models); verificado con datos reales (2026-08-22):
+# ~$0,00076 por request con max_output_tokens=400, contra los ~$0,0006
+# estimados — cerca, dentro de lo esperable para "centavos".
+AI_VISIBILITY_MODEL = "gpt-4o-mini"
+AI_VISIBILITY_MAX_OUTPUT_TOKENS = 400
+
+# Cuántos ejemplos reales de Q&A trae ai_optimization/llm_mentions/
+# search_mentions/live por marca (scrapers/dataforseo_ai_visibility.py).
+# Costo real observado (2026-08-22): $0,1 de tarifa base + $0,001 por
+# fila — con este límite, ~$0,105 por marca. Sin este límite (default de
+# la API: 100) costó $0,2 en la exploración; 5 alcanza para mostrar
+# "qué dicen textualmente" sin gastar de más.
+LIMIT_AI_SEARCH_MENTIONS = 5
+
+# Share of voice en búsqueda — intención de PROBLEMA vs. intención
+# COMERCIAL, combinadas con brand["keyword"] por get_share_of_voice_
+# keywords() para armar frases tipo "avianca demanda" / "avianca vuelos".
+# Igual que los prompts de arriba: viven acá, genéricas, no repetidas por
+# marca — una marca nueva las hereda automáticamente.
+SHARE_OF_VOICE_PROBLEM_TERMS = ["demanda", "reclamo", "queja", "cancelación", "estafa"]
+SHARE_OF_VOICE_COMMERCIAL_TERMS = ["vuelos", "ofertas", "check in", "reserva", "tiquetes"]
+
+
+def get_share_of_voice_keywords(brand_name: str) -> list[dict]:
+    """
+    Frases de búsqueda "{keyword} {término}" para `brand_name`, cada una
+    etiquetada con su intención ("problema" o "comercial") — usado por
+    scrapers/dataforseo_share_of_voice.py para consultar volumen de
+    búsqueda real (Google Ads y AI search) y comparar cuánto pesa cada
+    intención.
+
+    Cada entrada: {"keyword": str, "intent": "problema"|"comercial"}.
+    """
+    keyword = get_brand(brand_name)["keyword"].lower()
+    result = [
+        {"keyword": f"{keyword} {t}", "intent": "problema"}
+        for t in SHARE_OF_VOICE_PROBLEM_TERMS
+    ]
+    result += [
+        {"keyword": f"{keyword} {t}", "intent": "comercial"}
+        for t in SHARE_OF_VOICE_COMMERCIAL_TERMS
+    ]
+    return result
+
 
 # ── v2 ────────────────────────────────────────────────────────
 

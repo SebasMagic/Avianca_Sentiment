@@ -73,6 +73,162 @@ CREATE TABLE IF NOT EXISTS runs (
     short_text_count  INTEGER DEFAULT 0,
     notes             TEXT
 );
+
+-- ── Visibilidad de marca en respuestas de IA ────────────────────────────
+--
+-- Esto NO son menciones (no son comentarios ni reseñas de un usuario real,
+-- no tienen autor ni texto libre publicado por alguien) — son MÉTRICAS por
+-- marca/modelo/fecha de captura, y viven en tablas propias, nunca como
+-- filas de `mentions`. `captured_at` (no `published_at`) es la fecha que
+-- importa acá: cuándo NOSOTROS medimos el dato, para poder comparar
+-- corridas en el tiempo — ver dashboard/ai_visibility_aggregate.py.
+--
+-- Cinco tablas, una por forma de dato (mismo criterio que separar
+-- `mentions` de `runs`: cada una tiene su propia grilla de columnas, no
+-- tiene sentido forzarlas a un esquema común):
+--
+--   ai_brand_metrics:          mentions + ai_search_volume agregados de
+--                               una marca en respuestas de IA — endpoint
+--                               target_metrics (una marca) o
+--                               multi_target_metrics (todas a la vez,
+--                               source_endpoint lo distingue).
+--   ai_brand_sources:          qué dominios citan los modelos al hablar de
+--                               la marca (aggregated_metrics.sources_domain
+--                               de esos mismos endpoints) — que aparezca el
+--                               dominio de un competidor entre las fuentes
+--                               es el hallazgo que motivó este bloque
+--                               (is_competitor_domain).
+--   ai_prompt_responses:       la respuesta COMPLETA de un modelo a UN
+--                               prompt propio (config.get_ai_prompts) — el
+--                               texto real, no solo un número.
+--   ai_prompt_brand_mentions:  qué marca(s) se evaluaron contra esa
+--                               respuesta y con qué resultado (aparece,
+--                               posición, sentimiento) — separada de
+--                               ai_prompt_responses porque un prompt de
+--                               categoría (sin marca propia) se evalúa
+--                               contra VARIAS marcas a la vez sobre el
+--                               mismo texto de respuesta; no tiene sentido
+--                               duplicar la respuesta por cada marca.
+--   ai_search_mention_examples: ejemplos reales de pregunta+respuesta ya
+--                               indexados por DataForSEO (Google AI
+--                               Overview u otro `platform`) que mencionan
+--                               la marca — endpoint search_mentions;
+--                               complementa ai_prompt_responses con
+--                               preguntas que la gente YA le hace a la IA,
+--                               no solo las que nosotros diseñamos.
+--
+-- Y una tabla de share of voice en búsqueda (Tarea 3, bloque aparte):
+--
+--   search_share_of_voice:     volumen de búsqueda real por keyword
+--                               "marca + término" (p.ej. "avianca demanda"),
+--                               con su intención (problema/comercial) y motor
+--                               (google_ads / ai_search) — endpoints
+--                               keywords_data/google_ads/search_volume y
+--                               ai_optimization/ai_keyword_data/
+--                               keywords_search_volume.
+--
+-- Todas idempotentes vía CREATE TABLE IF NOT EXISTS — tablas nuevas, no
+-- hace falta ALTER TABLE (eso solo aplica a columnas nuevas sobre tablas
+-- YA existentes, ver _migrate). `run_id` en todas referencia `runs.id`
+-- sin FK declarada a propósito (mismo estilo que `mentions.run_id`) —
+-- SQLite no aplica FKs por defecto y esto es solo trazabilidad, no
+-- integridad referencial estricta.
+
+CREATE TABLE IF NOT EXISTS ai_brand_metrics (
+    id                TEXT PRIMARY KEY,
+    brand             TEXT NOT NULL,
+    captured_at       TEXT NOT NULL,
+    domain            TEXT NOT NULL,
+    platform          TEXT NOT NULL,
+    mentions          INTEGER NOT NULL,
+    ai_search_volume  INTEGER NOT NULL,
+    source_endpoint   TEXT NOT NULL,
+    raw               TEXT,
+    run_id            TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_brand_metrics_brand ON ai_brand_metrics(brand);
+CREATE INDEX IF NOT EXISTS idx_ai_brand_metrics_captured ON ai_brand_metrics(captured_at);
+
+CREATE TABLE IF NOT EXISTS ai_brand_sources (
+    id                     TEXT PRIMARY KEY,
+    brand                  TEXT NOT NULL,
+    captured_at            TEXT NOT NULL,
+    cited_domain           TEXT NOT NULL,
+    mentions               INTEGER NOT NULL,
+    ai_search_volume       INTEGER NOT NULL,
+    is_own_domain          INTEGER NOT NULL DEFAULT 0,
+    is_competitor_domain   INTEGER NOT NULL DEFAULT 0,
+    source_endpoint        TEXT NOT NULL,
+    run_id                 TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_brand_sources_brand ON ai_brand_sources(brand);
+CREATE INDEX IF NOT EXISTS idx_ai_brand_sources_captured ON ai_brand_sources(captured_at);
+
+CREATE TABLE IF NOT EXISTS ai_prompt_responses (
+    id                TEXT PRIMARY KEY,
+    captured_at       TEXT NOT NULL,
+    platform          TEXT NOT NULL,
+    model             TEXT NOT NULL,
+    prompt            TEXT NOT NULL,
+    prompt_scope      TEXT NOT NULL,
+    subject_brand     TEXT,
+    response_text     TEXT NOT NULL,
+    input_tokens      INTEGER,
+    output_tokens     INTEGER,
+    money_spent       REAL,
+    raw               TEXT,
+    run_id            TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_responses_captured ON ai_prompt_responses(captured_at);
+
+CREATE TABLE IF NOT EXISTS ai_prompt_brand_mentions (
+    id                     TEXT PRIMARY KEY,
+    response_id            TEXT NOT NULL,
+    brand                  TEXT NOT NULL,
+    appears                INTEGER NOT NULL DEFAULT 0,
+    position               INTEGER,
+    sentiment_positive     REAL,
+    sentiment_negative     REAL,
+    sentiment_neutral      REAL,
+    emotion                TEXT,
+    classification_status  TEXT NOT NULL DEFAULT 'unclassified'
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_brand_mentions_response ON ai_prompt_brand_mentions(response_id);
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_brand_mentions_brand ON ai_prompt_brand_mentions(brand);
+
+CREATE TABLE IF NOT EXISTS ai_search_mention_examples (
+    id                 TEXT PRIMARY KEY,
+    brand              TEXT NOT NULL,
+    captured_at        TEXT NOT NULL,
+    platform           TEXT,
+    question           TEXT,
+    answer             TEXT,
+    ai_search_volume   INTEGER,
+    top_source_domain  TEXT,
+    top_source_url     TEXT,
+    raw                TEXT,
+    run_id             TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_search_mention_examples_brand ON ai_search_mention_examples(brand);
+
+CREATE TABLE IF NOT EXISTS search_share_of_voice (
+    id             TEXT PRIMARY KEY,
+    brand          TEXT NOT NULL,
+    captured_at    TEXT NOT NULL,
+    keyword        TEXT NOT NULL,
+    intent         TEXT NOT NULL,
+    engine         TEXT NOT NULL,
+    search_volume  INTEGER,
+    raw            TEXT,
+    run_id         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_share_of_voice_brand ON search_share_of_voice(brand);
 """
 
 _FIELDS = [
@@ -471,3 +627,217 @@ def last_completed_run_started_at(conn) -> str | None:
         "ORDER BY started_at DESC LIMIT 1"
     ).fetchone()
     return row["started_at"] if row else None
+
+
+# ── Visibilidad de marca en respuestas de IA ─────────────────────────────
+#
+# Las funciones de esta sección solo INSERTAN (no hay dedup por
+# fingerprint: cada captura es una fotografía con su propio `captured_at`,
+# y dos capturas del mismo dato en fechas distintas son dos filas válidas
+# a propósito — es justamente lo que permite comparar corridas en el
+# tiempo, ver docstring de SCHEMA arriba). `run_id` liga cada fila a la
+# corrida de `runs` que la produjo (start_run/finish_run con
+# mode="ai_visibility" — ver pipeline/ai_visibility.py), mismo patrón que
+# ya usa `mentions.run_id`.
+
+
+def insert_ai_brand_metrics(conn, rows: list[dict], run_id: str | None) -> int:
+    """
+    `rows`: [{"brand", "captured_at", "domain", "platform", "mentions",
+    "ai_search_volume", "source_endpoint", "raw"}, ...] — ver
+    scrapers/dataforseo_ai_visibility.py. Devuelve cuántas filas se
+    insertaron.
+    """
+    for r in rows:
+        conn.execute(
+            """INSERT INTO ai_brand_metrics
+               (id, brand, captured_at, domain, platform, mentions,
+                ai_search_volume, source_endpoint, raw, run_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()), r["brand"], r["captured_at"], r["domain"],
+                r["platform"], r["mentions"], r["ai_search_volume"],
+                r["source_endpoint"], json.dumps(r.get("raw") or {}, ensure_ascii=False),
+                run_id,
+            ),
+        )
+    conn.commit()
+    return len(rows)
+
+
+def insert_ai_brand_sources(conn, rows: list[dict], run_id: str | None) -> int:
+    """
+    `rows`: [{"brand", "captured_at", "cited_domain", "mentions",
+    "ai_search_volume", "is_own_domain", "is_competitor_domain",
+    "source_endpoint"}, ...]. Devuelve cuántas filas se insertaron.
+    """
+    for r in rows:
+        conn.execute(
+            """INSERT INTO ai_brand_sources
+               (id, brand, captured_at, cited_domain, mentions,
+                ai_search_volume, is_own_domain, is_competitor_domain,
+                source_endpoint, run_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()), r["brand"], r["captured_at"], r["cited_domain"],
+                r["mentions"], r["ai_search_volume"],
+                int(bool(r.get("is_own_domain", 0))),
+                int(bool(r.get("is_competitor_domain", 0))),
+                r["source_endpoint"], run_id,
+            ),
+        )
+    conn.commit()
+    return len(rows)
+
+
+def insert_ai_prompt_response(conn, response: dict, mentions: list[dict],
+                               run_id: str | None) -> str:
+    """
+    Inserta UNA respuesta de modelo (`response`: {"captured_at",
+    "platform", "model", "prompt", "prompt_scope", "subject_brand",
+    "response_text", "input_tokens", "output_tokens", "money_spent",
+    "raw"}) y sus extracciones por marca (`mentions`: [{"brand",
+    "appears", "position", "sentiment_positive", "sentiment_negative",
+    "sentiment_neutral", "emotion", "classification_status"}, ...] —
+    típicamente una por cada marca de config.BRANDS evaluada contra este
+    texto). Devuelve el id de la respuesta insertada, para quien necesite
+    referenciarla.
+    """
+    response_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO ai_prompt_responses
+           (id, captured_at, platform, model, prompt, prompt_scope,
+            subject_brand, response_text, input_tokens, output_tokens,
+            money_spent, raw, run_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            response_id, response["captured_at"], response["platform"],
+            response["model"], response["prompt"], response["prompt_scope"],
+            response.get("subject_brand"), response["response_text"],
+            response.get("input_tokens"), response.get("output_tokens"),
+            response.get("money_spent"),
+            json.dumps(response.get("raw") or {}, ensure_ascii=False), run_id,
+        ),
+    )
+    for m in mentions:
+        conn.execute(
+            """INSERT INTO ai_prompt_brand_mentions
+               (id, response_id, brand, appears, position,
+                sentiment_positive, sentiment_negative, sentiment_neutral,
+                emotion, classification_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()), response_id, m["brand"],
+                int(bool(m.get("appears", 0))), m.get("position"),
+                m.get("sentiment_positive"), m.get("sentiment_negative"),
+                m.get("sentiment_neutral"), m.get("emotion"),
+                m.get("classification_status", "unclassified"),
+            ),
+        )
+    conn.commit()
+    return response_id
+
+
+def insert_ai_search_mention_examples(conn, rows: list[dict], run_id: str | None) -> int:
+    """
+    `rows`: [{"brand", "captured_at", "platform", "question", "answer",
+    "ai_search_volume", "top_source_domain", "top_source_url", "raw"},
+    ...]. Devuelve cuántas filas se insertaron.
+    """
+    for r in rows:
+        conn.execute(
+            """INSERT INTO ai_search_mention_examples
+               (id, brand, captured_at, platform, question, answer,
+                ai_search_volume, top_source_domain, top_source_url, raw, run_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()), r["brand"], r["captured_at"], r.get("platform"),
+                r.get("question"), r.get("answer"), r.get("ai_search_volume"),
+                r.get("top_source_domain"), r.get("top_source_url"),
+                json.dumps(r.get("raw") or {}, ensure_ascii=False), run_id,
+            ),
+        )
+    conn.commit()
+    return len(rows)
+
+
+def insert_search_share_of_voice(conn, rows: list[dict], run_id: str | None) -> int:
+    """
+    `rows`: [{"brand", "captured_at", "keyword", "intent", "engine",
+    "search_volume", "raw"}, ...]. Devuelve cuántas filas se insertaron.
+    """
+    for r in rows:
+        conn.execute(
+            """INSERT INTO search_share_of_voice
+               (id, brand, captured_at, keyword, intent, engine,
+                search_volume, raw, run_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()), r["brand"], r["captured_at"], r["keyword"],
+                r["intent"], r["engine"], r.get("search_volume"),
+                json.dumps(r.get("raw") or {}, ensure_ascii=False), run_id,
+            ),
+        )
+    conn.commit()
+    return len(rows)
+
+
+# ── Lecturas para el dashboard (dashboard/ai_visibility_aggregate.py) ────
+#
+# Todas devuelven TODAS las filas de la marca (sin filtrar a "la última
+# corrida") — la agregación decide cómo recortar a la captura más
+# reciente (MAX(captured_at)) o cómo armar una serie en el tiempo; esta
+# capa solo lee, no decide qué es "vigente".
+
+def ai_brand_metrics_for_brand(conn, brand: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ai_brand_metrics WHERE brand = ? ORDER BY captured_at DESC",
+        (brand,),
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
+
+
+def ai_brand_sources_for_brand(conn, brand: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ai_brand_sources WHERE brand = ? ORDER BY captured_at DESC",
+        (brand,),
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
+
+
+def ai_prompt_responses_for_brand(conn, brand: str) -> list[dict]:
+    """
+    Respuestas donde `brand` fue una de las marcas evaluadas (prompts
+    propios de esa marca, más los prompts de categoría, que se evalúan
+    contra todas). Cada fila trae el texto completo de la respuesta más
+    los campos de `ai_prompt_brand_mentions` para ESA marca (appears,
+    position, sentiment, emotion) ya incorporados — un JOIN, no dos
+    lecturas que el llamador tenga que cruzar a mano.
+    """
+    rows = conn.execute(
+        """SELECT r.*, m.appears, m.position, m.sentiment_positive,
+                  m.sentiment_negative, m.sentiment_neutral, m.emotion,
+                  m.classification_status
+           FROM ai_prompt_responses r
+           JOIN ai_prompt_brand_mentions m ON m.response_id = r.id
+           WHERE m.brand = ?
+           ORDER BY r.captured_at DESC""",
+        (brand,),
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
+
+
+def ai_search_mention_examples_for_brand(conn, brand: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ai_search_mention_examples WHERE brand = ? ORDER BY captured_at DESC",
+        (brand,),
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
+
+
+def search_share_of_voice_for_brand(conn, brand: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM search_share_of_voice WHERE brand = ? ORDER BY captured_at DESC",
+        (brand,),
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
