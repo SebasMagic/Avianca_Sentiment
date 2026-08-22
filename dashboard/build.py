@@ -225,20 +225,43 @@ def build(db_path: str | None = None, out_dir: str = "dashboard", conn=None,
 DEPLOY_DIR = Path(__file__).parent.parent / "deploy"
 
 
-def stage_for_deploy(html_path: str) -> str:
+# Nombre de archivo en deploy/ por marca — tiene que calzar con las rutas
+# de deploy/vercel.json ("/avianca" -> "/index.html", "/latam" ->
+# "/latam.html"). Avianca es la marca por defecto y por eso hereda el
+# nombre histórico "index.html" (la URL raíz del sitio); cualquier otra
+# marca usa su slug en minúsculas + ".html" — hoy solo LATAM, pero una
+# marca nueva en config.BRANDS cae en la misma regla sin tocar este
+# diccionario, siempre que se le agregue su propia entrada en
+# deploy/vercel.json si se quiere una ruta corta para ella.
+_DEPLOY_FILENAMES = {DEFAULT_BRAND: "index.html"}
+
+
+def _deploy_filename(brand: str) -> str:
+    return _DEPLOY_FILENAMES.get(brand, f"{brand.lower()}.html")
+
+
+def stage_for_deploy(html_path: str, brand: str = DEFAULT_BRAND) -> str:
     """
-    Copia el dashboard a deploy/index.html para publicarlo en Vercel.
+    Copia el dashboard a deploy/<archivo-de-la-marca> para publicarlo en
+    Vercel — deploy/index.html para la marca por defecto (Avianca),
+    deploy/latam.html para LATAM (ver _deploy_filename/_DEPLOY_FILENAMES).
 
-    Brand-agnóstico a propósito: recibe la ruta del HTML ya generado (de
-    cualquier marca) y lo copia tal cual — así --deploy puede stagear el
-    dashboard de Avianca o el de LATAM sin ninguna rama especial aquí.
+    Antes SIEMPRE escribía deploy/index.html sin importar qué marca se
+    hubiera construido — build.py --deploy --brand LATAM pisaba el
+    dashboard de Avianca en vez de tocar latam.html, y latam.html se
+    venía copiando a mano por fuera de este script (fricción real: tarde
+    o temprano se publica una versión desactualizada). `brand` (default:
+    DEFAULT_BRAND, así que el comportamiento sin --brand no cambia) hace
+    que --deploy siempre stagee el archivo correcto para la marca que se
+    está construyendo, cualquiera que sea.
 
-    El index.html queda fuera de git a propósito: contiene los nombres de
-    usuario y los textos de cientos de personas reales. La configuración de
-    deploy/ (vercel.json, robots.txt) sí se versiona; el contenido no.
+    El HTML de deploy/ queda fuera de git a propósito: contiene los
+    nombres de usuario y los textos de cientos de personas reales. La
+    configuración de deploy/ (vercel.json, robots.txt) sí se versiona;
+    el contenido no.
     """
     DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
-    destino = DEPLOY_DIR / "index.html"
+    destino = DEPLOY_DIR / _deploy_filename(brand)
     destino.write_text(Path(html_path).read_text(encoding="utf-8"), encoding="utf-8")
     print(f"[Deploy] listo en {destino} — publicar con:  vercel deploy --prod deploy")
     return str(destino)
@@ -256,4 +279,4 @@ if __name__ == "__main__":
 
     generado = build(brand=args.brand)
     if args.deploy:
-        stage_for_deploy(generado)
+        stage_for_deploy(generado, brand=args.brand)

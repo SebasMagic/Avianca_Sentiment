@@ -245,3 +245,47 @@ def test_media_query_de_tarjetas_moviles_existe_para_el_bloque_6():
     html = build.render(PAYLOAD)
     assert "@media (max-width:680px)" in html
     assert "content:attr(data-label)" in html
+
+
+# ── stage_for_deploy: nombre de archivo correcto por marca (Tarea 4) ─────
+#
+# Bug real: --deploy SIEMPRE escribía deploy/index.html sin importar qué
+# marca se hubiera construido — build.py --deploy --brand LATAM pisaba el
+# dashboard de Avianca, y deploy/latam.html se venía copiando a mano por
+# fuera del script.
+
+def test_stage_for_deploy_sin_marca_escribe_index_html(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "DEPLOY_DIR", tmp_path)
+    origen = tmp_path / "avianca_dashboard_2026-08-22.html"
+    origen.write_text("<html>avianca</html>", encoding="utf-8")
+
+    destino = build.stage_for_deploy(str(origen))
+
+    assert destino.endswith("index.html")
+    assert (tmp_path / "index.html").read_text(encoding="utf-8") == "<html>avianca</html>"
+
+
+def test_stage_for_deploy_latam_escribe_latam_html_no_index(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "DEPLOY_DIR", tmp_path)
+    origen = tmp_path / "latam_dashboard_2026-08-22.html"
+    origen.write_text("<html>latam</html>", encoding="utf-8")
+
+    destino = build.stage_for_deploy(str(origen), brand="LATAM")
+
+    assert destino.endswith("latam.html")
+    assert (tmp_path / "latam.html").read_text(encoding="utf-8") == "<html>latam</html>"
+    assert not (tmp_path / "index.html").exists()  # no pisa el de Avianca
+
+
+def test_stage_for_deploy_avianca_y_latam_conviven_sin_pisarse(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "DEPLOY_DIR", tmp_path)
+    avianca_html = tmp_path / "avianca_dashboard_2026-08-22.html"
+    avianca_html.write_text("<html>avianca</html>", encoding="utf-8")
+    latam_html = tmp_path / "latam_dashboard_2026-08-22.html"
+    latam_html.write_text("<html>latam</html>", encoding="utf-8")
+
+    build.stage_for_deploy(str(avianca_html))
+    build.stage_for_deploy(str(latam_html), brand="LATAM")
+
+    assert (tmp_path / "index.html").read_text(encoding="utf-8") == "<html>avianca</html>"
+    assert (tmp_path / "latam.html").read_text(encoding="utf-8") == "<html>latam</html>"
