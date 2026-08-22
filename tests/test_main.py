@@ -316,3 +316,58 @@ def test_cli_retirar_canal_web_llama_al_modulo_correcto(monkeypatch, tmp_path):
     main.main()
 
     assert llamada["brand"] == "LATAM"
+
+
+def test_cli_visibilidad_ia_llama_al_modulo_correcto_con_el_perfil(monkeypatch, tmp_path):
+    """--visibilidad-ia debe invocar pipeline.ai_visibility.run con la
+    conexión y el PERFIL completo de la marca (no solo el nombre) — mismo
+    contrato que classify_pending.run."""
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    llamada = {}
+
+    def fake_run(conn, brand):
+        llamada["brand"] = brand
+        return {"brand_metrics": 0}
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main.ai_visibility, "run", fake_run)
+    monkeypatch.setattr(
+        "sys.argv", ["main.py", "--visibilidad-ia", "--brand", "LATAM"],
+    )
+
+    main.main()
+
+    assert llamada["brand"]["name"] == "LATAM"
+
+
+def test_cli_comparar_marcas_ia_no_requiere_brand(monkeypatch, tmp_path):
+    """--comparar-marcas-ia invoca pipeline.ai_visibility.run_comparison
+    sin ningún argumento de marca — compara TODAS las de config.BRANDS."""
+    db_file = tmp_path / "test.db"
+
+    def fake_connect(path=None):
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        store_db.init_db(conn)
+        return conn
+
+    llamadas = {"n": 0}
+
+    def fake_run_comparison(conn):
+        llamadas["n"] += 1
+        return {"brand_metrics": 2}
+
+    monkeypatch.setattr(main.db, "connect", fake_connect)
+    monkeypatch.setattr(main.ai_visibility, "run_comparison", fake_run_comparison)
+    monkeypatch.setattr("sys.argv", ["main.py", "--comparar-marcas-ia"])
+
+    main.main()
+
+    assert llamadas["n"] == 1

@@ -17,6 +17,8 @@ main.py — Entry point del pipeline Avianca/LATAM Sentiment Monitor v2.
   python main.py --solo-resenas --brand LATAM    # re-corre SOLO reseñas (Trustpilot, gasta poco)
   python main.py --limpiar-relevancia-social --brand LATAM  # aplica el filtro de hashtag a TikTok ya en la DB (no gasta API)
   python main.py --retirar-canal-web --brand LATAM  # marca las menciones web ya en la DB como excluidas (no gasta API)
+  python main.py --visibilidad-ia --brand LATAM  # captura visibilidad en IA de UNA marca (gasta DataForSEO, centavos)
+  python main.py --comparar-marcas-ia            # comparación directa Avianca vs LATAM (multi_target_metrics, un solo request)
   python main.py --schedule                     # semanal, lunes 8am
 
 `--brand` (default: config.DEFAULT_BRAND = "Avianca") acota TODO el
@@ -65,6 +67,17 @@ normal no debería gastar en ellas sin que alguien lo pida explícitamente;
 a diferencia del canal web, esta decisión no es "las descartamos", es
 "las corremos a propósito, no de rebote"). Se corren con estos flags
 (o llamando run_pipeline con scrapers=[...] a mano) para las dos marcas.
+
+`--visibilidad-ia`/`--comparar-marcas-ia`: visibilidad de marca en
+respuestas de IA (pipeline/ai_visibility.py) — NO son menciones, así que
+no pasan por run_pipeline() ni por SCRAPERS; tienen su propio flujo,
+guardan en tablas propias (store/db.py) y no tocan `mentions`.
+`--visibilidad-ia` es por marca (como `--solo-prensa`): métricas +
+fuentes citadas + ejemplos de Q&A + prompts propios al modelo + share of
+voice en búsqueda, todo para UNA marca (ver --brand). `--comparar-marcas-ia`
+no toma `--brand` a propósito: compara TODAS las marcas de config.BRANDS
+en un solo request (multi_target_metrics), así que se corre una sola vez,
+no una por marca.
 """
 import argparse
 import collections
@@ -75,8 +88,9 @@ import schedule
 
 from config import BACKFILL_SINCE, DEFAULT_BRAND, get_brand
 from pipeline import (
-    classify_pending, engagement_enrichment, instagram_reach_backfill,
-    social_relevance_backfill, source_account_backfill, web_channel_retirement,
+    ai_visibility, classify_pending, engagement_enrichment,
+    instagram_reach_backfill, social_relevance_backfill,
+    source_account_backfill, web_channel_retirement,
 )
 from pipeline.excel_writer import export as export_excel
 from pipeline.normalizer import normalize
@@ -250,6 +264,15 @@ def main():
                         help="marca las menciones platform='web' YA en la DB como excluidas "
                              "(pipeline/web_channel_retirement.py) — no borra filas, marca "
                              "exclusion_reason; no gasta API (ver --brand)")
+    parser.add_argument("--visibilidad-ia", action="store_true",
+                        help="captura visibilidad de marca en respuestas de IA para UNA marca "
+                             "(pipeline/ai_visibility.py: métricas + fuentes citadas + ejemplos "
+                             "de Q&A + prompts propios al modelo + share of voice en búsqueda) "
+                             "— gasta DataForSEO, del orden de centavos (ver --brand)")
+    parser.add_argument("--comparar-marcas-ia", action="store_true",
+                        help="comparación directa entre TODAS las marcas de config.BRANDS "
+                             "(multi_target_metrics, un solo request) — no toma --brand, "
+                             "gasta DataForSEO, del orden de centavos")
     args = parser.parse_args()
 
     # Falla temprano y con mensaje claro si --brand no existe en config.BRANDS,
@@ -302,6 +325,18 @@ def main():
     if args.retirar_canal_web:
         conn = db.connect()
         print(f"[WebChannelRetirement] {web_channel_retirement.run(conn, brand=args.brand)}")
+        conn.close()
+        return
+
+    if args.visibilidad_ia:
+        conn = db.connect()
+        print(f"[AIVisibility] {ai_visibility.run(conn, brand)}")
+        conn.close()
+        return
+
+    if args.comparar_marcas_ia:
+        conn = db.connect()
+        print(f"[AIVisibility] {ai_visibility.run_comparison(conn)}")
         conn.close()
         return
 
