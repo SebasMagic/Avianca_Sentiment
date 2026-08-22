@@ -1,6 +1,6 @@
 """
-Filtro de relevancia para menciones web y para contenido social de
-HASHTAG.
+Filtro de relevancia para menciones web, contenido social de HASHTAG y,
+desde la incorporación de prensa/reseñas, notas de Google News.
 
 Responde una sola pregunta por plataforma: ¿esta mención habla de la
 marca-la-aerolínea, o es ruido?
@@ -16,7 +16,10 @@ verificar 29 videos reales de "#latam", ver docstring de is_relevant):
     ella: no hay forma de comentar un post de @avianca sin que ese post
     sea de Avianca. Filtrar ahí solo descartaría quejas cortas legítimas
     ("me perdieron la maleta", sin la palabra "Avianca" ni "equipaje"
-    explícitos) sin ganar nada a cambio.
+    explícitos) sin ganar nada a cambio. Las reseñas de Trustpilot
+    (platform="resena") comparten el mismo argumento: el dominio que se
+    consulta YA es brand["review_domain"], así que cualquier reseña que
+    devuelva es, por construcción, sobre esa marca.
   - Contenido que es resultado de una búsqueda por HASHTAG — hoy, TikTok
     completo: apify_tiktok.py no tiene otra forma de traer contenido, así
     que TODO lo que llega con platform="tiktok" es, por construcción, un
@@ -24,6 +27,11 @@ verificar 29 videos reales de "#latam", ver docstring de is_relevant):
     hashtag es una coincidencia de texto sobre cualquier tema; el
     contexto NO está garantizado (ver el caso real de "#latam" en el
     docstring de is_relevant).
+  - Contenido que es resultado de una búsqueda por KEYWORD en Google News
+    (platform="prensa", scrapers/dataforseo_news.py) — mismo problema que
+    el hashtag: se filtra con la misma estructura de dos ramas (dominio
+    de medio reconocido, o keyword + contexto aeronáutico), ver
+    _is_press_relevant.
 
 `brand` (el perfil de config.BRANDS / config.get_brand) se recibe como
 parámetro en cada llamada, nunca se resuelve a nivel de módulo — antes
@@ -41,6 +49,7 @@ from config import (
     BLACKLIST_DOMAIN_ROOTS,
     LANG_MIN_STOPWORDS,
     LANG_MIN_WORDS,
+    RECOGNIZED_MEDIA_DOMAINS,
     SPANISH_STOPWORDS,
 )
 
@@ -68,6 +77,16 @@ def _is_blacklisted(domain: str) -> bool:
     Así una sola entrada "rehlat" atrapa rehlat.es, au.rehlat.com y www.rehlat.mx.
     """
     return any(label in BLACKLIST_DOMAIN_ROOTS for label in domain.split("."))
+
+
+def _is_recognized_media_domain(domain: str) -> bool:
+    """
+    Mismo match por etiqueta que _is_blacklisted, pero en sentido
+    contrario: True si `domain` es uno de los medios verificados en
+    config.RECOGNIZED_MEDIA_DOMAINS. Ver el comentario junto a esa
+    constante para la calibración completa.
+    """
+    return any(label in RECOGNIZED_MEDIA_DOMAINS for label in domain.split("."))
 
 
 def _strip_accents(text: str) -> str:
@@ -158,6 +177,38 @@ def _is_hashtag_relevant(mention: dict, brand: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def _is_press_relevant(mention: dict, brand: dict) -> tuple[bool, str]:
+    """
+    Relevancia de una nota de prensa (Google News, scrapers/
+    dataforseo_news.py). Misma estructura de dos ramas que
+    _is_hashtag_relevant, adaptada a prensa (pedido explícito del
+    usuario — ver config.RECOGNIZED_MEDIA_DOMAINS para la calibración):
+
+      1. La nota viene de un medio reconocido (author = dominio de la
+         nota, ver el scraper) — pasa sin exigir contexto aeronáutico
+         explícito, igual que una cuenta oficial de TikTok.
+      2. Si no, relevante solo si el texto menciona la marca Y además
+         trae contexto aeronáutico — una búsqueda de noticias por
+         "LATAM" también trae macroeconomía y sismos regionales que
+         mencionan "Latam" (abreviatura de Latinoamérica) sin hablar de
+         la aerolínea; para "Avianca" (nombre sin ambigüedad) esta rama
+         casi nunca descarta nada real.
+    """
+    domain = (mention.get("author") or "").lower().strip()
+    if _is_recognized_media_domain(domain):
+        return True, ""
+
+    text = mention.get("text") or ""
+    keyword = (brand.get("keyword") or "").lower()
+    if keyword and keyword not in text.lower():
+        return False, "sin_keyword"
+
+    if not _has_aviation_context(text):
+        return False, "sin_contexto_aeronautico"
+
+    return True, ""
+
+
 def is_relevant(mention: dict, brand: dict) -> tuple[bool, str]:
     """
     Devuelve (pasa, razon_de_descarte).
@@ -182,11 +233,21 @@ def is_relevant(mention: dict, brand: dict) -> tuple[bool, str]:
         distingue esos casos porque el video de K-pop también contiene
         "latam" en su texto — hace falta contexto aeronáutico además del
         nombre de la marca.
+      - "prensa": filtro de prensa (ver _is_press_relevant) — una
+        búsqueda de Google News por la keyword de la marca puede traer
+        notas donde la marca se menciona de pasada o, en el caso de
+        "LATAM", notas que no son sobre la aerolínea en absoluto.
+      - "resena": pasa sin evaluar. Una reseña de Trustpilot del dominio
+        propio de la marca (scrapers/dataforseo_reviews.py pide
+        exactamente brand["review_domain"]) es inherentemente relevante
+        — no hay forma de que Trustpilot le atribuya a avianca.com una
+        reseña que no sea sobre Avianca, el mismo argumento que ya exime
+        a los comentarios de Instagram.
       - cualquier otra ("instagram", y cualquier plataforma futura que no
-        sea resultado de hashtag): pasa sin evaluar. Instagram en este
-        pipeline es siempre comentarios de Fase 2 sobre los perfiles
-        oficiales de la marca (brand["instagram_profiles"]) — el post
-        contenedor ya garantiza el contexto, filtrar ahí solo
+        sea resultado de hashtag ni de prensa): pasa sin evaluar. Instagram
+        en este pipeline es siempre comentarios de Fase 2 sobre los
+        perfiles oficiales de la marca (brand["instagram_profiles"]) — el
+        post contenedor ya garantiza el contexto, filtrar ahí solo
         descartaría quejas cortas legítimas.
     """
     platform = mention.get("platform")
@@ -212,5 +273,8 @@ def is_relevant(mention: dict, brand: dict) -> tuple[bool, str]:
 
     if platform == "tiktok":
         return _is_hashtag_relevant(mention, brand)
+
+    if platform == "prensa":
+        return _is_press_relevant(mention, brand)
 
     return True, ""

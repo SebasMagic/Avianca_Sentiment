@@ -239,3 +239,97 @@ def test_hashtag_cuenta_no_oficial_con_nombre_parecido_si_se_evalua():
     )
     assert ok is False
     assert razon == "sin_keyword"
+
+
+# ── prensa (Google News, scrapers/dataforseo_news.py) ──────────────────
+#
+# Misma estructura de dos ramas que el filtro de hashtag: dominio de
+# medio reconocido, o keyword + contexto aeronáutico. Casos calibrados
+# contra datos reales de la API (2026-08-21/22, ver
+# config.RECOGNIZED_MEDIA_DOMAINS y .superpowers/prensa-resenas.md).
+
+def _prensa(text, author=None):
+    return {"platform": "prensa", "text": text, "author": author}
+
+
+def test_prensa_pasa_con_keyword_y_contexto_aeronautico():
+    ok, razon = is_relevant(
+        _prensa("Avianca anuncia el desenlace de la polémica con Yeferson Cossio: "
+                "el influencer no podrá volar con la aerolínea durante un año",
+                author="unmedio-no-listado.co"),
+        AVIANCA,
+    )
+    assert ok is True
+    assert razon == ""
+
+
+def test_prensa_descarta_mencion_de_pasada_sin_contexto_ni_medio_reconocido():
+    """Caso real: la keyword "LATAM" también es la abreviatura de
+    Latinoamérica — una nota sobre porcicultura o sobre un sindicato que
+    de pura casualidad usa "Latam" en el texto no es cobertura de la
+    aerolínea."""
+    ok, razon = is_relevant(
+        _prensa("El sindicato Latam rechaza la derogación de once circulares "
+                "laborales en Colombia", author="latamgremial.com"),
+        LATAM,
+    )
+    assert ok is False
+    assert razon == "sin_contexto_aeronautico"
+
+
+def test_prensa_descarta_nota_sin_la_keyword_en_absoluto():
+    ok, razon = is_relevant(
+        _prensa("El aeropuerto El Dorado bate récord de pasajeros este semestre",
+                author="unmedio-no-listado.co"),
+        AVIANCA,
+    )
+    assert ok is False
+    assert razon == "sin_keyword"
+
+
+def test_prensa_medio_reconocido_pasa_sin_exigir_contexto_aeronautico():
+    """Caso real: Blu Radio publicó "LATAM transporta gratis 36 toneladas
+    de ayuda al Chocó" — genuinamente sobre la aerolínea, pero sin
+    ninguna palabra de AVIATION_CONTEXT_WORDS en el título."""
+    ok, razon = is_relevant(
+        _prensa("LATAM transporta gratis 36 toneladas de ayuda al Chocó; "
+                "ya suma 119 toneladas por el terremoto", author="www.bluradio.com"),
+        LATAM,
+    )
+    assert ok is True
+    assert razon == ""
+
+
+def test_prensa_medio_reconocido_es_por_etiqueta_de_dominio():
+    """"www.eltiempo.com" y "eltiempo.com" deben reconocerse igual — el
+    match es por etiqueta, como _is_blacklisted."""
+    for dominio in ["www.eltiempo.com", "eltiempo.com", "amp.eltiempo.com"]:
+        ok, razon = is_relevant(_prensa("cualquier titular sin contexto", author=dominio), AVIANCA)
+        assert ok is True, dominio
+        assert razon == "", dominio
+
+
+def test_prensa_medio_no_reconocido_si_se_evalua_por_contexto():
+    """Caso real: forbes.co trajo una nota sobre IA antifraude sin ninguna
+    relación con la aerolínea al buscar "LATAM" — forbes.co NO está en
+    RECOGNIZED_MEDIA_DOMAINS a propósito, así que cae a la rama de
+    keyword + contexto y se descarta."""
+    ok, razon = is_relevant(
+        _prensa("Del tribunal a la primera IA antifraude certificada en Latam",
+                author="forbes.co"),
+        LATAM,
+    )
+    assert ok is False
+
+
+def test_prensa_avianca_no_ambiguo_pasa_con_solo_keyword_y_contexto():
+    """Para "Avianca" (nombre propio sin ambigüedad, a diferencia de
+    "LATAM") la keyword + contexto alcanza sin necesidad de whitelist."""
+    ok, razon = is_relevant(
+        _prensa("Yeferson Cossio no viajará en Avianca hasta 2027: así se resolvió "
+                "la polémica del influencer con la aerolínea",
+                author="undiariolocal.com"),
+        AVIANCA,
+    )
+    assert ok is True
+    assert razon == ""
