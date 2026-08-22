@@ -24,19 +24,31 @@ def run(conn, brand: dict) -> dict:
         return {"pendientes": 0, "clasificadas": 0, "fallidas": 0}
 
     print(f"[Classify] clasificando {len(pendientes)} menciones de {brand['name']}...")
-    resultados = classify_texts([m["text"] for m in pendientes], brand)
 
     clasificadas = 0
     fallidas = 0
 
-    for mention, resultado in zip(pendientes, resultados):
-        if resultado is None:
-            fallidas += 1
-            continue
-        db.update_classification(conn, mention["id"], resultado)
-        clasificadas += 1
+    # Se persiste por tramos, no al final. Antes se llamaba al LLM para TODAS
+    # las pendientes y recién después se escribía: con miles de menciones eso
+    # son decenas de minutos en los que cualquier interrupción perdía el
+    # trabajo completo — y el dinero ya gastado en esas llamadas. Escribir
+    # cada tramo hace la corrida reanudable: lo ya clasificado queda firme y
+    # al volver a correr solo se piden las que siguen pendientes.
+    TRAMO = 100
 
-    print(f"[Classify] {clasificadas} clasificadas, {fallidas} fallidas")
+    for inicio in range(0, len(pendientes), TRAMO):
+        tramo = pendientes[inicio:inicio + TRAMO]
+        resultados = classify_texts([m["text"] for m in tramo], brand)
+
+        for mention, resultado in zip(tramo, resultados):
+            if resultado is None:
+                fallidas += 1
+                continue
+            db.update_classification(conn, mention["id"], resultado)
+            clasificadas += 1
+
+        print(f"[Classify] {clasificadas}/{len(pendientes)} clasificadas"
+              f" ({fallidas} fallidas)", flush=True)
     return {
         "pendientes": len(pendientes),
         "clasificadas": clasificadas,
