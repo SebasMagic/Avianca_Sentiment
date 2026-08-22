@@ -87,7 +87,7 @@ def test_render_titulo_y_color_avianca_salen_del_perfil():
     """Sin --brand (default), el look de Avianca se conserva exactamente:
     su rojo de marca y su logo PNG embebido — no un wordmark."""
     html = build.render(PAYLOAD)
-    assert "<title>Avianca — Social Listening</title>" in html
+    assert "<title>Avianca: Social Listening</title>" in html
     assert "--brand:#F62839;" in html
     assert "--brand-ink:#C81030;" in html
     assert "data:image/png;base64," in html
@@ -97,7 +97,7 @@ def test_render_titulo_y_color_avianca_salen_del_perfil():
 
 def test_render_titulo_y_color_latam_salen_del_perfil():
     html = build.render(PAYLOAD, brand_name="LATAM")
-    assert "<title>LATAM — Social Listening</title>" in html
+    assert "<title>LATAM: Social Listening</title>" in html
     assert "--brand:#1B0088;" in html
     assert "__BRAND_" not in html
 

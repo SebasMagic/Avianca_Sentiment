@@ -176,7 +176,10 @@ def render(payload: dict, template_path: str = str(TEMPLATE),
         html = html.replace(BRAND_LOGO_MARKER, _brand_logo_html(profile))
 
     if BRAND_TITLE_MARKER in html:
-        html = html.replace(BRAND_TITLE_MARKER, f"{profile['name']} — Social Listening")
+        # Sin guion largo (Cambio 2b, ajuste visual pedido por el cliente):
+        # esto termina en el <title> de la pestaña del navegador, texto
+        # visible, no un comentario interno.
+        html = html.replace(BRAND_TITLE_MARKER, f"{profile['name']}: Social Listening")
 
     if BRAND_NAME_MARKER in html:
         html = html.replace(BRAND_NAME_MARKER, profile["name"])

@@ -136,29 +136,38 @@
      una columna más ancha que las 4 secundarias para que "1 de cada N" nunca
      tenga que partirse en dos líneas. */
   #kpis{display:grid;grid-template-columns:1.7fr repeat(4,1fr);padding:0;overflow:hidden}
-  .kpi{padding:18px 22px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);position:relative;min-width:0}
+  /* Compactado ~40% (Cambio 2a, pedido por el cliente: "el número héroe
+     ocupa una pantalla entera"). El padding de cada tarjeta y el tamaño
+     del número héroe bajan ~40% (18/22px -> 11/14px, 42px -> 25px); las
+     etiquetas mono en mayúsculas (.kpi-lbl) y el texto de apoyo (.kpi-sub)
+     NO bajan en la misma proporción -- ya estaban cerca del piso legible
+     (9.5-11px) y cortarlos 40% los habría dejado ilegibles (~5.7px). La
+     jerarquía se conserva por RELACIÓN entre tamaños (héroe > valor
+     secundario > etiqueta), no por mantener cada número absoluto igual de
+     grande que antes. Verificado con Playwright a 1440/1024/390px. */
+  .kpi{padding:11px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);position:relative;min-width:0}
   .kpi:last-child{border-right:none}
-  .kpi-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);margin-bottom:8px}
-  .kpi-val{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--txt);line-height:1;display:flex;align-items:baseline;gap:8px}
-  .kpi-val small{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--txt-2)}
-  .kpi-sub{margin-top:8px;font-size:11px;color:var(--txt-2);display:flex;align-items:center}
+  .kpi-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);margin-bottom:5px}
+  .kpi-val{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--txt);line-height:1;display:flex;align-items:baseline;gap:6px}
+  .kpi-val small{font-family:var(--sans);font-size:10px;font-weight:400;color:var(--txt-2)}
+  .kpi-sub{margin-top:5px;font-size:10.5px;color:var(--txt-2);display:flex;align-items:center}
   /* El KPI héroe (Cambio 2): la tasa de quejas es el número que lidera el
      reporte — no el sentiment neto. Exactamente un héroe por vista
      (ver dataviz: "Hero figure ... Exactly one per view"). */
   .kpi.hero{background:linear-gradient(180deg, var(--brand-dim), transparent 68%)}
   .kpi.hero::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand)}
   .kpi.hero .kpi-lbl{color:var(--brand-ink)}
-  .kpi-val.hero-val{font-size:42px;white-space:nowrap}
+  .kpi-val.hero-val{font-size:25px;white-space:nowrap}
   /* Tasa de queja sobre conversación de servicio (principal) — la tasa
      vieja, sobre el total de menciones, se conserva DENTRO de la misma
      tarjeta héroe como línea secundaria subordinada (línea punteada +
      texto muted), en vez de una segunda tarjeta — comparabilidad con lo
      ya reportado sin sumar un sexto elemento a un bloque que el cliente
      pidió compactar. */
-  .kpi-hero-secondary{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:10.5px;color:var(--txt-3);line-height:1.4}
+  .kpi-hero-secondary{margin-top:6px;padding-top:5px;border-top:1px dashed var(--border);font-size:10px;color:var(--txt-3);line-height:1.35}
   /* Explica la diferencia entre las dos tasas en una sola línea, sin
      jerga — fila propia de ancho completo, debajo de las 5 tarjetas. */
-  .kpis-note{grid-column:1/-1;padding:10px 22px 14px;font-size:10.5px;color:var(--txt-3);border-top:1px solid var(--border);line-height:1.4}
+  .kpis-note{grid-column:1/-1;padding:6px 14px 9px;font-size:10px;color:var(--txt-3);border-top:1px solid var(--border);line-height:1.35}
   .kpi-platlist{display:flex;flex-direction:column;gap:5px;margin-top:2px}
   @media (max-width:820px){
     #kpis{grid-template-columns:1fr 1fr}
@@ -741,7 +750,7 @@
 
   <div class="two-col">
     <section id="b3">
-      <h2>¿De qué se queja la gente? <span class="h2-sub">— el motivo por el que existe este reporte</span></h2>
+      <h2>¿De qué se queja la gente? <span class="h2-sub">: el motivo por el que existe este reporte</span></h2>
       <div class="card">
         <div class="driver-toolbar">
           <p class="driver-insight" id="driverInsight"></p>
@@ -767,7 +776,7 @@
         <div>
           <div class="donut-wrap">
             <canvas id="chSentiment"></canvas>
-            <div class="donut-center"><div class="donut-num" id="donutNum">—</div><div class="donut-lbl" id="donutLbl">clasificadas</div></div>
+            <div class="donut-center"><div class="donut-num" id="donutNum">s/d</div><div class="donut-lbl" id="donutLbl">clasificadas</div></div>
           </div>
           <div class="sent-legend" id="sentLegend"></div>
         </div>
@@ -804,26 +813,26 @@
         <tbody id="tbody"></tbody></table></div>
       <p id="conteoTabla" class="muted"></p></div></section>
 
-  <section id="b7"><h2>Quejas con más impacto <span class="h2-sub">— por alcance propio cuando existe (TikTok); por interacciones cuando no (Instagram, sin alcance propio)</span></h2><div id="topQuejas"></div></section>
+  <section id="b7"><h2>Quejas con más impacto <span class="h2-sub">: por alcance propio cuando existe (TikTok); por interacciones cuando no (Instagram, sin alcance propio)</span></h2><div id="topQuejas"></div></section>
 
   <section id="b8">
-    <h2>Calidad de los datos <span class="h2-sub">— qué tan confiable es esto</span></h2>
+    <h2>Calidad de los datos <span class="h2-sub">: qué tan confiable es esto</span></h2>
     <div id="calidad" class="card"></div>
   </section>
 
   <div class="two-col">
     <section id="b9a">
-      <h2>Reseñas <span class="h2-sub">— Trustpilot, suman a la conversación de usuarios</span></h2>
+      <h2>Reseñas <span class="h2-sub">: Trustpilot, suman a la conversación de usuarios</span></h2>
       <div class="card" id="reviewsCard"></div>
     </section>
     <section id="b9b">
-      <h2>Cobertura de prensa <span class="h2-sub">— fuera de la tasa de quejas del bloque 1</span></h2>
+      <h2>Cobertura de prensa <span class="h2-sub">: fuera de la tasa de quejas del bloque 1</span></h2>
       <div class="card" id="pressCard"></div>
     </section>
   </div>
 
   <section id="b10">
-    <h2>Visibilidad en respuestas de IA <span class="h2-sub">— cuando alguien le pregunta a un modelo en vez de a Google</span></h2>
+    <h2>Visibilidad en respuestas de IA <span class="h2-sub">: cuando alguien le pregunta a un modelo en vez de a Google</span></h2>
   </section>
 
   <div class="two-col">
@@ -839,7 +848,7 @@
 
   <div class="two-col">
     <section id="b10c">
-      <h2>¿Salimos al preguntar por la categoría? <span class="h2-sub">— sin nombrar a nadie</span></h2>
+      <h2>¿Salimos al preguntar por la categoría? <span class="h2-sub">: sin nombrar a nadie</span></h2>
       <div class="card" id="aivCategory"></div>
     </section>
     <section id="b10d">
@@ -849,16 +858,16 @@
   </div>
 
   <section id="b10e">
-    <h2>Lo que ya le preguntan sobre nosotros <span class="h2-sub">— indexado de forma independiente, no son nuestros prompts</span></h2>
+    <h2>Lo que ya le preguntan sobre nosotros <span class="h2-sub">: indexado de forma independiente, no son nuestros prompts</span></h2>
     <div class="card" id="aivSearchExamples"></div>
   </section>
 
   <section id="b11">
-    <h2>Share of voice en búsqueda <span class="h2-sub">— intención de problema vs. intención comercial</span></h2>
+    <h2>Share of voice en búsqueda <span class="h2-sub">: intención de problema vs. intención comercial</span></h2>
     <div class="card" id="sovCard"></div>
   </section>
 
-  <footer>__BRAND_NAME__ · Social Listening — reporte autocontenido, generado sin conexión a servidores externos.</footer>
+  <footer>__BRAND_NAME__ · Social Listening, reporte autocontenido, generado sin conexión a servidores externos.</footer>
 </div>
 
 <script>__CHARTJS__</script>
@@ -956,7 +965,7 @@ const fmtInt = n => (n ?? 0).toLocaleString('es-CO');
 const fmtSigned = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 const fmtPct = n => (n ?? 0).toFixed(1) + '%';
 function fmtDate(iso, opts) {
-  if (!iso) return '—';
+  if (!iso) return 's/d';
   const s = String(iso);
   // Se construye la fecha con componentes locales a propósito. `new Date("2026-01-01")`
   // se interpreta como medianoche UTC, y al renderizar en Colombia (UTC-5) sale
@@ -972,7 +981,7 @@ function fmtDate(iso, opts) {
 // de "11 de ago de 26". Mismos componentes locales que fmtDate (nunca
 // Date.parse de un ISO puro: se corre por zona horaria — ver su comentario).
 function fmtDateShort(iso) {
-  if (!iso) return '—';
+  if (!iso) return 's/d';
   const p = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!p) return String(iso).slice(0, 10);
   return `${p[3]}/${p[2]}/${p[1].slice(2)}`;
@@ -1036,7 +1045,7 @@ function renderKpis() {
   if (k.total === 0) {
     document.getElementById('rango').textContent = `Sin menciones registradas todavía · ${BRAND_LABEL}`;
     kpisEl.classList.add('empty');
-    kpisEl.innerHTML = `<p class="block-empty">Todavía no hay menciones recolectadas para ${esc(BRAND_LABEL)} — este bloque se llena solo en cuanto arranque la recolección.</p>`;
+    kpisEl.innerHTML = `<p class="block-empty">Todavía no hay menciones recolectadas para ${esc(BRAND_LABEL)}. Este bloque se llena solo en cuanto arranque la recolección.</p>`;
     return;
   }
   kpisEl.classList.remove('empty');
@@ -1076,12 +1085,12 @@ function renderKpis() {
     </div>
     <div class="kpi">
       <div class="kpi-lbl">Sentiment neto</div>
-      <div class="kpi-val" style="font-size:19px">${fmtSigned(k.net_sentiment)}</div>
+      <div class="kpi-val" style="font-size:14px">${fmtSigned(k.net_sentiment)}</div>
       <div class="kpi-sub"><span class="dot" style="background:${TONE_COLOR[tone]};margin-right:6px"></span>${sentimentWord(k.net_sentiment)} · por etiqueta dominante</div>
     </div>
     <div class="kpi">
       <div class="kpi-lbl">Rango de fechas</div>
-      <div class="kpi-val" style="font-size:15px">${fmtDate(k.date_from,{day:'2-digit',month:'short'})} → ${fmtDate(k.date_to,{day:'2-digit',month:'short'})}</div>
+      <div class="kpi-val" style="font-size:11px">${fmtDate(k.date_from,{day:'2-digit',month:'short'})} → ${fmtDate(k.date_to,{day:'2-digit',month:'short'})}</div>
       <div class="kpi-sub">${DATA.timeline.length} días con datos</div>
     </div>
     <div class="kpi">
@@ -1122,7 +1131,7 @@ function renderRepHealth() {
     return;
   }
   if (k.complaints === 0) {
-    el.innerHTML = `<p class="block-empty">Sin quejas registradas todavía para ${esc(BRAND_LABEL)} — este indicador se activa en cuanto haya al menos una queja clasificada.</p>`;
+    el.innerHTML = `<p class="block-empty">Sin quejas registradas todavía para ${esc(BRAND_LABEL)}. Este indicador se activa en cuanto haya al menos una queja clasificada.</p>`;
     return;
   }
 
@@ -1131,20 +1140,20 @@ function renderRepHealth() {
 
   el.innerHTML = `
     <div class="rep-stat">
-      <div class="rep-lbl">Salud reputacional — no es lo mismo que la tasa de quejas</div>
+      <div class="rep-lbl">Salud reputacional: no es lo mismo que la tasa de quejas</div>
       <div class="rep-val">${fmtPct(r.pct_of_complaints)}</div>
-      <div class="rep-sentence">de las quejas <b>no son sobre un fallo puntual — son rechazo a la marca</b> (${fmtInt(r.count)} de ${fmtInt(k.complaints)} quejas clasificadas como <b>${esc(DRIVER_LABEL.rechazo_marca)}</b>: insultos o rechazo genérico, sin una causa operativa concreta detrás).</div>
+      <div class="rep-sentence">de las quejas <b>no son sobre un fallo puntual: son rechazo a la marca</b> (${fmtInt(r.count)} de ${fmtInt(k.complaints)} quejas clasificadas como <b>${esc(DRIVER_LABEL.rechazo_marca)}</b>: insultos o rechazo genérico, sin una causa operativa concreta detrás).</div>
     </div>
     <div class="rep-divider"></div>
     <div class="rep-compare">
-      <div class="rep-lbl">Para contraste — el problema operativo #1</div>
+      <div class="rep-lbl">Para contraste: el problema operativo #1</div>
       ${op ? `
         <div class="rep-compare-row">
           <span class="rc-name">${esc(DRIVER_LABEL[op.driver] || op.driver)}</span>
           <span class="rc-val">${fmtPct(op.pct_of_complaints)}</span>
         </div>
-        <div class="rep-compare-note">${fmtInt(op.count)} de ${fmtInt(k.complaints)} quejas — un problema concreto y operativo (se arregla con logística), de naturaleza distinta al rechazo de marca de la izquierda (no se arregla solo con logística).</div>
-      ` : `<div class="rep-compare-note">Todas las quejas clasificadas son rechazo de marca — no hay, hoy, ningún driver operativo con volumen propio que contrastar.</div>`}
+        <div class="rep-compare-note">${fmtInt(op.count)} de ${fmtInt(k.complaints)} quejas: un problema concreto y operativo (se arregla con logística), de naturaleza distinta al rechazo de marca de la izquierda (no se arregla solo con logística).</div>
+      ` : `<div class="rep-compare-note">Todas las quejas clasificadas son rechazo de marca: no hay, hoy, ningún driver operativo con volumen propio que contrastar.</div>`}
     </div>
   `;
 }
@@ -1173,7 +1182,7 @@ const ACCOUNT_META = {
   latamairlines_peru:      { label: 'LATAM Perú',     tag: 'local' },
 };
 function accountMeta(account) {
-  if (account == null) return { label: 'Cuenta sin registrar', tag: 'histórico — ver bloque 8' };
+  if (account == null) return { label: 'Cuenta sin registrar', tag: 'histórico, ver bloque 8' };
   return ACCOUNT_META[account] || { label: '@' + account, tag: 'otra cuenta' };
 }
 
@@ -1209,8 +1218,8 @@ function renderAccountBreakdown() {
   }).join('');
 
   el.innerHTML = `
-    <div class="q-block-title">Tasa de queja por cuenta de origen — Instagram</div>
-    <p class="acct-note">La tasa de quejas del titular (arriba) es el agregado de <b style="color:var(--txt)">todas</b> las cuentas de Instagram de ${esc(BRAND_LABEL)}. Cuando una marca publica desde una cuenta global de alcance continental junto a cuentas locales, promediarlas en un solo número esconde la diferencia real entre canales — por eso se desglosa aquí, junto al titular, no solo en "Calidad de los datos" (bloque 8).</p>
+    <div class="q-block-title">Tasa de queja por cuenta de origen: Instagram</div>
+    <p class="acct-note">La tasa de quejas del titular (arriba) es el agregado de <b style="color:var(--txt)">todas</b> las cuentas de Instagram de ${esc(BRAND_LABEL)}. Cuando una marca publica desde una cuenta global de alcance continental junto a cuentas locales, promediarlas en un solo número esconde la diferencia real entre canales, por eso se desglosa aquí, junto al titular, no solo en "Calidad de los datos" (bloque 8).</p>
     <div class="scroll-x">
       <table class="acct-table">
         <thead><tr><th>Cuenta</th><th>Menciones</th><th>% de Instagram</th><th>Tasa de queja</th></tr></thead>
@@ -1230,7 +1239,7 @@ function renderTimeline() {
   // menciones sin fecha) no hay serie que dibujar — un chart con ejes y
   // cero puntos se leería como roto, no como "sin datos todavía".
   if (!rows.length) {
-    card.innerHTML = `<p class="block-empty">Sin menciones con fecha confiable todavía para ${esc(BRAND_LABEL)} — este gráfico se activa en cuanto haya menciones fechadas.</p>`;
+    card.innerHTML = `<p class="block-empty">Sin menciones con fecha confiable todavía para ${esc(BRAND_LABEL)}. Este gráfico se activa en cuanto haya menciones fechadas.</p>`;
     return;
   }
 
@@ -1363,7 +1372,7 @@ function renderDrivers(month) {
   const top = rows[0];
 
   document.getElementById('driverInsight').innerHTML = top && top.count > 0
-    ? `El motivo #1 es <b>${esc(DRIVER_LABEL[top.driver])}</b> — ${fmtInt(top.count)} quejas (${fmtPct(top.pct)} del periodo mostrado).`
+    ? `El motivo #1 es <b>${esc(DRIVER_LABEL[top.driver])}</b>: ${fmtInt(top.count)} quejas (${fmtPct(top.pct)} del periodo mostrado).`
     : `No hay quejas con driver asignado en el periodo seleccionado.`;
 
   document.getElementById('driverList').innerHTML = rows.map(r => `
@@ -1439,7 +1448,7 @@ function renderHeatmap() {
   // Degradado: sin quejas con driver asignado, la tabla sería puro "0" en
   // cada celda — nada que cruzar todavía.
   if (!DATA.driver_by_platform.length) {
-    el.innerHTML = `<p class="block-empty">Sin quejas clasificadas todavía para ${esc(BRAND_LABEL)} — el cruce driver × plataforma aparece en cuanto haya datos.</p>`;
+    el.innerHTML = `<p class="block-empty">Sin quejas clasificadas todavía para ${esc(BRAND_LABEL)}. El cruce driver × plataforma aparece en cuanto haya datos.</p>`;
     return;
   }
 
@@ -1508,7 +1517,7 @@ function renderSentiment() {
   // El centro de la dona ya no es un número gigante en verde "triunfal"
   // (Cambio 2): es el conteo neutral de menciones clasificadas. El neto va
   // como línea secundaria dentro de la leyenda, sin celebrar ni alarmar.
-  document.getElementById('donutNum').textContent = hasData ? fmtInt(s.classified_count) : '—';
+  document.getElementById('donutNum').textContent = hasData ? fmtInt(s.classified_count) : 's/d';
   document.getElementById('donutLbl').textContent = hasData ? 'clasificadas' : 'sin datos';
 
   const tone = sentimentTone(k.net_sentiment);
@@ -1532,7 +1541,7 @@ function renderSentiment() {
         <div class="sent-legend-row" style="color:var(--txt-3);font-size:10.5px">
           ${fmtInt(s.classified_count)} menciones clasificadas, por etiqueta dominante
         </div>`
-    : `<div class="sent-legend-row" style="color:var(--txt-3)">Sin menciones clasificadas todavía — no hay datos de sentiment que mostrar.</div>`;
+    : `<div class="sent-legend-row" style="color:var(--txt-3)">Sin menciones clasificadas todavía. No hay datos de sentiment que mostrar.</div>`;
 
   if (sentChart) sentChart.destroy();
   sentChart = new Chart(document.getElementById('chSentiment').getContext('2d'), {
@@ -1762,39 +1771,39 @@ function renderTabla() {
       const unknown = m.date_confidence === 'unknown';
       const drv = m.complaint_driver ? DRIVER_LABEL[m.complaint_driver] || m.complaint_driver : null;
       const repeatBadge = m.repeat_count > 1
-        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces — engagement, interacciones y alcance propio ya están sumados. La visibilidad del post NO se duplica si repitió en el mismo post: cada post distinto cuenta una sola vez.">×${m.repeat_count}</span>`
+        ? `<span class="repeat-badge" title="Este autor repitió este mismo texto ${m.repeat_count} veces: engagement, interacciones y alcance propio ya están sumados. La visibilidad del post NO se duplica si repitió en el mismo post: cada post distinto cuenta una sola vez.">×${m.repeat_count}</span>`
         : '';
       // Las capas de engagement: metricCell() pinta guion cuando la
       // métrica no aplica a la plataforma o no se midió (null) — nunca un
       // 0 que sugiera "se midió y dio cero". data-label alimenta la vista
       // de tarjetas en móvil (Tarea 2, ver el <style>, media max-width:680px).
       const metricCell = (val, label, extraClass = '') =>
-        `<td class="metric ${extraClass}" data-label="${label}">${val == null ? '<span class="dash">—</span>' : fmtInt(val)}</td>`;
+        `<td class="metric ${extraClass}" data-label="${label}">${val == null ? '<span class="dash">s/d</span>' : fmtInt(val)}</td>`;
       // views es SIEMPRE alcance propio ahora (nunca heredado) — ver
       // dashboard/aggregate.py METRIC_APPLIES. post_reach es su propia
       // columna, con su propio tooltip, para que nunca se lean como lo mismo.
       const reachTitle = m.views == null ? '' : 'Alcance propio de este contenido (video/post propio)';
       const postReachTitle = m.post_reach == null ? '' :
-        'Visibilidad del POST que contiene este comentario — no es cuánta gente vio este comentario en particular, es cuánta gente vio el post. Contexto, no se usa para ordenar quejas por alcance.';
-      const fechaTitle = (unknown ? 'Fecha no confiable — excluida del timeline. ' : '') +
+        'Visibilidad del POST que contiene este comentario: no es cuánta gente vio este comentario en particular, es cuánta gente vio el post. Contexto, no se usa para ordenar quejas por alcance.';
+      const fechaTitle = (unknown ? 'Fecha no confiable, excluida del timeline. ' : '') +
         (m.published_at ? fmtDate(m.published_at, { day: '2-digit', month: 'long', year: 'numeric' }) : 'Sin fecha');
       return `<tr>
         <td class="date ${unknown ? 'unknown' : ''}" data-label="Fecha" title="${esc(fechaTitle)}">${fmtDateShort(m.published_at)}${unknown ? ' *' : ''}</td>
         <td data-label="Plataforma"><span class="plat-tag"><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}${m.rating != null ? ` <span style="color:var(--gold)">★${m.rating}</span>` : ''}</span></td>
         <td class="author-text" data-label="Autor / Texto">
-          <span class="at-author"><span class="at-name">${esc(m.author) || '—'}</span>${repeatBadge}</span>
+          <span class="at-author"><span class="at-name">${esc(m.author) || 's/d'}</span>${repeatBadge}</span>
           <span class="at-text" title="${esc(m.text)}">${esc(m.text)}</span>
         </td>
-        <td data-label="Driver">${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">—</span>`}</td>
-        <td class="metric reach" data-label="Alcance" title="${reachTitle}">${m.views == null ? '<span class="dash">—</span>' : fmtInt(m.views)}</td>
-        <td class="metric detail-col" data-label="Visib. post" title="${postReachTitle}">${m.post_reach == null ? '<span class="dash">—</span>' : fmtInt(m.post_reach)}</td>
+        <td data-label="Driver">${drv ? `<span class="drv-pill">${esc(drv)}</span>` : `<span class="drv-pill none">s/d</span>`}</td>
+        <td class="metric reach" data-label="Alcance" title="${reachTitle}">${m.views == null ? '<span class="dash">s/d</span>' : fmtInt(m.views)}</td>
+        <td class="metric detail-col" data-label="Visib. post" title="${postReachTitle}">${m.post_reach == null ? '<span class="dash">s/d</span>' : fmtInt(m.post_reach)}</td>
         ${metricCell(m.likes, 'Likes', 'detail-col')}
         ${metricCell(m.comments_count, 'Coment.', 'detail-col')}
         ${metricCell(m.shares, 'Shares', 'detail-col')}
         ${metricCell(m.saves, 'Saves', 'detail-col')}
         ${metricCell(m.interactions, 'Interacciones', 'aggregate')}
         <td class="eng detail-col" data-label="Engagement">${fmtInt(m.engagement)}</td>
-        <td class="link" data-label="Link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : '—'}</td>
+        <td class="link" data-label="Link">${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener noreferrer">Ver ↗</a>` : 's/d'}</td>
       </tr>`;
     }).join('');
   }
@@ -1802,7 +1811,7 @@ function renderTabla() {
   pintaIndicadores();
 
   document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · — = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Interacciones = likes+comentarios+shares+saves · "Ver detalle de engagement" despliega Visib. post, Likes, Coment., Shares, Saves y Engagement`;
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · s/d = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Interacciones = likes+comentarios+shares+saves · "Ver detalle de engagement" despliega Visib. post, Likes, Coment., Shares, Saves y Engagement`;
 }
 
 // ── Bloque 7: cards, en dos grupos por criterio de orden ──────────
@@ -1830,7 +1839,7 @@ function cqCard(m, i, { ownReach }) {
   } else if (m.post_reach != null) {
     // Contexto, no ranking: el post donde apareció este comentario llegó
     // a esta visibilidad — no dice cuánta gente vio ESTE comentario.
-    contexto = `visibilidad del post: ${fmtInt(m.post_reach)} (contexto — no es el alcance de esta queja, no se usa para ordenar)`;
+    contexto = `visibilidad del post: ${fmtInt(m.post_reach)} (contexto: no es el alcance de esta queja, no se usa para ordenar)`;
   } else {
     contexto = `sin alcance propio ni visibilidad de post medida para esta fila`;
   }
@@ -1840,7 +1849,7 @@ function cqCard(m, i, { ownReach }) {
         <span class="cq-plat"><span class="cq-rank">#${i + 1}</span><span class="dot" style="background:${PLT_COLOR[m.platform] || '#8B8378'}"></span>${esc(PLT_LABEL[m.platform] || m.platform)}</span>
         <span class="cq-eng">${heroValue}<small>${esc(heroLabel)}</small></span>
       </div>
-      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces — engagement/interacciones/alcance propio sumados; visibilidad de post NO duplicada si fue el mismo post">×${m.repeat_count}</span>` : ''}</div>` : ''}
+      ${m.author ? `<div class="cq-author">@${esc(m.author)}${m.repeat_count > 1 ? `<span class="repeat-badge" title="Repetida ${m.repeat_count} veces: engagement/interacciones/alcance propio sumados; visibilidad de post NO duplicada si fue el mismo post">×${m.repeat_count}</span>` : ''}</div>` : ''}
       <div class="cq-text">${esc(m.text)}</div>
       <div class="cq-context">${esc(contexto)}</div>
       <div class="cq-foot">
@@ -1862,12 +1871,12 @@ function renderTopQuejas() {
   }
 
   const bloqueConAlcance = conAlcancePropio.length ? `
-    <div class="cq-group-title">Por alcance propio — TikTok (${fmtInt(conAlcancePropio.length)})</div>
+    <div class="cq-group-title">Por alcance propio: TikTok (${fmtInt(conAlcancePropio.length)})</div>
     <div class="cq-grid">${conAlcancePropio.map((m, i) => cqCard(m, i, { ownReach: true })).join('')}</div>
   ` : '';
 
   const bloqueSinAlcance = sinAlcancePropio.length ? `
-    <div class="cq-group-title">Sin alcance propio — por interacciones (${fmtInt(sinAlcancePropio.length)})</div>
+    <div class="cq-group-title">Sin alcance propio: por interacciones (${fmtInt(sinAlcancePropio.length)})</div>
     <div class="cq-grid">${sinAlcancePropio.map((m, i) => cqCard(m, i, { ownReach: false })).join('')}</div>
   ` : '';
 
@@ -1883,7 +1892,7 @@ function renderCalidad() {
   // hablando de "0 de 0" o "el 100% de las 0 voces" — cierto, pero lee
   // como un bug. Un solo mensaje explícito en su lugar.
   if (q.total === 0) {
-    calidadEl.innerHTML = `<p class="block-empty">Sin menciones recolectadas todavía para ${esc(BRAND_LABEL)} — este bloque reportará cobertura y calidad de datos en cuanto arranque la recolección.</p>`;
+    calidadEl.innerHTML = `<p class="block-empty">Sin menciones recolectadas todavía para ${esc(BRAND_LABEL)}. Este bloque reportará cobertura y calidad de datos en cuanto arranque la recolección.</p>`;
     return;
   }
 
@@ -1911,15 +1920,15 @@ function renderCalidad() {
   const notes = [
     q.outside_window > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.outside_window)}</span>
-      <span>menciones de la base son anteriores a <b style="color:var(--txt)">${fmtDate(q.window_start, { day: '2-digit', month: 'short', year: 'numeric' })}</b> y <b style="color:var(--txt)">no entran en este reporte</b> — en el backfill, el actor de TikTok devolvió contenido fuera del rango pedido (videos de 2023 a 2025 pese a pedir solo 2026). Son menciones reales y ya pagadas, pero se excluyen de todos los bloques (KPIs, tendencia, drivers, sentimiento, tabla y top quejas) para que el reporte no se estire sobre años cuando casi todos los datos están concentrados en meses recientes.</span></div>`
+      <span>menciones de la base son anteriores a <b style="color:var(--txt)">${fmtDate(q.window_start, { day: '2-digit', month: 'short', year: 'numeric' })}</b> y <b style="color:var(--txt)">no entran en este reporte</b>, en el backfill, el actor de TikTok devolvió contenido fuera del rango pedido (videos de 2023 a 2025 pese a pedir solo 2026). Son menciones reales y ya pagadas, pero se excluyen de todos los bloques (KPIs, tendencia, drivers, sentimiento, tabla y top quejas) para que el reporte no se estire sobre años cuando casi todos los datos están concentrados en meses recientes.</span></div>`
       : '',
     q.excluded_irrelevant > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_irrelevant)}</span>
-      <span>menciones de TikTok dentro de la ventana son resultado de una búsqueda por <b style="color:var(--txt)">hashtag sin relación real con la marca</b> (${esc(exclusionReasonsTxt)}) — caso real: el hashtag "#latam" trajo videos de memes de Latinoamérica, geografía y K-pop que mencionaban "latam" sin hablar de la aerolínea. Se excluyen de todos los bloques del reporte, igual que las de fuera de ventana — la fila sigue en la base para poder auditar la decisión.</span></div>`
+      <span>menciones de TikTok dentro de la ventana son resultado de una búsqueda por <b style="color:var(--txt)">hashtag sin relación real con la marca</b> (${esc(exclusionReasonsTxt)}), caso real: el hashtag "#latam" trajo videos de memes de Latinoamérica, geografía y K-pop que mencionaban "latam" sin hablar de la aerolínea. Se excluyen de todos los bloques del reporte, igual que las de fuera de ventana. La fila sigue en la base para poder auditar la decisión.</span></div>`
       : '',
     q.excluded_web_retired > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.excluded_web_retired)}</span>
-      <span>menciones del <b style="color:var(--txt)">canal web se retiraron de este reporte</b> — no por un error puntual, sino por decisión: esas menciones (páginas, blogs y foros indexados por DataForSEO) produjeron solo 2 quejas reales entre las dos marcas, y el resto era en su mayoría agregadores de vuelos, además de contenido sin relación con el servicio (un casino online, una página de registro de eventos, un directorio de empresas, spam SEO y granjas de teléfonos falsos suplantando el call center). El canal web ya no se scrapea y estas filas siguen en la base, auditables, pero no cuentan en ningún bloque de este reporte.</span></div>`
+      <span>menciones del <b style="color:var(--txt)">canal web se retiraron de este reporte</b>: no por un error puntual, sino por decisión: esas menciones (páginas, blogs y foros indexados por DataForSEO) produjeron solo 2 quejas reales entre las dos marcas, y el resto era en su mayoría agregadores de vuelos, además de contenido sin relación con el servicio (un casino online, una página de registro de eventos, un directorio de empresas, spam SEO y granjas de teléfonos falsos suplantando el call center). El canal web ya no se scrapea y estas filas siguen en la base, auditables, pero no cuentan en ningún bloque de este reporte.</span></div>`
       : '',
     // Tarea 3 (corrección de dashboard): la asimetría de canales entre
     // marcas es real, no un hueco de captura — se declara en palabras
@@ -1929,38 +1938,38 @@ function renderCalidad() {
     // Avianca o el de LATAM, así que nombra a las dos marcas explícitamente
     // en vez de depender de BRAND_LABEL.
     `<div class="q-note"><span class="q-num" style="font-size:13px">1 : 2</span>
-      <span>Avianca tiene <b style="color:var(--txt)">una sola cuenta oficial de Instagram</b> (@avianca) — @aviancacolombia, un segundo perfil que en algún momento se asumió activo, <b style="color:var(--txt)">no existe</b> (Instagram la devuelve como <span style="font-family:var(--mono)">not_found</span>, verificado contra la API real). LATAM sí tiene dos cuentas oficiales registradas: @latamairlines (global) y @latamairlines_colombia (local). Esta asimetría de canales entre las dos marcas es real, no un error de captura — es la razón por la que el desglose por cuenta (bloque 1) tiene más filas comparables para LATAM que para Avianca.</span></div>`,
+      <span>Avianca tiene <b style="color:var(--txt)">una sola cuenta oficial de Instagram</b> (@avianca). @aviancacolombia, un segundo perfil que en algún momento se asumió activo, <b style="color:var(--txt)">no existe</b> (Instagram la devuelve como <span style="font-family:var(--mono)">not_found</span>, verificado contra la API real). LATAM sí tiene dos cuentas oficiales registradas: @latamairlines (global) y @latamairlines_colombia (local). Esta asimetría de canales entre las dos marcas es real, no un error de captura, es la razón por la que el desglose por cuenta (bloque 1) tiene más filas comparables para LATAM que para Avianca.</span></div>`,
     nSinCuentaIG > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(nSinCuentaIG)}</span>
-      <span>menciones de Instagram de ${esc(BRAND_LABEL)} son anteriores a que se empezara a registrar la cuenta de origen (<span style="font-family:var(--mono)">source_account</span>) y aparecen como <b style="color:var(--txt)">"Cuenta sin registrar"</b> en el desglose por cuenta (bloque 1) — no es un hueco en la captura actual, es contenido scrapeado antes de que ese campo existiera en la base.</span></div>`
+      <span>menciones de Instagram de ${esc(BRAND_LABEL)} son anteriores a que se empezara a registrar la cuenta de origen (<span style="font-family:var(--mono)">source_account</span>) y aparecen como <b style="color:var(--txt)">"Cuenta sin registrar"</b> en el desglose por cuenta (bloque 1): no es un hueco en la captura actual, es contenido scrapeado antes de que ese campo existiera en la base.</span></div>`
       : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
-      <span>filas crudas eran repeticiones del mismo autor diciendo el mismo texto (spam o re-posteo) y se colapsaron en <b style="color:var(--txt)">${fmtInt(q.unique_voices)} voces únicas</b> — cada una cuenta una sola vez en todo este reporte, con su alcance sumado y la cantidad de repeticiones visible como <b style="color:var(--txt)">×N</b> en la tabla (bloque 6).</span></div>`
+      <span>filas crudas eran repeticiones del mismo autor diciendo el mismo texto (spam o re-posteo) y se colapsaron en <b style="color:var(--txt)">${fmtInt(q.unique_voices)} voces únicas</b>, cada una cuenta una sola vez en todo este reporte, con su alcance sumado y la cantidad de repeticiones visible como <b style="color:var(--txt)">×N</b> en la tabla (bloque 6).</span></div>`
       : '',
     `<div class="q-note"><span class="q-num">${fmtInt(q.unknown_date)}</span>
-      <span>menciones no tienen una fecha confiable y quedaron <b style="color:var(--txt)">excluidas del gráfico de tendencia</b> (bloque 2) — sí se cuentan en el total y en la tabla explorable.</span></div>`,
+      <span>menciones no tienen una fecha confiable y quedaron <b style="color:var(--txt)">excluidas del gráfico de tendencia</b> (bloque 2), sí se cuentan en el total y en la tabla explorable.</span></div>`,
     q.unclassified > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.unclassified)}</span>
       <span>menciones aún no han sido clasificadas por el modelo de sentimiento y <b style="color:var(--txt)">se excluyen de los promedios de sentimiento</b>.</span></div>`
       : `<div class="q-note"><span class="q-num" style="color:var(--green)">0</span>
-      <span>menciones sin clasificar — el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
+      <span>menciones sin clasificar: el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
     q.press_total > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.press_total)}</span>
-      <span>notas de prensa dentro de la ventana <b style="color:var(--txt)">no cuentan en la tasa de quejas ni en ningún número de este bloque ni de los bloques 1-7</b> — un periodista reportando una demanda o una cancelación masiva es cobertura, no una queja de un usuario. Se agregan por su cuenta, con su propio sentimiento, medios y temas, en <b style="color:var(--txt)">"Cobertura de prensa"</b> más abajo.</span></div>`
+      <span>notas de prensa dentro de la ventana <b style="color:var(--txt)">no cuentan en la tasa de quejas ni en ningún número de este bloque ni de los bloques 1-7</b>: un periodista reportando una demanda o una cancelación masiva es cobertura, no una queja de un usuario. Se agregan por su cuenta, con su propio sentimiento, medios y temas, en <b style="color:var(--txt)">"Cobertura de prensa"</b> más abajo.</span></div>`
       : '',
     q.reviews_total > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.reviews_total)}</span>
-      <span>de las menciones de arriba son <b style="color:var(--txt)">reseñas de Trustpilot</b> — sí cuentan en la tasa de quejas y en todos los bloques 1-7, con el mismo criterio que un comentario social: una reseña de 1 estrella es una queja real. Su estrella promedio vive en "Cobertura de prensa" → Reseñas, más abajo.</span></div>`
+      <span>de las menciones de arriba son <b style="color:var(--txt)">reseñas de Trustpilot</b>: sí cuentan en la tasa de quejas y en todos los bloques 1-7, con el mismo criterio que un comentario social: una reseña de 1 estrella es una queja real. Su estrella promedio vive en "Cobertura de prensa" → Reseñas, más abajo.</span></div>`
       : '',
     q.last_run_at
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.filtered_last_run)}</span>
-      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || '—')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}) — resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con ${esc(BRAND_LABEL)}. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
-      : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">—</span>
+      <span>elementos se descartaron <b style="color:var(--txt)">en la última corrida</b> (${esc(q.last_run_mode || 's/d')} · ${fmtDate(q.last_run_at, { day: '2-digit', month: 'short', year: 'numeric' })}), resultados de agregadores/OTAs, contenido en otro idioma, dominios oficiales de la marca y ruido sin relación con ${esc(BRAND_LABEL)}. Es la cifra de <b style="color:var(--txt)">esa corrida puntual</b>, no un acumulado histórico: el pipeline no guarda los descartes de corridas anteriores para poder sumarlos sin duplicar.</span></div>`
+      : `<div class="q-note"><span class="q-num" style="color:var(--txt-3)">s/d</span>
       <span>no hay registro de una corrida de recolección completada; no se puede reportar cuánto se descartó.</span></div>`,
     q.last_run_at
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.short_text_last_run)}</span>
-      <span>comentarios se descartaron <b style="color:var(--txt)">en la última corrida</b> por ser demasiado cortos para analizar (típicamente solo emoji) — se filtran antes del paso de relevancia, así que no están incluidos en el número de arriba. Tampoco es un acumulado histórico, por la misma razón.</span></div>`
+      <span>comentarios se descartaron <b style="color:var(--txt)">en la última corrida</b> por ser demasiado cortos para analizar (típicamente solo emoji), se filtran antes del paso de relevancia, así que no están incluidos en el número de arriba. Tampoco es un acumulado histórico, por la misma razón.</span></div>`
       : '',
   ];
 
@@ -2047,10 +2056,10 @@ function renderMetricCoverage(coverage, applies) {
         </table>
       </div>
       <p style="margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3)">
-        "no aplica" = ninguna voz de esa plataforma tiene ese dato — ver bloque 6 (columnas con guion) y el detalle de cobertura en el reporte del proyecto.
+        "no aplica" = ninguna voz de esa plataforma tiene ese dato. Ver bloque 6 (columnas marcadas "s/d") y el detalle de cobertura en el reporte del proyecto.
       </p>
       <p style="margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--txt-3)">
-        <b style="color:var(--txt-2)">Alcance ≠ Visib. post:</b> en TikTok, el alcance es del video mismo. En Instagram no hay alcance propio de un comentario — "Visib. post" es la visibilidad del POST donde apareció ese comentario, no de la queja en sí, y por eso el bloque 7 nunca la usa para ordenar ni la suma con el alcance de TikTok.
+        <b style="color:var(--txt-2)">Alcance ≠ Visib. post:</b> en TikTok, el alcance es del video mismo. En Instagram no hay alcance propio de un comentario: "Visib. post" es la visibilidad del POST donde apareció ese comentario, no de la queja en sí, y por eso el bloque 7 nunca la usa para ordenar ni la suma con el alcance de TikTok.
       </p>
     </div>
   `;
@@ -2080,7 +2089,7 @@ function renderReviewsCard() {
   el.innerHTML = `
     <div class="rev-hero">
       <span class="rev-star" style="color:var(--gold)">★</span>
-      <span class="rev-star">${r.avg_rating != null ? r.avg_rating.toFixed(1) : '—'}</span>
+      <span class="rev-star">${r.avg_rating != null ? r.avg_rating.toFixed(1) : 's/d'}</span>
       <span class="rev-of5">/ 5</span>
     </div>
     <div class="rev-sub">${fmtInt(r.total)} reseñas${r.domain ? ` en <b style="color:var(--txt)">${esc(r.domain)}</b>` : ''} · suman a la tasa de quejas y al resto del reporte (bloques 1-7) como cualquier mención de usuario</div>
@@ -2123,7 +2132,7 @@ function renderPressCard() {
       <span class="dot" style="background:${h.sentiment ? TONE_COLOR[h.sentiment === 'positive' ? 'pos' : h.sentiment === 'negative' ? 'neg' : 'neu'] : '#8B8378'}"></span>
       <div style="min-width:0">
         <div class="ph-title">${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)}</div>
-        <div class="ph-meta">${esc(h.outlet || '—')}${h.published_at ? ' · ' + fmtDate(h.published_at, { day: '2-digit', month: 'short', year: 'numeric' }) : ''}${h.complaint_driver ? ' · ' + esc(DRIVER_LABEL[h.complaint_driver] || h.complaint_driver) : ''}</div>
+        <div class="ph-meta">${esc(h.outlet || 's/d')}${h.published_at ? ' · ' + fmtDate(h.published_at, { day: '2-digit', month: 'short', year: 'numeric' }) : ''}${h.complaint_driver ? ' · ' + esc(DRIVER_LABEL[h.complaint_driver] || h.complaint_driver) : ''}</div>
       </div>
     </div>`).join('');
 
@@ -2151,7 +2160,7 @@ function renderPressCard() {
     <div class="q-block-title">Titulares recientes</div>
     <div class="press-headlines">${headlines || '<p class="muted" style="font-size:11.5px">Sin titulares.</p>'}</div>
     <div class="press-scope-note">
-      <span>Estas ${fmtInt(p.total)} notas <b style="color:var(--txt)">no suman</b> a la tasa de quejas, al total de menciones ni a ningún gráfico de los bloques 1-7 — un periodista reportando una demanda o una cancelación no es un cliente quejándose. Ver el bloque 8 ("Calidad de los datos") para el desglose completo del alcance.</span>
+      <span>Estas ${fmtInt(p.total)} notas <b style="color:var(--txt)">no suman</b> a la tasa de quejas, al total de menciones ni a ningún gráfico de los bloques 1-7: un periodista reportando una demanda o una cancelación no es un cliente quejándose. Ver el bloque 8 ("Calidad de los datos") para el desglose completo del alcance.</span>
     </div>
   `;
 }
@@ -2176,7 +2185,7 @@ function renderAIVisibilityCompare() {
   const el = document.getElementById('aivCompare');
 
   if (!av || !av.has_metrics) {
-    el.innerHTML = `<p class="block-empty">Todavía no se capturó visibilidad en IA para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    el.innerHTML = `<p class="block-empty">Todavía no se capturó visibilidad en IA para ${esc(BRAND_LABEL)}. Corre <code>python main.py --visibilidad-ia</code>.</p>`;
     return;
   }
 
@@ -2197,7 +2206,7 @@ function renderAIVisibilityCompare() {
     </div>`).join('');
 
   const faltantes = av.missing_competitors.length
-    ? `<div class="aiv-meta" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">Sin captura todavía para: ${av.missing_competitors.map(esc).join(', ')} — no se muestra como 0, se declara sin dato.</div>`
+    ? `<div class="aiv-meta" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">Sin captura todavía para: ${av.missing_competitors.map(esc).join(', ')}. No se muestra como 0, se declara sin dato.</div>`
     : '';
 
   el.innerHTML = `
@@ -2251,7 +2260,7 @@ function renderAIVisibilityCategory() {
   const el = document.getElementById('aivCategory');
 
   if (!av || !av.category_prompts.length) {
-    el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas de categoría al modelo para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas de categoría al modelo para ${esc(BRAND_LABEL)}. Corre <code>python main.py --visibilidad-ia</code>.</p>`;
     return;
   }
   el.innerHTML = av.category_prompts.map(_aivPromptCard).join('');
@@ -2291,7 +2300,7 @@ function renderAIVisibilitySearchExamples() {
     const mencionaMarca = (q.question || '').toLowerCase().includes(brandNeedle);
     return `
     <div class="aiv-quote">
-      <div class="aiv-quote-q">${esc(q.question || '—')}${!mencionaMarca ? ' <span class="aiv-own-badge" title="La pregunta no nombra la marca — el dominio solo aparece entre las fuentes citadas">no nombra la marca</span>' : ''}</div>
+      <div class="aiv-quote-q">${esc(q.question || 's/d')}${!mencionaMarca ? ' <span class="aiv-own-badge" title="La pregunta no nombra la marca: el dominio solo aparece entre las fuentes citadas">no nombra la marca</span>' : ''}</div>
       <div class="aiv-quote-a">${esc(q.answer)}</div>
       <div class="aiv-quote-meta">${q.source_domain ? `fuente citada: <a href="${esc(q.source_url || '#')}" target="_blank" rel="noopener">${esc(q.source_domain)}</a> · ` : ''}${fmtVol(q.ai_search_volume)} búsquedas/mes · ${esc(q.platform || 'IA')}</div>
     </div>`;
@@ -2304,7 +2313,7 @@ function renderShareOfVoice() {
   const el = document.getElementById('sovCard');
 
   if (!s || !s.has_data) {
-    el.innerHTML = `<p class="block-empty">Todavía no se capturó share of voice para ${esc(BRAND_LABEL)} — corre <code>python main.py --visibilidad-ia</code>.</p>`;
+    el.innerHTML = `<p class="block-empty">Todavía no se capturó share of voice para ${esc(BRAND_LABEL)}. Corre <code>python main.py --visibilidad-ia</code>.</p>`;
     return;
   }
 
