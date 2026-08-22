@@ -1,6 +1,19 @@
 """
 Clasifica todas las menciones que están 'unclassified' en la DB, para una
-sola marca.
+sola marca — SIN distinguir plataforma. db.pending_classification()
+devuelve instagram, tiktok, resena Y prensa por igual, y las cuatro pasan
+por el mismo prompt de pipeline/classifier.py (Tarea 3 de prensa/
+reseñas: "ambas fuentes pasan por el clasificador con los mismos
+drivers" — una nota de prensa sobre una demanda cae en "cancelacion" o
+"equipaje" con el mismo vocabulario que una queja social).
+
+La distinción entre "cobertura de prensa" y "queja de un usuario" NO vive
+acá — sería el lugar equivocado, porque el clasificador no sabe ni le
+importa de qué plataforma vino el texto. Vive en dashboard/aggregate.py:
+platform="prensa" se separa del resto antes de calcular la tasa de
+quejas del KPI principal, y se agrega por su cuenta en payload["press"]
+(mismo is_complaint/complaint_driver, leído con otro propósito: "temas de
+la cobertura", no "quejas de servicio"). Ver el docstring de ese módulo.
 
 Es idempotente y reanudable: lo que falló en una corrida sigue pendiente,
 así que basta volver a llamarla para reintentarlo, sin re-scrapear nada.

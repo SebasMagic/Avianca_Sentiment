@@ -67,10 +67,38 @@ voces (_collapse_voices) agrupa por (brand, author, text) — no solo
 (author, text) — precisamente para que, en la vista combinada, dos
 personas de marcas distintas diciendo lo mismo no se fusionen en una sola
 voz.
+
+Prensa y reseñas (Tarea 3 de la incorporación de esas dos fuentes) — una
+SEXTA regla que no se negocia, aplicada justo después de la ventana de
+reporte y antes que cualquier otra:
+
+  - platform="prensa" se separa del resto ANTES de calcular relevant_
+    mentions/mentions/kpis/complaints — nunca vuelve a aparecer en
+    NINGUNO de los bloques de arriba (KPIs, timeline, drivers,
+    sentiment, emociones, tabla, top quejas, data_quality). Un
+    periodista reportando una demanda o una cancelación masiva es
+    cobertura, no una queja de un usuario — mezclarla en la tasa de
+    quejas del KPI principal la distorsionaría conceptualmente (una nota
+    de prensa muy compartida no es "más quejas"). La prensa se agrega
+    por su cuenta, en payload["press"]: total, sentimiento, medios que
+    más publican, temas (mismo complaint_driver que asigna el
+    clasificador, ver pipeline/classifier.py — "ambas fuentes pasan por
+    el mismo clasificador, con los mismos drivers"; la distinción vive
+    acá, en la agregación, no en la clasificación) y titulares recientes.
+  - platform="resena" (Trustpilot) SÍ se queda en el flujo principal —
+    una reseña de 1 estrella es una queja real de un usuario, ni más ni
+    menos legítima que un comentario de Instagram. Suma a total,
+    complaints, sentiment, drivers, tabla y top quejas exactamente igual
+    que instagram/tiktok. payload["reviews"] solo expone lo que ningún
+    otro bloque muestra: la estrella promedio (rating, columna nueva de
+    store/db.py, NULL para todo lo que no sea reseña).
+  - data_quality declara explícitamente el alcance (kpi_platforms,
+    press_excluded_from_kpis) para que nadie lea "tasa de quejas" o
+    "total" del bloque 1 y asuma que incluye prensa.
 """
 import collections
 
-from config import REPORT_WINDOW_START, WEB_CHANNEL_RETIREMENT_REASON
+from config import REPORT_WINDOW_START, WEB_CHANNEL_RETIREMENT_REASON, get_brand
 from store import db
 
 # "web" queda FUERA a propósito (Cambio 1, retiro del canal web) — nunca
@@ -79,7 +107,39 @@ from store import db
 # guardadas quedan con exclusion_reason). Si esta lista siguiera incluyendo
 # "web", el timeline y la cobertura por plataforma (bloque 8) mostrarían una
 # columna "Web" siempre en cero, colgando sin datos.
+#
+# "prensa" (Tarea de prensa/reseñas) queda FUERA a propósito, y de forma
+# permanente, no solo hasta que se scrapee: build_payload() separa las
+# menciones de prensa del resto ANTES de llegar a esta lista (ver
+# `windowed_mentions`/`press_windowed_mentions` ahí abajo) y las agrega
+# por su cuenta en la clave "press" del payload — nunca se cuelan en
+# PLATFORMS, precisamente para que la tasa de quejas (bloque 1) y el
+# resto de bloques derivados de esta lista sigan siendo sobre menciones
+# de USUARIOS reales, nunca sobre cobertura de un periodista. Ver el
+# docstring de build_payload para la decisión completa.
+#
+# "resena" (reseñas de Trustpilot) SÍ es una plataforma de usuario — una
+# reseña de 1 estrella es una queja real, ni más ni menos legítima que un
+# comentario de Instagram — pero no se agrega AQUÍ: esta lista además
+# controla metric_coverage (bloque 8), que reporta cobertura de métricas
+# de ENGAGEMENT (likes/shares/saves/views/post_reach), ninguna de las
+# cuales existe para una reseña (dataforseo_reviews.py nunca las trae) —
+# agregar "resena" aquí solo produciría una columna de bloque 8 en cero,
+# el mismo problema que ya se evitó con "web". Las reseñas SÍ suman al
+# resto de bloques que no dependen de esta lista (KPIs, sentimiento,
+# emociones, tabla, top quejas, driver×plataforma — ninguno de esos
+# filtra por PLATFORMS) y tienen su propia serie en el timeline vía
+# TIMELINE_PLATFORMS, más abajo — separada de esta lista exactamente para
+# no alterar su valor, que varios tests existentes verifican con
+# igualdad estricta (aggregate.PLATFORMS == ["instagram", "tiktok"]).
 PLATFORMS = ["instagram", "tiktok"]
+
+# Plataformas que se grafican en el timeline (bloque 2) — PLATFORMS más
+# "resena": las reseñas de Trustpilot suman a la conversación de usuarios
+# y su volumen por día/mes es información real (ver docstring de
+# PLATFORMS arriba). "prensa" nunca entra acá tampoco — tiene su propio
+# timeline dentro de payload["press"], no el de conversación de usuarios.
+TIMELINE_PLATFORMS = PLATFORMS + ["resena"]
 
 # Qué métricas de engagement tiene sentido mostrar por plataforma —
 # diagnóstico verificado sobre datos reales (2026-08-20, ver
@@ -400,6 +460,21 @@ def build_payload(conn, brand: str | None = None) -> dict:
     windowed_mentions = [m for m in raw_mentions if _in_report_window(m)]
     outside_window = len(raw_mentions) - len(windowed_mentions)
 
+    # Prensa (platform="prensa") se separa del resto ACÁ, antes que
+    # cualquier otro filtro — decisión de diseño de la Tarea 3 de prensa/
+    # reseñas (ver docstring del módulo, sección "press"/complaint_rate).
+    # Un periodista reportando una demanda no es un cliente quejándose:
+    # mezclar cobertura de prensa en `mentions` distorsionaría la tasa de
+    # quejas del KPI principal, que debe seguir siendo sobre menciones de
+    # USUARIOS reales (social + reseñas). De acá en adelante,
+    # `windowed_mentions` (y todo lo que deriva de ella: relevant_mentions,
+    # mentions, complaints, kpis, timeline, drivers, sentiment, emociones,
+    # tabla, top quejas, data_quality) NUNCA vuelve a ver una fila de
+    # prensa — press_windowed_mentions se agrega por su cuenta, más abajo,
+    # en la clave "press" del payload.
+    press_windowed_mentions = [m for m in windowed_mentions if m["platform"] == "prensa"]
+    windowed_mentions = [m for m in windowed_mentions if m["platform"] != "prensa"]
+
     # Exclusiones por exclusion_reason (relevancia social Tarea 3 + retiro
     # del canal web Cambio 1) — ver docstring del módulo. Se aplica DESPUÉS
     # de la ventana de reporte (para no cambiar outside_window, que sigue
@@ -475,7 +550,7 @@ def build_payload(conn, brand: str | None = None) -> dict:
         muestras = sent_dia.get(dia, [])
         timeline.append({
             "date": dia,
-            "counts": {p: por_dia[dia].get(p, 0) for p in PLATFORMS},
+            "counts": {p: por_dia[dia].get(p, 0) for p in TIMELINE_PLATFORMS},
             "net_sentiment": round(sum(muestras) / len(muestras) * 100, 1) if muestras else None,
         })
 
@@ -561,6 +636,11 @@ def build_payload(conn, brand: str | None = None) -> dict:
         "reach_source": m["reach_source"],
         "interactions": m["interactions"],
         "interaction_rate": m["interaction_rate"],
+        # Estrella 1-5 de una reseña de Trustpilot (platform="resena") —
+        # None para cualquier otra plataforma, tal cual sale de la
+        # columna `rating` (store/db.py). El dashboard la muestra como
+        # ★ en la tabla; ver también payload["reviews"] para el promedio.
+        "rating": m.get("rating"),
     } for m in mentions]
 
     quejas = [f for f in filas if f["is_complaint"]]
@@ -591,6 +671,106 @@ def build_payload(conn, brand: str | None = None) -> dict:
             key=lambda f: f["interactions"] or 0,
             reverse=True,
         )[:20],
+    }
+
+    # ── Reseñas (Tarea 3 de prensa/reseñas): resumen de Trustpilot con su
+    # estrella promedio — las reseñas YA suman al resto de bloques de
+    # arriba (kpis, sentiment, drivers, tabla, top quejas: ninguno filtra
+    # por plataforma), este bloque solo expone el dato que no vive en
+    # ningún otro lado, la estrella. rated_count puede ser menor que
+    # total si alguna reseña llegó sin rating parseable (nunca se
+    # inventa una estrella, ver scrapers/dataforseo_reviews.py).
+    resenas = [m for m in mentions if m["platform"] == "resena"]
+    estrellas = [m["rating"] for m in resenas if m.get("rating") is not None]
+    reviews_summary = {
+        "total": len(resenas),
+        "rated_count": len(estrellas),
+        "avg_rating": round(sum(estrellas) / len(estrellas), 2) if estrellas else None,
+        "rating_counts": {n: estrellas.count(n) for n in range(1, 6) if estrellas.count(n)},
+        # `brand` acá es el NOMBRE (string) que recibió build_payload, no
+        # el perfil — se resuelve contra config.get_brand() solo cuando
+        # hay una marca única; en la vista combinada (brand=None) no hay
+        # un solo dominio de reseñas que mostrar.
+        "domain": get_brand(brand)["review_domain"] if brand is not None else None,
+    }
+
+    # ── Prensa (Tarea 3 de prensa/reseñas): bloque por derecho propio,
+    # NUNCA sumado a `mentions`/kpis/complaints de arriba (ver el corte en
+    # `press_windowed_mentions`, al principio de esta función). Misma
+    # exclusión por exclusion_reason que el resto del reporte, aunque hoy
+    # nunca debería dispararse — pipeline/relevance.py filtra prensa ANTES
+    # de insertar (is_relevant(), rama "prensa"), así que una nota
+    # irrelevante nunca llega a esta tabla; se conserva el chequeo por si
+    # algún día existe un backfill retroactivo de relevancia de prensa,
+    # igual que ya existe para TikTok (pipeline/social_relevance_backfill.py).
+    press_mentions = [m for m in press_windowed_mentions if not _is_excluded(m)]
+    press_classified = [m for m in press_mentions if m["classification_status"] == "classified"]
+    press_label_counts = collections.Counter(_dominant_label(m) for m in press_classified)
+    n_press_classified = len(press_classified)
+    press_sent_counts = {
+        "positive": press_label_counts["positive"],
+        "negative": press_label_counts["negative"],
+        "neutral": press_label_counts["neutral"],
+    }
+    press_sent_pct = {k: _pct(v, n_press_classified) for k, v in press_sent_counts.items()}
+
+    # "outlets" = medios que más publican — Counter de author (=dominio
+    # de la nota, ver scrapers/dataforseo_news.py), no de source_url (una
+    # nota puede tener varias URLs con parámetros distintos, el dominio
+    # es lo que importa acá).
+    press_outlets = collections.Counter(m.get("author") for m in press_mentions if m.get("author"))
+
+    # "topics" = temas de la cobertura — complaint_driver también se le
+    # asigna a prensa por el MISMO clasificador que a redes (Tarea 3: "
+    # ambas fuentes pasan por el clasificador con los mismos drivers"),
+    # así que una nota sobre una demanda por equipaje perdido cae en
+    # "equipaje" igual que lo haría una queja social. Solo notas con
+    # is_complaint=true tienen driver (contrato del clasificador,
+    # pipeline/classifier.py) — "temas" acá es necesariamente cobertura
+    # de un problema operativo, no toda la prensa (una nota puramente
+    # positiva no tiene driver, y con razón: no hay "tema" que asignarle
+    # en este vocabulario).
+    press_topics_counter = collections.Counter(
+        m.get("complaint_driver") for m in press_mentions if m.get("complaint_driver")
+    )
+    press_topics = [
+        {"driver": d, "count": c, "pct": _pct(c, len(press_mentions))}
+        for d, c in press_topics_counter.most_common()
+    ]
+
+    press_by_month = collections.Counter(
+        m["published_at"][:7] for m in press_mentions
+        if m.get("published_at") and m.get("date_confidence") != "unknown"
+    )
+
+    # Titulares recientes para que la prensa "se vea" en el dashboard, no
+    # solo se cuente — hasta 12, más recientes primero. Independiente de
+    # la tabla de menciones (bloque 6), que sigue siendo solo social+
+    # reseñas: prensa tiene su propia lista, dentro de payload["press"].
+    press_headlines = [
+        {
+            "title": m["text"],
+            "outlet": m.get("author"),
+            "url": m.get("source_url"),
+            "published_at": m.get("published_at"),
+            "sentiment": _dominant_label(m) if m["classification_status"] == "classified" else None,
+            "complaint_driver": m.get("complaint_driver"),
+        }
+        for m in sorted(
+            press_mentions,
+            key=lambda m: m.get("published_at") or "",
+            reverse=True,
+        )[:12]
+    ]
+
+    press_summary = {
+        "total": len(press_mentions),
+        "classified_count": n_press_classified,
+        "sentiment": {"counts": press_sent_counts, "pct": press_sent_pct},
+        "outlets": [{"domain": d, "count": c} for d, c in press_outlets.most_common(10)],
+        "topics": press_topics,
+        "by_month": dict(sorted(press_by_month.items())),
+        "headlines": press_headlines,
     }
 
     # ── Calidad de datos
@@ -688,6 +868,21 @@ def build_payload(conn, brand: str | None = None) -> dict:
         # pero, hoy, cero filas lo tienen medido). Sin esto, metric_coverage
         # por sí solo no puede distinguir esos dos casos honestamente.
         "metric_applies": METRIC_APPLIES,
+        # Tarea 3 de prensa/reseñas: declara EXPLÍCITAMENTE qué entra en
+        # qué métrica, para que nadie lea "tasa de quejas" o "total" y
+        # asuma que incluye prensa. `kpi_platforms` son las plataformas
+        # que sí suman a kpis/sentiment/emociones/tabla/top quejas de
+        # arriba — instagram, tiktok y resena (reseñas de Trustpilot: una
+        # reseña de 1 estrella es una queja real de un usuario, igual de
+        # legítima que un comentario). "prensa" NUNCA está en esta lista:
+        # vive aparte, en payload["press"], con su propio total/
+        # sentimiento/medios/temas — un periodista reportando una demanda
+        # es cobertura, no una queja de servicio, y mezclarla distorsionaría
+        # conceptualmente la tasa de quejas del KPI principal.
+        "kpi_platforms": list(TIMELINE_PLATFORMS),
+        "press_excluded_from_kpis": True,
+        "press_total": len(press_mentions),
+        "reviews_total": len(resenas),
     }
 
     # Qué marca(s) representa este payload — para que la plantilla pueda
@@ -727,4 +922,8 @@ def build_payload(conn, brand: str | None = None) -> dict:
         "mentions": filas,
         "top_complaints": top_complaints,
         "data_quality": data_quality,
+        # Tarea 3 de prensa/reseñas — ver el corte de press_windowed_mentions
+        # al principio de esta función y el docstring del módulo.
+        "reviews": reviews_summary,
+        "press": press_summary,
     }
