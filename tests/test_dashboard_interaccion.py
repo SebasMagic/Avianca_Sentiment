@@ -208,6 +208,52 @@ def test_el_control_es_un_boton_real_operable_con_teclado(pagina):
     assert boton.get_attribute("aria-expanded") == "false"
 
 
+# ── textos explicativos (pedidos 1 y 3) ──────────────────────────────────
+
+def test_el_bloque_de_menciones_en_ia_explica_que_se_mide(pagina):
+    """Pedido 1: "no entiendo esto, cómo se lee". Bajada (qué es cada
+    número) arriba y nota de lectura (qué dice la comparación) abajo."""
+    bajada = pagina.locator("#aivCompare .aiv-bajada").inner_text()
+    lectura = pagina.locator("#aivCompare .aiv-lectura").inner_text()
+
+    assert "cuántas veces la marca aparece nombrada" in bajada
+    assert "volumen asociado" in bajada
+    # La nota se arma con los números del payload, no con una frase fija.
+    assert "1.091" in lectura and "1.079" in lectura
+    assert "1.037.930" in lectura and "839.350" in lectura
+    assert "LATAM" in lectura
+    assert "mide alcance" in lectura
+
+
+def test_share_of_voice_titula_con_1_de_cada_n_y_el_competidor_al_lado(pagina):
+    """0,28% y 0,06% se leen los dos como "casi nada"; 351 contra 1.543 se
+    lee como una diferencia de escala. Y sin el competidor en la misma
+    tarjeta el bloque no es interpretable."""
+    ratios = pagina.locator("#sovCard .sov-ratio-row").all_inner_texts()
+    assert any("1 de cada 351" in r and "Avianca" in r for r in ratios)
+    assert any("1 de cada 1.543" in r and "LATAM" in r for r in ratios)
+
+
+def test_la_razon_de_share_of_voice_cuadra_con_los_numeros_que_muestra(pagina):
+    """1.543 / 351 = 4,4. Dividir los porcentajes ya redondeados daría 4,7
+    y contradiría a los propios números de la frase: un cliente que divida
+    lo que está leyendo tiene que obtener lo mismo que dice el texto."""
+    lectura = pagina.locator("#sovCard .aiv-lectura").inner_text()
+
+    assert "4,4 veces más" in lectura
+    assert "4,7" not in lectura
+    assert "1 de cada 351" in lectura and "1 de cada 1.543" in lectura
+    assert "890 búsquedas al mes" in lectura
+
+
+def test_los_porcentajes_usan_coma_decimal(pagina):
+    """Mismo sistema de puntuación que el separador de miles que el
+    dashboard ya usaba: "0.28%" al lado de "312.810" mezclaba dos."""
+    legend = pagina.locator("#sovCard .sov-legend").first.inner_text()
+    assert "0,28%" in legend
+    assert "0.28%" not in legend
+
+
 # ── navegación: sidebar de dos secciones ─────────────────────────────────
 
 def test_arranca_en_social_listening_con_los_otros_paneles_ocultos(pagina):

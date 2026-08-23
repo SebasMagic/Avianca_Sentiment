@@ -766,6 +766,24 @@
     font-size:11px;color:var(--txt-3);line-height:1.6;
     margin-bottom:12px;padding-bottom:11px;border-bottom:1px solid var(--border);
   }
+  /* Bajada (que se mide) y nota de lectura (como se interpreta). Dos
+     piezas distintas a proposito: el cliente dijo "no entiendo esto como
+     se lee" de dos bloques diferentes, y las dos preguntas que hay detras
+     ("que es este numero" y "que me dice") no se contestan igual. */
+  .aiv-bajada{
+    font-size:11.5px;color:var(--txt-2);line-height:1.65;max-width:70ch;
+    margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);
+  }
+  .aiv-bajada b{color:var(--txt);font-weight:600}
+  .aiv-lectura{
+    font-size:11.5px;color:var(--txt-2);line-height:1.65;max-width:74ch;
+    margin-top:14px;padding-top:12px;border-top:1px solid var(--border);
+  }
+  .aiv-lectura b{color:var(--txt);font-weight:600}
+  .aiv-lectura .lectura-t{
+    display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--txt-3);margin-bottom:5px;
+  }
 
   /* Objetivo tactil comodo donde no hay cursor. Se ata al tipo de entrada,
      no al ancho de viewport: una tablet ancha tambien se toca con el dedo. */
@@ -785,11 +803,29 @@
   .aiv-quote-meta{font-size:10.5px;color:var(--txt-3)}
   .aiv-quote-meta a{color:inherit}
 
-  .sov-engine{margin-bottom:20px}
+  .sov-engine{margin-bottom:24px}
   .sov-engine:last-child{margin-bottom:0}
   .sov-engine-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);margin-bottom:10px}
+  /* "1 de cada N" es el numero protagonista, no el porcentaje: 0,28% y
+     0,06% se leen los dos como "casi nada", mientras que 351 contra 1.543
+     se lee de inmediato como una diferencia de escala — que es
+     exactamente lo que el cliente no estaba viendo. La barra apilada se
+     conserva debajo (dice "lo comercial domina") pero no puede ser el
+     unico elemento: su segmento de problema mide 0,28% del ancho, o sea
+     que es invisible. */
+  .sov-ratio{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+  .sov-ratio-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .sov-ratio-brand{font-size:12.5px;font-weight:600;color:var(--txt-2);min-width:92px}
+  .sov-ratio-val{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--txt-2);line-height:1.1}
+  .sov-ratio-row.is-own .sov-ratio-brand{color:var(--txt)}
+  .sov-ratio-row.is-own .sov-ratio-val{font-size:22px;color:var(--brand-ink)}
+  .sov-ratio-note{font-size:11px;color:var(--txt-3)}
   .sov-bar-stack{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:8px}
-  .sov-bar-stack span{height:100%}
+  /* min-width en el segmento de problema: a 0,28% del ancho el navegador
+     lo pinta en menos de un pixel y la barra miente por omision (parece
+     que no hay ninguna busqueda de problema). Tres pixeles es lo minimo
+     que se ve sin exagerar la proporcion. */
+  .sov-bar-stack span{height:100%;min-width:3px}
   .sov-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--txt-2)}
   .sov-legend .lv{font-family:var(--mono);font-weight:700;color:var(--txt);margin-left:4px}
 
@@ -1036,8 +1072,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const fmtInt = n => (n ?? 0).toLocaleString('es-CO');
-const fmtSigned = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
-const fmtPct = n => (n ?? 0).toFixed(1) + '%';
+// Decimal con coma (es-CO), la misma convención del separador de miles
+// que fmtInt ya usaba: "0.28%" al lado de "312.810" mezclaba dos sistemas
+// de puntuación dentro de la misma frase. `dec` fija los decimales — 1
+// para todo el reporte, 2 solo en share of voice, donde un decimal de
+// menos borra la diferencia real entre las marcas (ver bloque 11).
+const fmtDec = (n, dec) => (n ?? 0).toLocaleString('es-CO',
+  { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const fmtSigned = n => (n >= 0 ? '+' : '') + fmtDec(n, 1) + '%';
+const fmtPct = (n, dec) => fmtDec(n, dec == null ? 1 : dec) + '%';
 function fmtDate(iso, opts) {
   if (!iso) return 's/d';
   const s = String(iso);
@@ -2284,10 +2327,50 @@ function renderAIVisibilityCompare() {
     : '';
 
   el.innerHTML = `
+    <p class="aiv-bajada"><b>Menciones</b> es cuántas veces la marca aparece nombrada dentro de las respuestas que los modelos de IA le dan a la gente. El <b>volumen asociado</b> es cuánta búsqueda mensual hay detrás de esas preguntas: el tamaño de la audiencia que puede terminar leyendo esa respuesta. La barra dice cuánta presencia tiene cada marca, y el volumen dice qué tan consultadas son las preguntas donde esa marca aparece.</p>
     <div class="aiv-vs">${filas}</div>
+    ${_aivLecturaMenciones(entidades)}
     ${faltantes}
     <div class="aiv-meta" style="margin-top:10px">Capturado ${fmtDate(av.captured_at)} · ${esc(av.own.domain)} · fuente: ${av.own.source_endpoint === 'multi_target_metrics' ? 'comparación directa' : 'métricas de marca'} (DataForSEO AI Optimization)</div>
   `;
+}
+
+// Nota de lectura del bloque de menciones en IA (pedido 1: "no entiendo
+// esto como se lee"). Se arma con los números del payload, no con una
+// frase fija: tiene que seguir siendo cierta con la otra marca, con otro
+// competidor y con la captura de la semana que viene.
+function _aivLecturaMenciones(entidades) {
+  if (entidades.length < 2) return '';
+  const propia = entidades[0];
+  // El competidor con más menciones, para no elegir uno al azar cuando
+  // haya más de uno.
+  const rival = entidades.slice(1).sort((a, b) => b.mentions - a.mentions)[0];
+
+  const maxM = Math.max(propia.mentions, rival.mentions) || 1;
+  const parecido = Math.abs(propia.mentions - rival.mentions) / maxM <= 0.15;
+  const masVisible = propia.mentions >= rival.mentions ? propia : rival;
+  const menosVisible = masVisible === propia ? rival : propia;
+
+  const presencia = parecido
+    ? `${esc(propia.brand)} y ${esc(rival.brand)} aparecen <b>casi el mismo número de veces</b> (${fmtInt(propia.mentions)} y ${fmtInt(rival.mentions)})`
+    : `${esc(masVisible.brand)} aparece <b>más veces</b> que ${esc(menosVisible.brand)} (${fmtInt(masVisible.mentions)} frente a ${fmtInt(menosVisible.mentions)})`;
+
+  let volumen = '';
+  const maxV = Math.max(propia.vol, rival.vol) || 1;
+  if (Math.abs(propia.vol - rival.vol) / maxV > 0.1) {
+    const conMasVol = propia.vol > rival.vol ? propia : rival;
+    const conMenosVol = conMasVol === propia ? rival : propia;
+    const cierre = conMasVol === propia
+      ? 'la audiencia potencial está de nuestro lado'
+      : 'más audiencia potencial del otro lado';
+    volumen = `, ${parecido ? 'pero' : 'y'} las menciones de ${esc(conMasVol.brand)} caen en preguntas con <b>más búsqueda detrás</b> (${fmtVol(conMasVol.vol)} al mes frente a ${fmtVol(conMenosVol.vol)}): ${parecido ? 'presencia parecida, ' : ''}${cierre}`;
+  }
+
+  return `
+    <div class="aiv-lectura">
+      <span class="lectura-t">Cómo se lee</span>
+      Hoy ${presencia}${volumen}. Este bloque mide <b>alcance</b>, no si la IA habla bien o mal de cada marca.
+    </div>`;
 }
 
 function renderAIVisibilitySources() {
@@ -2568,29 +2651,98 @@ function renderShareOfVoice() {
 
   const ENGINE_LABEL = { google_ads: 'Búsqueda en Google', ai_search: 'Uso en herramientas de IA' };
   const engines = Object.entries(s.by_engine);
+  const rivales = s.competitors || [];
 
   const bloques = engines.map(([engine, d]) => {
     const total = d.problema + d.comercial;
     const pctProblema = total ? d.problema / total * 100 : 0;
     const pctComercial = 100 - pctProblema;
+
+    // Una fila "1 de cada N" por marca: la propia primero, después cada
+    // competidor con captura. Sin el competidor al lado el número no es
+    // interpretable, porque no se compara contra cero.
+    const filasRatio = [
+      { brand: BRAND_LABEL, d, own: true },
+      ...rivales.map(c => ({ brand: c.brand, d: (c.by_engine || {})[engine], own: false })),
+    ].filter(f => f.d).map((f, i) => `
+        <div class="sov-ratio-row${f.own ? ' is-own' : ''}">
+          <span class="sov-ratio-brand">${esc(f.brand)}</span>
+          <span class="sov-ratio-val">${f.d.problem_one_in != null ? `1 de cada ${fmtInt(f.d.problem_one_in)}` : 'sin búsquedas de problema'}</span>
+          ${i === 0 ? '<span class="sov-ratio-note">búsquedas de la marca es por un problema</span>' : ''}
+        </div>`).join('');
+
     return `
       <div class="sov-engine">
         <div class="sov-engine-title">${esc(ENGINE_LABEL[engine] || engine)}</div>
+        <div class="sov-ratio">${filasRatio}</div>
         <div class="sov-bar-stack">
-          ${pctProblema > 0 ? `<span style="width:${pctProblema}%;background:${TONE_COLOR.neg}"></span>` : ''}
-          ${pctComercial > 0 ? `<span style="width:${pctComercial}%;background:${TONE_COLOR.neu}"></span>` : ''}
+          ${pctProblema > 0 ? `<span style="width:${pctProblema}%;background:${TONE_COLOR.neg}" title="Problema: ${fmtVol(d.problema)} búsquedas/mes"></span>` : ''}
+          ${pctComercial > 0 ? `<span style="width:${pctComercial}%;background:${TONE_COLOR.neu}" title="Comercial: ${fmtVol(d.comercial)} búsquedas/mes"></span>` : ''}
         </div>
         <div class="sov-legend">
-          <span><span class="dot" style="background:${TONE_COLOR.neg}"></span>Problema (demanda, reclamo, queja...) <span class="lv">${fmtVol(d.problema)}/mes${d.problem_pct != null ? ` · ${d.problem_pct}%` : ''}</span></span>
+          <span><span class="dot" style="background:${TONE_COLOR.neg}"></span>Problema (demanda, reclamo, queja...) <span class="lv">${fmtVol(d.problema)}/mes${d.problem_pct != null ? ` · ${fmtPct(d.problem_pct, 2)}` : ''}</span></span>
           <span><span class="dot" style="background:${TONE_COLOR.neu}"></span>Comercial (vuelos, ofertas, check in...) <span class="lv">${fmtVol(d.comercial)}/mes</span></span>
         </div>
       </div>`;
   }).join('');
 
+  const faltantes = (s.missing_competitors || []).length
+    ? `<div class="aiv-meta" style="margin-top:10px">Sin captura de share of voice todavía para: ${s.missing_competitors.map(esc).join(', ')}. No se muestra como 0, se declara sin dato.</div>`
+    : '';
+
   el.innerHTML = `
+    <p class="aiv-bajada">Toda búsqueda que incluye el nombre de la marca cae en uno de dos grupos: alguien que <b>quiere comprar</b> (vuelos, check in, reserva, tiquetes, ofertas) o alguien que <b>tiene un problema</b> (queja, reclamo, demanda, estafa). Esto mide qué parte del interés total por la marca es del segundo tipo.</p>
     ${bloques}
-    <div class="aiv-meta" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--border)">Capturado ${fmtDate(s.captured_at)} · cuanto más alta la proporción de problema, más pesa la reputación negativa en lo que la gente busca sobre ${esc(BRAND_LABEL)}.</div>
+    ${_sovLectura(s, ENGINE_LABEL)}
+    ${faltantes}
+    <div class="aiv-meta" style="margin-top:10px">Capturado ${fmtDate(s.captured_at)} · volúmenes de búsqueda mensuales por palabra clave (DataForSEO).</div>
   `;
+}
+
+// Nota de lectura del bloque 11 (pedido 3: "no entiendo el resultado de
+// aquí, esto qué quiere decir"). Se arma con el payload, incluido el
+// competidor, para que siga siendo cierta con la otra marca y con la
+// captura de la semana que viene.
+function _sovLectura(s, ENGINE_LABEL) {
+  // El motor con más volumen es el que manda la lectura: hoy Google Ads
+  // mueve cientos de miles de búsquedas al mes y ai_search unos miles.
+  const entradas = Object.entries(s.by_engine)
+    .filter(([, d]) => d.problem_one_in != null)
+    .sort((a, b) => (b[1].problema + b[1].comercial) - (a[1].problema + a[1].comercial));
+  if (!entradas.length) return '';
+  const [engine, d] = entradas[0];
+
+  const rival = (s.competitors || [])
+    .map(c => ({ brand: c.brand, d: (c.by_engine || {})[engine] }))
+    .filter(c => c.d && c.d.problem_one_in != null && c.d.problem_pct)[0];
+
+  const cabeza = `Suena a poco, pero el número no se compara contra cero: se compara contra el <b>mismo indicador del competidor</b>.`;
+
+  let comparacion = '';
+  if (rival && d.problem_pct) {
+    // La razón se calcula con los "1 de cada N", no dividiendo los dos
+    // porcentajes: 0,28 / 0,06 da 4,7, que es un artefacto del redondeo y
+    // contradice a los propios números de la frase (1.543 / 351 = 4,4).
+    // Un cliente que divida lo que está leyendo tiene que obtener lo
+    // mismo que dice el texto.
+    const r = rival.d.problem_one_in / d.problem_one_in;
+    const veces = r >= 1 ? r : 1 / r;
+    const sentido = r >= 1 ? 'más' : 'menos';
+    comparacion = ` En ${esc(BRAND_LABEL)}, <b>1 de cada ${fmtInt(d.problem_one_in)}</b> búsquedas de la marca la hace alguien con un problema. En ${esc(rival.brand)} es 1 de cada ${fmtInt(rival.d.problem_one_in)}. En proporción a su propio volumen de marca, ${esc(BRAND_LABEL)} se busca en clave de problema <b>${fmtDec(veces, 1)} veces ${sentido}</b> que ${esc(rival.brand)}.`;
+  } else {
+    comparacion = ` En ${esc(BRAND_LABEL)}, <b>1 de cada ${fmtInt(d.problem_one_in)}</b> búsquedas de la marca la hace alguien con un problema. Sin el mismo indicador de un competidor al lado, esa cifra queda sin punto de comparación.`;
+  }
+
+  const absoluto = ` El dato absoluto (${fmtVol(d.problema)} búsquedas al mes) no dice nada por sí solo, porque la marca con más tráfico siempre acumula más quejas en bruto. Lo que informa es la proporción, y la comparación contra quien compite por el mismo pasajero.`;
+
+  const cierre = `Esas ${fmtVol(d.problema)} personas al mes ya tienen el problema y salieron a buscar respuesta: lo que encuentren en esa página de resultados es la primera respuesta de la marca que van a leer.`;
+
+  return `
+    <div class="aiv-lectura">
+      <span class="lectura-t">Cómo se lee el ${fmtPct(d.problem_pct, 2)} de ${esc(ENGINE_LABEL[engine] || engine).toLowerCase()}</span>
+      ${cabeza}${comparacion}${absoluto}
+      <p style="margin-top:9px">${cierre}</p>
+    </div>`;
 }
 
 [
