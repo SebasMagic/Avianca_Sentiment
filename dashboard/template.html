@@ -702,12 +702,86 @@
   }
   .aiv-pill.yes{color:var(--green);background:var(--green-dim);border:1px solid rgba(30,142,62,.3)}
   .aiv-pill.no{color:var(--txt-3);background:var(--bg-3);border:1px solid var(--border)}
-  .aiv-prompt-excerpt{font-size:11.5px;color:var(--txt-2);line-height:1.55}
+  /* Vista cerrada recortada a 3 lineas. El excerpt completo sigue en el
+     DOM (solo se recorta visualmente) para que la lista de 2 a 4 tarjetas
+     se pueda escanear y para que desplegar tenga recompensa. */
+  .aiv-prompt-excerpt{
+    font-size:11.5px;color:var(--txt-2);line-height:1.55;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+  }
+  .aiv-prompt.abierta .aiv-prompt-excerpt{display:none}
+
+  /* Divulgacion en linea ("ponle una flechita que permita abrir el tab
+     para poder leer completo el output"). Reutiliza el idioma de toggle
+     que el dashboard ya tiene en el bloque 6 (.btn-detalle): etiqueta de
+     texto + flecha en ::after que rota 180 grados al abrir — nunca un
+     lenguaje visual nuevo para la misma idea de "aca hay mas". */
+  .aiv-toggle{
+    display:inline-flex;align-items:center;gap:6px;margin-top:8px;
+    background:none;border:0;padding:4px 0;cursor:pointer;
+    font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--brand-ink);
+  }
+  .aiv-toggle:hover .aiv-toggle-txt{text-decoration:underline}
+  /* La flecha se pinta con content, nunca como caracter en el DOM: asi no
+     la lee un lector de pantalla (seria redundante con aria-expanded) y no
+     se copia junto con el texto. */
+  .aiv-toggle::after{content:'▾';font-size:9px;color:var(--txt-3);transition:transform .15s}
+  .aiv-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
+  .aiv-toggle:focus-visible{outline:2px solid var(--brand-mid);outline-offset:3px;border-radius:3px}
+
+  .aiv-resp{
+    margin-top:10px;padding:11px 13px;background:var(--bg-3);
+    border-left:2px solid var(--brand-mid);border-radius:0 4px 4px 0;
+  }
+  /* hidden="until-found" (lo que permite que Ctrl+F encuentre y abra un
+     panel cerrado) NO es display:none: el navegador lo resuelve con
+     content-visibility:hidden, o sea que la caja se sigue maquetando y el
+     panel cerrado se veía como un recuadro vacío con su filete. Se le
+     quita todo el relleno visual mientras está cerrado. El `hidden` a
+     secas ya es display:none por hoja de usuario y no necesita nada. */
+  .aiv-resp[hidden]{margin:0;padding:0;border-left-width:0;background:none}
+  /* pre-wrap es obligatorio: las respuestas completas traen parrafos y
+     listas numeradas ("\n\n2. Canje de millas:") que sin esto se leen
+     como un parrafo corrido. */
+  .aiv-resp-txt{font-size:11.5px;color:var(--txt-2);line-height:1.6;white-space:pre-wrap}
+  .aiv-resp-meta{
+    font-family:var(--mono);font-size:9.5px;color:var(--txt-3);
+    margin-top:10px;padding-top:8px;border-top:1px solid var(--border);
+  }
+  .aiv-resp-src{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);margin-top:3px}
+
+  /* Resaltado dentro del texto del modelo. No estrena ni un color:
+     --brand-ink sobre --brand-dim es el par de #heatmap td.pct-col, y el
+     oro sobre oro traslucido es el de .aiv-badge, que en este mismo
+     bloque ya significa "aca esta el competidor". */
+  .aiv-mark-own{
+    background:var(--brand-dim);color:var(--brand-ink);
+    font-weight:600;border-radius:3px;padding:0 2px;
+  }
+  .aiv-mark-rival{
+    background:rgba(138,99,0,.12);color:var(--gold);
+    font-weight:600;border-radius:3px;padding:0 2px;
+  }
+  .aiv-nota-seccion{
+    font-size:11px;color:var(--txt-3);line-height:1.6;
+    margin-bottom:12px;padding-bottom:11px;border-bottom:1px solid var(--border);
+  }
+
+  /* Objetivo tactil comodo donde no hay cursor. Se ata al tipo de entrada,
+     no al ancho de viewport: una tablet ancha tambien se toca con el dedo. */
+  @media (hover:none){
+    .aiv-toggle{
+      width:100%;justify-content:space-between;min-height:44px;
+      padding:10px 0;border-top:1px solid var(--border);margin-top:10px;
+    }
+  }
+  @media (prefers-reduced-motion:reduce){ .aiv-toggle::after{transition:none} }
 
   .aiv-quote{padding:12px 0;border-bottom:1px solid var(--border)}
   .aiv-quote:last-child{border-bottom:none}
   .aiv-quote-q{font-family:var(--mono);font-size:10px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
   .aiv-quote-a{font-size:12px;color:var(--txt);line-height:1.55;margin-bottom:5px}
+  .aiv-quote.abierta .aiv-quote-a{display:none}
   .aiv-quote-meta{font-size:10.5px;color:var(--txt-3)}
   .aiv-quote-meta a{color:inherit}
 
@@ -2242,18 +2316,154 @@ function renderAIVisibilitySources() {
   el.innerHTML = `<div>${filas}</div>${hallazgo}`;
 }
 
-function _aivPromptCard(p) {
+// ── Desplegable de respuesta completa (pedido del cliente: "ponle una
+// flechita que permita abrir el tab para poder leer completo el output").
+//
+// El payload trae ahora, junto al excerpt de 380 caracteres, el texto
+// COMPLETO ya limpio de markdown (response_full en los prompts,
+// answer_full en los ejemplos indexados — ver
+// dashboard/ai_visibility_aggregate.py). El excerpt se conserva porque es
+// la vista cerrada; el control solo se pinta cuando de verdad hay más
+// texto que leer, y esa condición es exactamente `full.length >
+// corto.length`: cuando la respuesta cabía entera en el excerpt, los dos
+// strings son idénticos y la tarjeta queda como estaba.
+//
+// Se leen con guarda (`p.response_full || p.excerpt`) porque hay fixtures
+// de test que arman payloads a mano sin las claves nuevas; sin la guarda
+// pintarían "undefined".
+
+// `model` en la base es el id crudo del modelo (hoy:
+// "gpt-4o-mini-2024-07-18"). Se muestra el nombre que el cliente reconoce
+// y, entre paréntesis, el id exacto — el dato ya viajaba en el payload y
+// hasta ahora no se pintaba en ninguna parte, así que no se sabía qué
+// modelo dijo qué.
+const MODEL_LABEL = { chat_gpt: 'ChatGPT', gemini: 'Gemini', perplexity: 'Perplexity', claude: 'Claude' };
+// Plataforma de los ejemplos ya indexados (bloque 10e). Hoy solo llega
+// "google_ai_overview"; el resto cae al valor crudo, nunca a un guion.
+const PLATFORM_IA_LABEL = {
+  google_ai_overview: 'Google AI Overview', google_ai_mode: 'Google AI Mode',
+  chat_gpt: 'ChatGPT', perplexity: 'Perplexity', gemini: 'Gemini',
+};
+function modelLabel(m) {
+  if (!m) return null;
+  if (MODEL_LABEL[m]) return MODEL_LABEL[m];
+  if (/^gpt[-.]/i.test(m) || /^o\d/i.test(m)) return `ChatGPT (${m})`;
+  if (/^gemini/i.test(m)) return `Gemini (${m})`;
+  if (/^claude/i.test(m)) return `Claude (${m})`;
+  return m;
+}
+
+// Nombres a resaltar dentro del texto del modelo: la marca propia en
+// color de marca, cada competidor en oro. Los dos vienen del payload
+// (ai_visibility.competitors + missing_competitors), nunca hardcodeados.
+function _aivAgujas() {
+  const av = DATA.ai_visibility || {};
+  const rivales = [
+    ...(av.competitors || []).map(c => c.brand),
+    ...(av.missing_competitors || []),
+  ];
+  const agujas = [{ term: BRAND_LABEL, cls: 'aiv-mark-own' }];
+  rivales.forEach(nombre => {
+    if (nombre && nombre.toLowerCase() !== String(BRAND_LABEL).toLowerCase()) {
+      agujas.push({ term: nombre, cls: 'aiv-mark-rival' });
+    }
+  });
+  return agujas;
+}
+
+// Un caracter de palabra, para exigir coincidencia completa sin usar
+// lookbehind: `(?<!...)` todavía no existe en Safari viejo y un
+// SyntaxError al construir la expresión tumbaría el render entero del
+// bloque. Sin este control, "LATAM" se pintaría dentro de
+// "Latinoamérica" — la misma ambigüedad que config.py ya documenta para
+// esa marca.
+const _AIV_WORDCHAR = /[0-9A-Za-zÀ-ÿ]/;
+
+function _aivResalta(texto, agujas) {
+  const t = String(texto == null ? '' : texto);
+  const conteo = {};
+  agujas.forEach(a => { conteo[a.term] = 0; });
+  if (!t || !agujas.length) return { html: esc(t), conteo };
+
+  // De más larga a más corta: si una marca fuera prefijo de otra, gana la
+  // específica.
+  const orden = agujas.slice().sort((a, b) => b.term.length - a.term.length);
+  const rx = new RegExp(orden.map(a => a.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+
+  let html = '', ultimo = 0, m;
+  while ((m = rx.exec(t)) !== null) {
+    const ini = m.index, fin = ini + m[0].length;
+    const antes = ini > 0 ? t[ini - 1] : '';
+    const despues = fin < t.length ? t[fin] : '';
+    if (_AIV_WORDCHAR.test(antes) || _AIV_WORDCHAR.test(despues)) continue;
+    const aguja = orden.find(a => a.term.toLowerCase() === m[0].toLowerCase()) || orden[0];
+    conteo[aguja.term] = (conteo[aguja.term] || 0) + 1;
+    // Se parte el texto ORIGINAL y se escapa cada trozo después. Escapar
+    // primero y buscar sobre el HTML escapado es lo que rompe cuando un
+    // nombre trae "&" o comilla: esc sigue siendo la única puerta de salida.
+    html += esc(t.slice(ultimo, ini)) + `<mark class="${aguja.cls}">${esc(m[0])}</mark>`;
+    ultimo = fin;
+  }
+  return { html: html + esc(t.slice(ultimo)), conteo };
+}
+
+function _aivConteoTexto(conteo, agujas) {
+  return agujas.map(a => {
+    const n = conteo[a.term] || 0;
+    if (!n) return `${a.term}: sin menciones en el texto`;
+    return `${a.term}: ${fmtInt(n)} ${n === 1 ? 'mención' : 'menciones'}`;
+  }).join(' · ');
+}
+
+// El botón y el panel que comparten prompts (10c/10d) y ejemplos
+// indexados (10e). `corto` es lo que ya se ve; `completo`, lo que se
+// despliega. Devuelve '' cuando no hay nada más que mostrar.
+function _aivDisclosure(id, corto, completo, pie, labelId) {
+  const full = String(completo == null ? '' : completo);
+  if (!full || full.length <= String(corto == null ? '' : corto).length) return '';
+  const agujas = _aivAgujas();
+  const { html, conteo } = _aivResalta(full, agujas);
+  // El botón va ANTES del panel en el DOM: el orden de tabulación coincide
+  // con el visual y, al abrir, lo nuevo queda a un Tab de distancia.
+  // role="region" + aria-labelledby hace que quien navega por regiones lo
+  // oiga nombrado con la pregunta que lo originó.
+  return `
+      <button type="button" class="aiv-toggle" data-aiv-toggle
+              aria-expanded="false" aria-controls="${id}">
+        <span class="aiv-toggle-txt">Leer la respuesta completa</span>
+      </button>
+      <div class="aiv-resp" id="${id}" role="region" aria-labelledby="${labelId}" hidden>
+        <div class="aiv-resp-txt">${html}</div>
+        <div class="aiv-resp-meta">${esc(_aivConteoTexto(conteo, agujas))}</div>
+        ${pie ? `<div class="aiv-resp-src">${esc(pie)}</div>` : ''}
+      </div>`;
+}
+
+function _aivPromptCard(p, i, ambito) {
+  const idPanel = `aivr-${ambito}-${i}`;
+  const idPregunta = `aivq-${ambito}-${i}`;
+  const excerpt = p.excerpt || '';
+  const { html: excerptHtml } = _aivResalta(excerpt, _aivAgujas());
+  const modelo = modelLabel(p.model);
+  const pie = modelo
+    ? `Respuesta de ${modelo}, capturada el ${fmtDate(p.captured_at)}`
+    : `Respuesta capturada el ${fmtDate(p.captured_at)}`;
   return `
     <div class="aiv-prompt">
-      <div class="aiv-prompt-q">${esc(p.prompt)}</div>
+      <div class="aiv-prompt-q" id="${idPregunta}">${esc(p.prompt)}</div>
       <div class="aiv-prompt-pills">
         <span class="aiv-pill ${p.appears ? 'yes' : 'no'}">${p.appears ? '✓ aparece' : '✗ no aparece'}</span>
         ${p.appears && p.position ? `<span class="aiv-pill yes">posición ${p.position}</span>` : ''}
         ${p.sentiment ? `<span class="aiv-pill ${p.sentiment === 'positive' ? 'yes' : 'no'}" style="${p.sentiment === 'negative' ? 'color:' + TONE_COLOR.neg + ';background:' + TONE_COLOR.neg + '14;border-color:' + TONE_COLOR.neg + '55' : ''}">${{ positive: 'positivo', negative: 'negativo', neutral: 'neutral' }[p.sentiment]}</span>` : ''}
       </div>
-      <div class="aiv-prompt-excerpt">${esc(p.excerpt)}</div>
+      <div class="aiv-prompt-excerpt">${excerptHtml}</div>
+      ${_aivDisclosure(idPanel, excerpt, p.response_full, pie, idPregunta)}
     </div>`;
 }
+
+// Explica la leyenda de colores UNA vez por tarjeta de bloque, en vez de
+// repetirla dentro de cada panel desplegado.
+const AIV_NOTA_RESPUESTAS = 'Cada tarjeta guarda la respuesta textual del modelo. Ábrela para leerla completa: resaltamos dónde nos nombra y dónde nombra a la competencia.';
 
 function renderAIVisibilityCategory() {
   const av = DATA.ai_visibility;
@@ -2263,7 +2473,8 @@ function renderAIVisibilityCategory() {
     el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas de categoría al modelo para ${esc(BRAND_LABEL)}. Corre <code>python main.py --visibilidad-ia</code>.</p>`;
     return;
   }
-  el.innerHTML = av.category_prompts.map(_aivPromptCard).join('');
+  el.innerHTML = `<p class="aiv-nota-seccion">${esc(AIV_NOTA_RESPUESTAS)}</p>`
+    + av.category_prompts.map((p, i) => _aivPromptCard(p, i, 'cat')).join('');
 }
 
 function renderAIVisibilityBrandPrompts() {
@@ -2274,7 +2485,39 @@ function renderAIVisibilityBrandPrompts() {
     el.innerHTML = `<p class="block-empty">Todavía no se le hicieron preguntas propias al modelo sobre ${esc(BRAND_LABEL)}.</p>`;
     return;
   }
-  el.innerHTML = av.brand_prompts.map(_aivPromptCard).join('');
+  el.innerHTML = `<p class="aiv-nota-seccion">${esc(AIV_NOTA_RESPUESTAS)}</p>`
+    + av.brand_prompts.map((p, i) => _aivPromptCard(p, i, 'marca')).join('');
+}
+
+// Un solo escucha delegado, registrado una vez: sobrevive a cualquier
+// repintado y no crea un handler por tarjeta.
+function initAivRespuestas() {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-aiv-toggle]');
+    if (!btn) return;
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (!panel) return;
+    const abierto = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!abierto));
+    panel.hidden = abierto;
+    const tarjeta = btn.closest('.aiv-prompt') || btn.closest('.aiv-quote');
+    if (tarjeta) tarjeta.classList.toggle('abierta', !abierto);
+    btn.querySelector('.aiv-toggle-txt').textContent =
+      abierto ? 'Leer la respuesta completa' : 'Ocultar la respuesta completa';
+  });
+
+  // Ctrl+F encuentra texto dentro de un panel cerrado y lo abre solo,
+  // donde el navegador lo soporta. Reusa la misma ruta de estado (click),
+  // no la duplica.
+  if ('onbeforematch' in document.body) {
+    document.querySelectorAll('.aiv-resp[hidden]').forEach(panel => {
+      panel.setAttribute('hidden', 'until-found');
+      panel.addEventListener('beforematch', () => {
+        const b = document.querySelector(`[aria-controls="${panel.id}"]`);
+        if (b) b.click();
+      });
+    });
+  }
 }
 
 function renderAIVisibilitySearchExamples() {
@@ -2296,13 +2539,19 @@ function renderAIVisibilitySearchExamples() {
   // nadie lea "miami" como si alguien le hubiera preguntado a la IA por
   // LATAM.
   const brandNeedle = BRAND_LABEL.toLowerCase();
-  el.innerHTML = av.search_examples.map(q => {
+  // Mismo desplegable que las tarjetas de prompt: acá la pérdida por
+  // truncado era todavía mayor (respuestas de más de 5.000 caracteres
+  // recortadas a ~350, o sea el 7% del texto).
+  el.innerHTML = av.search_examples.map((q, i) => {
     const mencionaMarca = (q.question || '').toLowerCase().includes(brandNeedle);
+    const idPanel = `aivr-idx-${i}`, idPregunta = `aivq-idx-${i}`;
+    const pie = `Respuesta indexada en ${PLATFORM_IA_LABEL[q.platform] || q.platform || 'IA'}, capturada el ${fmtDate(q.captured_at)}`;
     return `
     <div class="aiv-quote">
-      <div class="aiv-quote-q">${esc(q.question || 's/d')}${!mencionaMarca ? ' <span class="aiv-own-badge" title="La pregunta no nombra la marca: el dominio solo aparece entre las fuentes citadas">no nombra la marca</span>' : ''}</div>
-      <div class="aiv-quote-a">${esc(q.answer)}</div>
-      <div class="aiv-quote-meta">${q.source_domain ? `fuente citada: <a href="${esc(q.source_url || '#')}" target="_blank" rel="noopener">${esc(q.source_domain)}</a> · ` : ''}${fmtVol(q.ai_search_volume)} búsquedas/mes · ${esc(q.platform || 'IA')}</div>
+      <div class="aiv-quote-q" id="${idPregunta}">${esc(q.question || 's/d')}${!mencionaMarca ? ' <span class="aiv-own-badge" title="La pregunta no nombra la marca: el dominio solo aparece entre las fuentes citadas">no nombra la marca</span>' : ''}</div>
+      <div class="aiv-quote-a">${_aivResalta(q.answer, _aivAgujas()).html}</div>
+      ${_aivDisclosure(idPanel, q.answer, q.answer_full, pie, idPregunta)}
+      <div class="aiv-quote-meta">${q.source_domain ? `fuente citada: <a href="${esc(q.source_url || '#')}" target="_blank" rel="noopener">${esc(q.source_domain)}</a> · ` : ''}${fmtVol(q.ai_search_volume)} búsquedas/mes · ${esc(PLATFORM_IA_LABEL[q.platform] || q.platform || 'IA')}</div>
     </div>`;
   }).join('');
 }
@@ -2353,6 +2602,10 @@ function renderShareOfVoice() {
   renderAIVisibilityCompare, renderAIVisibilitySources,
   renderAIVisibilityCategory, renderAIVisibilityBrandPrompts,
   renderAIVisibilitySearchExamples, renderShareOfVoice,
+  // Después de pintar las tarjetas: el escucha delegado no depende del
+  // orden, pero el barrido de `hidden=until-found` sí necesita que los
+  // paneles ya existan en el DOM.
+  initAivRespuestas,
 ].forEach(fn => fn());
 </script>
 </body>
