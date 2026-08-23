@@ -205,20 +205,20 @@
      hace visible que ese agregado mezcla canales de naturaleza distinta
      (una cuenta global de alcance continental frente a cuentas locales),
      en vez de dejar la anomalía escondida dentro de un solo número. */
-  .acct-card{margin-top:14px}
+  .acct-card{margin-top:0}
   .acct-note{font-size:12px;color:var(--txt-2);line-height:1.6;margin-bottom:14px;max-width:76ch}
-  .acct-table{width:100%;border-collapse:collapse;font-size:12px;min-width:460px}
+  .acct-table{width:100%;border-collapse:collapse;font-size:12px;min-width:330px}
   .acct-table th{
     font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--txt-3);text-align:left;padding:0 12px 8px 0;border-bottom:1px solid var(--border);
+    color:var(--txt-3);text-align:left;padding:0 9px 8px 0;border-bottom:1px solid var(--border);
   }
-  .acct-table td{padding:10px 12px 10px 0;border-bottom:1px solid var(--border);vertical-align:middle}
+  .acct-table td{padding:10px 9px 10px 0;border-bottom:1px solid var(--border);vertical-align:middle}
   .acct-table tr:last-child td{border-bottom:none}
-  .acct-name-cell{display:flex;flex-direction:column;gap:2px;min-width:150px}
+  .acct-name-cell{display:flex;flex-direction:column;gap:2px;min-width:104px}
   .acct-name{font-size:12.5px;font-weight:600;color:var(--txt)}
   .acct-tag{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);letter-spacing:.01em}
   .acct-mono{font-family:var(--mono);color:var(--txt-2);white-space:nowrap}
-  .acct-rate{display:flex;align-items:center;gap:8px;min-width:150px}
+  .acct-rate{display:flex;align-items:center;gap:7px;min-width:104px}
   .acct-rate .track{flex:1;height:6px;background:var(--bg-4);border-radius:3px;overflow:hidden}
   /* display:block es obligatorio acá (hallazgo de verificación visual con
      Playwright, Tarea 2): .fill es un <span> — inline por default — anidado
@@ -230,8 +230,13 @@
      .q-plat-row .fill y .rev-bar-row .fill, más abajo, que comparten
      exactamente el mismo patrón anidado y el mismo defecto. */
   .acct-rate .fill{display:block;height:100%;border-radius:3px;background:var(--red)}
-  .acct-rate .val{font-family:var(--mono);min-width:42px;text-align:right;color:var(--txt);font-weight:600}
+  .acct-rate .val{font-family:var(--mono);min-width:40px;text-align:right;color:var(--txt);font-weight:600}
   .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
+  /* Referencia cruzada dentro de la prosa del reporte: manda a otro
+     bloque del documento. El delegado de clic de la navegación intercepta
+     cualquier a[href^="#"] cuyo destino conozca, así que estos enlaces
+     cambian de sección solos. */
+  .xref{color:var(--brand-ink);text-decoration:underline;text-underline-offset:2px}
 
   /* ── chart chrome ── */
   .chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:14px}
@@ -296,9 +301,34 @@
   #heatmap td.total-col{font-family:var(--mono);font-weight:700;color:var(--txt);background:var(--bg-3)}
   #heatmap td.pct-col{font-family:var(--mono);font-weight:600;color:var(--brand-ink);background:var(--brand-dim)}
 
-  /* ── block 5 · sentiment + emotions ── */
-  .sent-grid{display:grid;grid-template-columns:260px 1fr;gap:28px}
-  .donut-wrap{position:relative;width:190px;height:190px;margin:0 auto}
+  /* ── block 5 · sentiment + emotions + tasa de queja por cuenta ──
+     Fila de dos columnas (pedido 4 del cliente: la tabla de tasa de queja
+     por cuenta de origen se muda del bloque 1 a este). No reutiliza
+     .two-col porque ahí cada columna es una <section> con su propio h2, y
+     acá el cliente pidió explícitamente "en el mismo bloque": una sola
+     section, un solo h2, dos tarjetas. El reparto no es 1:1 — la
+     izquierda tiene dona y barras de emociones, la derecha una tabla de
+     tres o cuatro filas. Quiebra en el mismo 1040px que .two-col, para no
+     estrenar un breakpoint más. */
+  .sent-row{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:22px;align-items:start}
+  /* Obligatorio, mismo motivo que .two-col > section (ver su comentario):
+     un item de grid hereda min-width:auto = su min-content, y el
+     min-content de la tabla de cuentas viaja hacia arriba a través del
+     .scroll-x. Sin esto, a 390px la tarjeta se negaba a bajar de 404px y
+     forzaba scroll horizontal del BODY entero, no del contenedor que sí
+     tiene scroll propio. */
+  .sent-row > *{min-width:0}
+  @media (max-width:1040px){ .sent-row{grid-template-columns:1fr} }
+
+  .sent-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:22px}
+  /* Bug preexistente: #boxEmotions ya tenía min-width:0, pero el <div>
+     padre (segundo item del grid) no, así que heredaba min-width:auto =
+     min-content del canvas y cerraba el trinquete: el chart nunca se
+     encogía al redimensionar, quedaba recortado sin barra de scroll por
+     el overflow-x:hidden del body. Con la columna izquierda ahora más
+     angosta esto pasa de latente a seguro. */
+  .sent-grid > *{min-width:0}
+  .donut-wrap{position:relative;width:min(190px,100%);height:190px;margin:0 auto}
   .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
   /* El centro de la dona ya NO es el hero de sentiment neto en verde gigante
      (Cambio 2): muestra el conteo neutral de menciones clasificadas — un
@@ -847,7 +877,6 @@
   <section id="b1"><h2>Resumen</h2>
     <div id="kpis" class="card"></div>
     <div id="repHealth" class="card rep-card"></div>
-    <div id="accountBreakdown" class="card acct-card"></div>
   </section>
 
   <section id="b2">
@@ -881,20 +910,28 @@
 
   <section id="b5">
     <h2>Sentimiento y emociones</h2>
-    <div class="card">
-      <div class="sent-grid">
-        <div>
-          <div class="donut-wrap">
-            <canvas id="chSentiment"></canvas>
-            <div class="donut-center"><div class="donut-num" id="donutNum">s/d</div><div class="donut-lbl" id="donutLbl">clasificadas</div></div>
+    <!-- La tabla de tasa de queja por cuenta de origen vive acá, al lado
+         de la dona, y ya no como tercera tarjeta del bloque 1 (pedido 4
+         del cliente). Encaja mejor de lo que parece: las dos cosas
+         responden "cómo se siente esta conversación", una por tono y otra
+         por canal de origen. -->
+    <div class="sent-row">
+      <div class="card">
+        <div class="sent-grid">
+          <div>
+            <div class="donut-wrap">
+              <canvas id="chSentiment"></canvas>
+              <div class="donut-center"><div class="donut-num" id="donutNum">s/d</div><div class="donut-lbl" id="donutLbl">clasificadas</div></div>
+            </div>
+            <div class="sent-legend" id="sentLegend"></div>
           </div>
-          <div class="sent-legend" id="sentLegend"></div>
-        </div>
-        <div>
-          <div class="chart-legend" id="legendEmotions"></div>
-          <div class="chart-box med" id="boxEmotions"><canvas id="chEmotions"></canvas></div>
+          <div>
+            <div class="chart-legend" id="legendEmotions"></div>
+            <div class="chart-box med" id="boxEmotions"><canvas id="chEmotions"></canvas></div>
+          </div>
         </div>
       </div>
+      <div id="accountBreakdown" class="card acct-card"></div>
     </div>
   </section>
 
@@ -1336,7 +1373,7 @@ function renderAccountBreakdown() {
 
   el.innerHTML = `
     <div class="q-block-title">Tasa de queja por cuenta de origen: Instagram</div>
-    <p class="acct-note">La tasa de quejas del titular (arriba) es el agregado de <b style="color:var(--txt)">todas</b> las cuentas de Instagram de ${esc(BRAND_LABEL)}. Cuando una marca publica desde una cuenta global de alcance continental junto a cuentas locales, promediarlas en un solo número esconde la diferencia real entre canales, por eso se desglosa aquí, junto al titular, no solo en "Calidad de los datos" (bloque 8).</p>
+    <p class="acct-note">La tasa de quejas del titular (<a class="xref" href="#b1">Resumen</a>) es el agregado de <b style="color:var(--txt)">todas</b> las cuentas de Instagram de ${esc(BRAND_LABEL)}. Cuando una marca publica desde una cuenta global de alcance continental junto a cuentas locales, promediarlas en un solo número esconde la diferencia real entre canales, por eso se desglosa aquí.</p>
     <div class="scroll-x">
       <table class="acct-table">
         <thead><tr><th>Cuenta</th><th>Menciones</th><th>% de Instagram</th><th>Tasa de queja</th></tr></thead>
@@ -1437,7 +1474,10 @@ function renderTimeline() {
         y: {
           stacked: true, beginAtZero: true, position: 'left',
           grid: { color: 'rgba(20,16,12,.07)' },
-          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0,
+                   // Mismo separador de miles que el resto del reporte: sin esto
+                   // Chart.js rotula "1,200" (en-US) al lado de un "1.200" nuestro.
+                   callback: v => fmtInt(v) },
           title: { display: true, text: 'Menciones / día', color: '#786F63', font: { family: FONT_MONO, size: 9 } },
         },
         y1: {
@@ -1538,7 +1578,10 @@ function renderDrivers(month) {
         x: {
           beginAtZero: true,
           grid: { color: 'rgba(20,16,12,.07)' },
-          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0,
+                   // Mismo separador de miles que el resto del reporte: sin esto
+                   // Chart.js rotula "1,200" (en-US) al lado de un "1.200" nuestro.
+                   callback: v => fmtInt(v) },
         },
         y: {
           grid: { display: false },
@@ -1729,7 +1772,10 @@ function renderSentiment() {
         x: {
           beginAtZero: true,
           grid: { color: 'rgba(20,16,12,.07)' },
-          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0 },
+          ticks: { color: '#786F63', font: { family: FONT_MONO, size: 9 }, precision: 0,
+                   // Mismo separador de miles que el resto del reporte: sin esto
+                   // Chart.js rotula "1,200" (en-US) al lado de un "1.200" nuestro.
+                   callback: v => fmtInt(v) },
         },
         y: { grid: { display: false }, ticks: { color: '#6B6259', font: { family: FONT_SANS, size: 11.5 } } },
       },
@@ -2055,10 +2101,10 @@ function renderCalidad() {
     // Avianca o el de LATAM, así que nombra a las dos marcas explícitamente
     // en vez de depender de BRAND_LABEL.
     `<div class="q-note"><span class="q-num" style="font-size:13px">1 : 2</span>
-      <span>Avianca tiene <b style="color:var(--txt)">una sola cuenta oficial de Instagram</b> (@avianca). @aviancacolombia, un segundo perfil que en algún momento se asumió activo, <b style="color:var(--txt)">no existe</b> (Instagram la devuelve como <span style="font-family:var(--mono)">not_found</span>, verificado contra la API real). LATAM sí tiene dos cuentas oficiales registradas: @latamairlines (global) y @latamairlines_colombia (local). Esta asimetría de canales entre las dos marcas es real, no un error de captura, es la razón por la que el desglose por cuenta (bloque 1) tiene más filas comparables para LATAM que para Avianca.</span></div>`,
+      <span>Avianca tiene <b style="color:var(--txt)">una sola cuenta oficial de Instagram</b> (@avianca). @aviancacolombia, un segundo perfil que en algún momento se asumió activo, <b style="color:var(--txt)">no existe</b> (Instagram la devuelve como <span style="font-family:var(--mono)">not_found</span>, verificado contra la API real). LATAM sí tiene dos cuentas oficiales registradas: @latamairlines (global) y @latamairlines_colombia (local). Esta asimetría de canales entre las dos marcas es real, no un error de captura, es la razón por la que el <a class="xref" href="#b5">desglose por cuenta</a> tiene más filas comparables para LATAM que para Avianca.</span></div>`,
     nSinCuentaIG > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(nSinCuentaIG)}</span>
-      <span>menciones de Instagram de ${esc(BRAND_LABEL)} son anteriores a que se empezara a registrar la cuenta de origen (<span style="font-family:var(--mono)">source_account</span>) y aparecen como <b style="color:var(--txt)">"Cuenta sin registrar"</b> en el desglose por cuenta (bloque 1): no es un hueco en la captura actual, es contenido scrapeado antes de que ese campo existiera en la base.</span></div>`
+      <span>menciones de Instagram de ${esc(BRAND_LABEL)} son anteriores a que se empezara a registrar la cuenta de origen (<span style="font-family:var(--mono)">source_account</span>) y aparecen como <b style="color:var(--txt)">"Cuenta sin registrar"</b> en el <a class="xref" href="#b5">desglose por cuenta</a>: no es un hueco en la captura actual, es contenido scrapeado antes de que ese campo existiera en la base.</span></div>`
       : '',
     q.collapsed_repeats > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.collapsed_repeats)}</span>
