@@ -164,7 +164,7 @@ def _visible_offenders(html: str) -> list[str]:
         # El dashboard arranca con una sola sección visible (sidebar de
         # dos secciones más apéndice), y `innerText` NO incluye lo que
         # está en display:none: sin esto, el guion largo dejaría de
-        # detectarse en toda la sección de IA y en Cobertura de los datos.
+        # detectarse en toda la sección de IA.
         # La casilla "Ver todo en una sola página" existe justamente para
         # devolverle al documento su forma completa (Ctrl+F, impresión) y
         # acá recupera la cobertura del escaneo.

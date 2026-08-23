@@ -296,19 +296,19 @@ def test_stage_for_deploy_avianca_y_latam_conviven_sin_pisarse(tmp_path, monkeyp
 # que se muestran y ocultan, anclas entre secciones, "ver todo en una sola
 # página") vive en tests/test_dashboard_interaccion.py, que sí ejecuta el JS.
 
-def test_los_tres_paneles_existen():
+def test_los_dos_paneles_existen():
     html = build.render(PAYLOAD)
-    for panel_id in ("panel-social", "panel-ai", "panel-cobertura"):
+    for panel_id in ("panel-social", "panel-ai"):
         assert f'id="{panel_id}"' in html
 
 
-def test_el_sidebar_declara_las_dos_secciones_y_el_apendice():
-    """Dos secciones numeradas, ni una más: el apéndice de cobertura va
-    bajo un separador y sin numerar, para no leerse como una tercera."""
+def test_el_sidebar_declara_exactamente_dos_secciones():
+    """Dos secciones numeradas y nada más: el cliente pidió eliminar el
+    apéndice de cobertura y lo reafirmó cuando se le propuso conservarlo."""
     html = build.render(PAYLOAD)
     assert ">1. Social Listening</button>" in html
     assert ">2. AI Mentions</button>" in html
-    assert 'class="nav-sec nav-apx"' in html
+    assert 'nav-apx' not in html, 'el apendice de cobertura no debe existir'
     assert ">3. " not in html
 
 
@@ -342,17 +342,15 @@ def test_el_footer_queda_fuera_de_los_paneles():
     sección."""
     html = build.render(PAYLOAD)
     cuerpo = html.split('<div class="wrap">', 1)[1]
-    ultimo_cierre = cuerpo.rindex("<!-- /panel-cobertura -->")
+    ultimo_cierre = cuerpo.rindex("<!-- /panel-ai -->")
     assert cuerpo.index("<footer>") > ultimo_cierre
 
 
-def test_calidad_de_los_datos_se_conserva_como_apendice_no_se_borra():
-    """El cliente pidió eliminar el bloque porque el reporte era un
-    largero; sacarlo del flujo principal elimina ese costo y conserva la
-    auditoría, que es el único lugar donde el reporte declara de qué NO
-    puede hablar."""
+def test_calidad_de_los_datos_fue_eliminada_por_completo():
+    """Se le propuso conservarla como apéndice compacto y respondió que no
+    la quiere. Se verifica que no quede el panel, ni la función que lo
+    pintaba, ni referencias cruzadas apuntando a un ancla inexistente."""
     html = build.render(PAYLOAD)
-    assert 'id="b8"' in html
-    assert 'id="calidad"' in html
-    assert "renderCalidad" in html
-    assert "Cobertura de los datos" in html
+    for rastro in ('id="b8"', 'id="calidad"', "renderCalidad",
+                   "Cobertura de los datos", 'href="#b8"', "panel-cobertura"):
+        assert rastro not in html, f"quedó rastro de: {rastro}"

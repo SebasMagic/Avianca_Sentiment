@@ -265,10 +265,9 @@ def test_los_porcentajes_usan_coma_decimal(pagina_ai):
 
 # ── navegación: sidebar de dos secciones ─────────────────────────────────
 
-def test_arranca_en_social_listening_con_los_otros_paneles_ocultos(pagina):
+def test_arranca_en_social_listening_con_el_otro_panel_oculto(pagina):
     assert pagina.locator("#panel-social").is_visible()
     assert not pagina.locator("#panel-ai").is_visible()
-    assert not pagina.locator("#panel-cobertura").is_visible()
     assert pagina.locator("#b1").is_visible()
     assert not pagina.locator("#b11").is_visible()
 
@@ -316,7 +315,6 @@ def test_ver_todo_en_una_sola_pagina_muestra_los_tres_paneles(pagina):
     pagina.wait_for_timeout(80)
     assert pagina.locator("#panel-social").is_visible()
     assert pagina.locator("#panel-ai").is_visible()
-    assert pagina.locator("#panel-cobertura").is_visible()
 
     pagina.uncheck("#chkAllView")
     pagina.wait_for_timeout(80)
