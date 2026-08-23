@@ -61,6 +61,18 @@ _MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _MD_CODE = re.compile(r"`([^`]+)`")
 _MD_HEADING = re.compile(r"^#{1,6}\s*", flags=re.MULTILINE)
 
+# El cliente prohibió el guion largo en TODO texto que él vea (lo asocia
+# con contenido generado por IA — ver tests/test_dashboard_visible_text.py).
+# Estas respuestas las escribe un modelo, no nosotros, así que la regla no
+# se puede garantizar en el origen: se normaliza acá, en la misma capa que
+# ya limpia markdown y por el mismo motivo (es tipografía, no contenido —
+# no se toca ni una palabra). Cubre también el guion medio (–, U+2013), que
+# el modelo usa indistintamente. Sin esto, la primera respuesta con "—" que
+# devuelva una captura futura llega intacta a la pantalla del cliente, y
+# ahora que el desplegable muestra el texto COMPLETO (no un excerpt de 380
+# caracteres) la superficie expuesta es varias veces mayor.
+_DASHES = re.compile(r"[—–]")
+
 
 def _strip_markdown(text: str) -> str:
     text = _MD_IMAGE.sub(r"\1", text)
@@ -71,8 +83,14 @@ def _strip_markdown(text: str) -> str:
     return text
 
 
+def _clean(text: str | None) -> str:
+    """Texto listo para mostrar: sin sintaxis de markdown, sin guion largo
+    y SIN truncar. Es lo que ve quien despliega la respuesta completa."""
+    return _DASHES.sub("-", _strip_markdown((text or "").strip()))
+
+
 def _excerpt(text: str | None) -> str:
-    text = _strip_markdown((text or "").strip())
+    text = _clean(text)
     if len(text) <= EXCERPT_LEN:
         return text
     return text[:EXCERPT_LEN].rsplit(" ", 1)[0] + "…"
@@ -129,6 +147,12 @@ def _prompt_entry(row: dict) -> dict:
         "sentiment": _dominant_label(
             row["sentiment_positive"], row["sentiment_negative"], row["sentiment_neutral"]),
         "excerpt": _excerpt(row["response_text"]),
+        # Texto completo, para el desplegable "Leer la respuesta completa"
+        # de la tarjeta (bloques 10c/10d). `excerpt` se conserva tal cual:
+        # es la vista cerrada. Cuando la respuesta cabe en EXCERPT_LEN los
+        # dos campos son idénticos, y esa igualdad es justamente la
+        # condición que usa la plantilla para NO pintar el control.
+        "response_full": _clean(row["response_text"]),
         "captured_at": row["captured_at"],
     }
 
@@ -170,6 +194,9 @@ def build_ai_visibility_payload(conn, brand: str) -> dict:
     search_examples = [{
         "question": r["question"],
         "answer": _excerpt(r["answer"]),
+        # Mismo criterio que response_full: acá la pérdida era todavía
+        # mayor (respuestas de hasta 5.300 caracteres recortadas a ~350).
+        "answer_full": _clean(r["answer"]),
         "platform": r["platform"],
         "ai_search_volume": r["ai_search_volume"],
         "source_domain": r["top_source_domain"],
@@ -192,19 +219,19 @@ def build_ai_visibility_payload(conn, brand: str) -> dict:
     }
 
 
-def build_share_of_voice_payload(conn, brand: str) -> dict:
+def _share_of_voice_by_engine(conn, brand_name: str) -> tuple[dict, bool, str | None]:
     """
-    Volumen de búsqueda por intención (problema vs. comercial) y motor
-    (google_ads vs. ai_search) para `brand`, de la captura más reciente
-    (mismo run_id que agrupa el resto de este bloque — ver docstring del
-    módulo).
+    Volumen por intención y motor de UNA marca, de su captura más reciente.
+    Se extrajo de build_share_of_voice_payload para poder correrla también
+    sobre los competidores: sin el mismo indicador del competidor al lado,
+    un 0,28% no es interpretable (no se compara contra cero, se compara
+    contra quien pelea por el mismo pasajero) — ver la nota de lectura del
+    bloque 11 en template.html.
     """
-    run = db.latest_completed_run(conn, brand, "ai_visibility")
-    rows = db.search_share_of_voice_for_brand(conn, brand)
+    run = db.latest_completed_run(conn, brand_name, "ai_visibility")
+    rows = db.search_share_of_voice_for_brand(conn, brand_name) if run else []
     if run:
         rows = [r for r in rows if r["run_id"] == run["id"]]
-    else:
-        rows = []
 
     by_engine: dict[str, dict] = {}
     for r in rows:
@@ -220,14 +247,55 @@ def build_share_of_voice_payload(conn, brand: str) -> dict:
 
     for engine_data in by_engine.values():
         engine_data["keywords"].sort(key=lambda k: k["search_volume"] or 0, reverse=True)
-        total = engine_data["problema"] + engine_data["comercial"]
-        engine_data["problem_pct"] = (
-            round(engine_data["problema"] / total * 100, 1) if total else None
-        )
+        problema = engine_data["problema"]
+        total = problema + engine_data["comercial"]
+        # 2 decimales, no 1: con un decimal, Avianca (0,2845%) y LATAM
+        # (0,0648%) se redondean a 0,3% y 0,1%, y esa diferencia real de
+        # 4,4x se lee como 3x. El redondeo estaba borrando exactamente la
+        # precisión que sostiene la comparación entre marcas.
+        engine_data["problem_pct"] = round(problema / total * 100, 2) if total else None
+        # El número protagonista del bloque: "1 de cada N búsquedas de la
+        # marca es por un problema". 0,28% y 0,06% se leen los dos como
+        # "casi nada"; 351 contra 1.543 se lee como una diferencia de
+        # escala. None cuando no hay ninguna búsqueda de problema (no es
+        # "1 de cada infinito", es que no hay dato que expresar así).
+        engine_data["problem_one_in"] = round(total / problema) if problema else None
+
+    return by_engine, bool(rows), (run["finished_at"] if run else None)
+
+
+def build_share_of_voice_payload(conn, brand: str) -> dict:
+    """
+    Volumen de búsqueda por intención (problema vs. comercial) y motor
+    (google_ads vs. ai_search) para `brand`, de la captura más reciente
+    (mismo run_id que agrupa el resto de este bloque — ver docstring del
+    módulo), más el mismo indicador de cada competidor del perfil.
+
+    La comparación viaja DENTRO del payload de la marca propia (own vs.
+    competitors), igual que en build_ai_visibility_payload — así la nota
+    de lectura del dashboard se arma con datos, no con una frase fija que
+    se rompería al entrar una tercera marca.
+    """
+    by_engine, has_data, captured_at = _share_of_voice_by_engine(conn, brand)
+
+    competitors = []
+    missing_competitors = []
+    for name in get_brand(brand).get("competitors") or []:
+        comp_engines, comp_has_data, comp_captured = _share_of_voice_by_engine(conn, name)
+        if comp_has_data:
+            competitors.append({
+                "brand": name, "by_engine": comp_engines, "captured_at": comp_captured,
+            })
+        else:
+            # Mismo criterio de honestidad que el resto del reporte: sin
+            # captura se declara, nunca se rellena con 0.
+            missing_competitors.append(name)
 
     return {
         "brand": brand,
         "by_engine": by_engine,
-        "has_data": bool(rows),
-        "captured_at": run["finished_at"] if run else None,
+        "competitors": competitors,
+        "missing_competitors": missing_competitors,
+        "has_data": has_data,
+        "captured_at": captured_at,
     }

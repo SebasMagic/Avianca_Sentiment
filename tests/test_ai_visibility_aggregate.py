@@ -247,7 +247,7 @@ def test_share_of_voice_suma_por_intencion_y_motor(tmp_db):
     ga = sov["by_engine"]["google_ads"]
     assert ga["problema"] == 400
     assert ga["comercial"] == 12000
-    assert ga["problem_pct"] == round(400 / 12400 * 100, 1)
+    assert ga["problem_pct"] == round(400 / 12400 * 100, 2)
     assert sov["has_data"] is True
 
 
@@ -275,3 +275,160 @@ def test_share_of_voice_ignora_corrida_vieja(tmp_db):
     sov = agg.build_share_of_voice_payload(tmp_db, "Avianca")
 
     assert sov["by_engine"]["google_ads"]["problema"] == 390
+
+
+# ── respuesta completa: lo que alimenta el desplegable "Leer la respuesta
+# completa" de las tarjetas de prompt (bloques 10c/10d) ──────────────────
+
+def test_response_full_limpia_markdown_pero_no_trunca(tmp_db):
+    largo = ("**Avianca** es una aerolínea colombiana. " * 40).strip()
+    run_id = db.start_run(tmp_db, "ai_visibility", None, brand="Avianca")
+    db.insert_ai_prompt_response(tmp_db, {
+        "captured_at": "2026-08-22T00:01:00+00:00", "platform": "chat_gpt",
+        "model": "gpt-4o-mini", "prompt": "¿Es confiable Avianca?",
+        "prompt_scope": "brand", "subject_brand": "Avianca",
+        "response_text": largo,
+    }, [{"brand": "Avianca", "appears": True, "position": 1}], run_id)
+    db.finish_run(tmp_db, run_id, 1, 1, 1, 0)
+
+    entrada = agg.build_ai_visibility_payload(tmp_db, "Avianca")["brand_prompts"][0]
+
+    assert "**" not in entrada["response_full"]
+    assert len(entrada["response_full"]) > agg.EXCERPT_LEN
+    assert not entrada["response_full"].endswith("…")
+    # El excerpt sigue siendo la vista cerrada, recortada como siempre.
+    assert len(entrada["excerpt"]) <= agg.EXCERPT_LEN + 1
+    assert entrada["response_full"].startswith(entrada["excerpt"][:100])
+
+
+def test_response_full_igual_al_excerpt_cuando_la_respuesta_es_corta(tmp_db):
+    """Es la condición exacta de la que depende que la tarjeta NO pinte el
+    control de desplegar: si no hay nada más que leer, no hay flechita."""
+    run_id = db.start_run(tmp_db, "ai_visibility", None, brand="Avianca")
+    db.insert_ai_prompt_response(tmp_db, {
+        "captured_at": "2026-08-22T00:01:00+00:00", "platform": "chat_gpt",
+        "model": "gpt-4o-mini", "prompt": "¿Es confiable Avianca?",
+        "prompt_scope": "brand", "subject_brand": "Avianca",
+        "response_text": "Sí, es confiable.",
+    }, [{"brand": "Avianca", "appears": True, "position": 1}], run_id)
+    db.finish_run(tmp_db, run_id, 1, 1, 1, 0)
+
+    entrada = agg.build_ai_visibility_payload(tmp_db, "Avianca")["brand_prompts"][0]
+
+    assert entrada["response_full"] == entrada["excerpt"] == "Sí, es confiable."
+
+
+def test_response_full_vacio_si_no_hay_texto_de_respuesta(tmp_db):
+    """`ai_prompt_responses.response_text` es NOT NULL, así que el caso
+    real de "no hay texto" es la cadena vacía: sin nada que desplegar, la
+    tarjeta tampoco debe pintar el control."""
+    run_id = db.start_run(tmp_db, "ai_visibility", None, brand="Avianca")
+    db.insert_ai_prompt_response(tmp_db, {
+        "captured_at": "2026-08-22T00:01:00+00:00", "platform": "chat_gpt",
+        "model": "gpt-4o-mini", "prompt": "¿Es confiable Avianca?",
+        "prompt_scope": "brand", "subject_brand": "Avianca",
+        "response_text": "   ",
+    }, [{"brand": "Avianca", "appears": True, "position": 1}], run_id)
+    db.finish_run(tmp_db, run_id, 1, 1, 1, 0)
+
+    entrada = agg.build_ai_visibility_payload(tmp_db, "Avianca")["brand_prompts"][0]
+
+    assert entrada["response_full"] == ""
+    assert entrada["excerpt"] == ""
+
+
+def test_answer_full_de_los_ejemplos_indexados_no_se_trunca(tmp_db):
+    largo = ("Aruba es un destino soleado del Caribe. " * 60).strip()
+    run_id = db.start_run(tmp_db, "ai_visibility", None, brand="Avianca")
+    db.insert_ai_search_mention_examples(tmp_db, [{
+        "brand": "Avianca", "captured_at": "2026-08-22T00:00:00+00:00",
+        "platform": "google_ai_overview", "question": "aruba",
+        "answer": largo, "ai_search_volume": 100,
+        "top_source_domain": "www.avianca.com", "top_source_url": "https://x",
+    }], run_id)
+    db.finish_run(tmp_db, run_id, 1, 1, 1, 0)
+
+    ejemplo = agg.build_ai_visibility_payload(tmp_db, "Avianca")["search_examples"][0]
+
+    assert len(ejemplo["answer"]) <= agg.EXCERPT_LEN + 1
+    assert ejemplo["answer_full"] == largo
+    assert len(ejemplo["answer_full"]) > len(ejemplo["answer"])
+
+
+def test_el_texto_del_modelo_llega_sin_guion_largo(tmp_db):
+    """El cliente prohibió el guion largo en todo lo que él ve, y este
+    texto lo escribe un modelo, no nosotros: se normaliza al armar el
+    payload (ver _clean). Cubre también el guion medio."""
+    run_id = db.start_run(tmp_db, "ai_visibility", None, brand="Avianca")
+    db.insert_ai_prompt_response(tmp_db, {
+        "captured_at": "2026-08-22T00:01:00+00:00", "platform": "chat_gpt",
+        "model": "gpt-4o-mini", "prompt": "¿Es confiable Avianca?",
+        "prompt_scope": "brand", "subject_brand": "Avianca",
+        "response_text": "Avianca — la aerolínea de bandera – es confiable.",
+    }, [{"brand": "Avianca", "appears": True, "position": 1}], run_id)
+    db.finish_run(tmp_db, run_id, 1, 1, 1, 0)
+
+    entrada = agg.build_ai_visibility_payload(tmp_db, "Avianca")["brand_prompts"][0]
+
+    assert "—" not in entrada["response_full"]
+    assert "–" not in entrada["response_full"]
+    assert "—" not in entrada["excerpt"]
+    assert entrada["response_full"] == "Avianca - la aerolínea de bandera - es confiable."
+
+
+# ── share of voice: precisión y comparación contra el competidor ─────────
+
+def _seed_sov(conn, brand, problema, comercial, captured_at="2026-08-22T00:00:00+00:00"):
+    run_id = db.start_run(conn, "ai_visibility", None, brand=brand)
+    db.insert_search_share_of_voice(conn, [
+        {"brand": brand, "captured_at": captured_at, "keyword": f"{brand} reclamo",
+         "intent": "problema", "engine": "google_ads", "search_volume": problema},
+        {"brand": brand, "captured_at": captured_at, "keyword": f"{brand} vuelos",
+         "intent": "comercial", "engine": "google_ads", "search_volume": comercial},
+    ], run_id)
+    db.finish_run(conn, run_id, 2, 2, 2, 0)
+    return run_id
+
+
+def test_share_of_voice_conserva_dos_decimales_de_precision(tmp_db):
+    """Con un solo decimal, 0,2845% y 0,0648% se redondean a 0,3% y 0,1%:
+    una diferencia real de 4,4x se lee como 3x. Son los números reales de
+    Avianca y LATAM."""
+    _seed_sov(tmp_db, "Avianca", 890, 311920)
+
+    ga = agg.build_share_of_voice_payload(tmp_db, "Avianca")["by_engine"]["google_ads"]
+
+    assert ga["problem_pct"] == 0.28
+    assert ga["problem_one_in"] == 351
+
+
+def test_share_of_voice_trae_el_mismo_indicador_del_competidor(tmp_db):
+    _seed_sov(tmp_db, "Avianca", 890, 311920)
+    _seed_sov(tmp_db, "LATAM", 80, 123390)
+
+    sov = agg.build_share_of_voice_payload(tmp_db, "Avianca")
+
+    assert sov["missing_competitors"] == []
+    assert len(sov["competitors"]) == 1
+    comp = sov["competitors"][0]
+    assert comp["brand"] == "LATAM"
+    assert comp["by_engine"]["google_ads"]["problem_pct"] == 0.06
+    assert comp["by_engine"]["google_ads"]["problem_one_in"] == 1543
+
+
+def test_share_of_voice_declara_competidor_sin_captura_en_vez_de_cero(tmp_db):
+    _seed_sov(tmp_db, "Avianca", 890, 311920)
+
+    sov = agg.build_share_of_voice_payload(tmp_db, "Avianca")
+
+    assert sov["competitors"] == []
+    assert sov["missing_competitors"] == ["LATAM"]
+
+
+def test_share_of_voice_sin_busquedas_de_problema_no_inventa_un_ratio(tmp_db):
+    _seed_sov(tmp_db, "Avianca", 0, 5000)
+
+    ga = agg.build_share_of_voice_payload(tmp_db, "Avianca")["by_engine"]["google_ads"]
+
+    assert ga["problem_pct"] == 0.0
+    assert ga["problem_one_in"] is None
