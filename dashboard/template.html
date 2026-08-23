@@ -41,6 +41,10 @@
     /* Fallbacks explícitos: el archivo debe verse bien sin internet */
     --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+    /* Navegación: 248px de riel, y una barra superior de 52px que en
+       móvil reemplaza al <header> de 92px que había (la cabecera BAJA de
+       alto, no sube). Ver el bloque "navegación" más abajo. */
+    --nav-w:248px; --topbar-h:52px;
   }
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html{background:var(--bg)}
@@ -52,11 +56,13 @@
   }
   .wrap{max-width:1360px;margin:0 auto;padding:28px 22px 70px}
 
-  /* ── header ── */
-  header{
-    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
-    gap:10px 20px;padding-bottom:18px;margin-bottom:28px;border-bottom:1px solid var(--border);
-  }
+  /* ── identidad de marca ──
+     Vive en el bloque .nav-id del sidebar, no en un <header> del flujo.
+     En escritorio queda fija y nunca se va con el scroll: en un documento
+     de 15 a 25 pantallas, al llegar al bloque 7 ya no se veía ni de qué
+     marca ni de qué ventana temporal era el reporte, y con dos marcas
+     activas que se ven casi iguales eso es un riesgo real de confusión.
+     El bloque de identidad es contexto, no contenido. */
   .brand{display:flex;align-items:center;gap:14px}
   .brand-logo{height:30px;width:auto;display:block}
   /* Wordmark tipográfico — usado cuando la marca no tiene archivo de logo
@@ -74,12 +80,9 @@
     width:7px;height:24px;border-radius:2px;flex-shrink:0;
     background:linear-gradient(180deg, var(--brand), var(--brand-ink));
   }
-  .brand-div{width:1px;height:18px;background:var(--border)}
-  header h1{
-    font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;
-    text-transform:uppercase;color:var(--txt-2);
-  }
-  #rango{font-family:var(--mono);font-size:11px;color:var(--txt-2);letter-spacing:.02em}
+  /* En el riel, el rango se parte en varias líneas: la fecha, el total y
+     las fuentes no caben en 208px de ancho útil en una sola. */
+  #rango{font-family:var(--mono);font-size:10.5px;color:var(--txt-2);letter-spacing:.02em;line-height:1.6}
 
   section{margin-bottom:36px}
   section > h2{
@@ -861,18 +864,185 @@
 
   footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
     font-family:var(--mono);font-size:10px;color:var(--txt-3);letter-spacing:.04em}
+
+  /* ══ navegación: sidebar de dos secciones ═══════════════════════════
+     El cliente lo describió como "un largero hacia abajo": 21.076px a
+     390px, con el bloque de IA sepultado detrás de 17.000. La mecánica
+     es híbrida a propósito, porque cada opción pura falla en una mitad
+     distinta del problema:
+       · Solo anclas: reduce el costo de LLEGAR a un bloque, pero no el
+         largo. La barra de scroll sigue midiendo lo mismo.
+       · Solo mostrar/ocultar por sección: parte el documento, pero la
+         sección 1 sigue siendo un largero de 18 pantallas.
+     Ocultar a nivel panel hace que la barra de scroll mida solo lo que
+     se está leyendo; las anclas más el resaltado del activo resuelven el
+     alcance dentro del panel. La casilla "Ver todo en una sola página"
+     es la contrapartida honesta: Ctrl+F y la impresión no encuentran lo
+     que está en display:none. */
+  .panel[hidden]{display:none}
+  body.all-view .panel[hidden]{display:block}
+  .panel-lead{color:var(--txt-2);font-size:12.5px;margin-bottom:24px;max-width:74ch;line-height:1.65}
+
+  #nav{background:var(--bg-3);border-right:1px solid var(--border);overflow-y:auto}
+  .nav-id{display:flex;flex-direction:column;gap:9px;padding-bottom:18px;
+    margin-bottom:18px;border-bottom:1px solid var(--border)}
+  .nav-id h1{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--txt-2)}
+  .nav-sec{display:block;width:100%;text-align:left;background:none;border:0;cursor:pointer;
+    font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--txt-2);padding:10px 10px 10px 12px;border-radius:6px}
+  .nav-sec:hover{background:var(--bg-4);color:var(--txt)}
+  /* Nada de colores fijos acá: con LATAM el acento pasa a azul y
+     --brand-ink cambia de derivación (ver build._derive_ink). */
+  .nav-sec[aria-current="true"]{color:var(--brand-ink);background:var(--brand-dim)}
+  .nav-items{list-style:none;margin:2px 0 14px;padding:0 0 0 12px;border-left:1px solid var(--border)}
+  .nav-items[hidden]{display:none}
+  .nav-items a{display:block;padding:6px 10px;border-radius:5px;font-size:12px;
+    color:var(--txt-2);text-decoration:none;border-left:3px solid transparent;margin-left:-1px}
+  .nav-items a:hover{background:var(--bg-4);color:var(--txt)}
+  .nav-items a.is-active{color:var(--brand-ink);font-weight:600;border-left-color:var(--brand)}
+  .nav-sep{height:1px;background:var(--border);margin:8px 0 12px}
+  /* El apéndice va bajo un separador, en tipografía menor: se lee como
+     pie de página del menú, no como una tercera sección de contenido.
+     Las dos secciones numeradas que pidió el cliente siguen siendo dos. */
+  .nav-apx{font-size:10px;letter-spacing:.09em;color:var(--txt-3)}
+  .nav-allview{display:flex;align-items:center;gap:8px;margin-top:22px;padding-top:14px;
+    border-top:1px solid var(--border);font-size:11px;color:var(--txt-3);cursor:pointer}
+  .nav-allview input{accent-color:var(--brand)}
+  .skip-link{position:absolute;left:-9999px}
+  .skip-link:focus{left:8px;top:8px;z-index:60;background:var(--bg-2);padding:8px 12px;
+    border:1px solid var(--border);border-radius:6px}
+
+  section[id]{scroll-margin-top:18px}
+  @media (prefers-reduced-motion: no-preference){ html{scroll-behavior:smooth} }
+
+  /* ── Escritorio: el riel ocupa ancho de flujo ──
+     1288 = 1040 + 248. 1040 es el breakpoint ya calibrado de .two-col
+     (ver su comentario), donde el ancho útil de contenido es 1040-44 =
+     996px. Con el riel en flujo, el contenido a 1288px vale 1288-248-44
+     = 996px: exactamente el mismo ancho ya validado. Por eso NINGÚN
+     breakpoint existente necesita moverse.
+     El desplazamiento se hace con padding-left en <body>, nunca
+     convirtiendo body o .wrap en flex/grid: .wrap como item de un
+     contenedor flex heredaría min-width:auto y el min-content del árbol
+     (tablas de 330 a 1180px) reventaría el ancho — el mismo bug que este
+     archivo ya documenta en .two-col. */
+  @media (min-width:1288px){
+    body{padding-left:var(--nav-w)}
+    #topbar,#navScrim{display:none}
+    #nav{position:fixed;top:0;left:0;bottom:0;width:var(--nav-w);z-index:20;
+      padding:26px 18px 26px 22px}
+  }
+
+  /* ── Debajo de 1288: cajón, ancho de flujo cero ──
+     Entre 1040 y 1287px también es cajón, deliberadamente: un riel fijo
+     de 248px en ese rango dejaría el contenido por debajo de los anchos
+     ya validados y reviviría el scroll fantasma del heatmap que el
+     breakpoint de 1040 fue calibrado para eliminar. */
+  @media (max-width:1287px){
+    #topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+      height:var(--topbar-h);padding:0 14px;background:var(--bg-3);
+      border-bottom:1px solid var(--border)}
+    .tb-brand{font-weight:700;color:var(--brand-ink);font-size:13px}
+    .tb-sec{font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--txt-3);margin-left:auto;text-align:right}
+    #btnNav{width:34px;height:34px;border:1px solid var(--border);border-radius:7px;
+      background:var(--bg-2);cursor:pointer;display:grid;place-items:center;flex-shrink:0}
+    .hb,.hb::before,.hb::after{display:block;width:15px;height:1.5px;background:var(--txt);
+      border-radius:1px;content:''}
+    .hb{position:relative}
+    .hb::before{position:absolute;top:-5px}
+    .hb::after{position:absolute;top:5px}
+    /* translateX + visibility:hidden en reposo, para que los enlaces del
+       cajón cerrado salgan del orden de tabulación. */
+    #nav{position:fixed;top:0;left:0;bottom:0;width:min(84vw,300px);z-index:50;
+      background:var(--bg-2);padding:22px 18px;
+      transform:translateX(-100%);visibility:hidden;
+      transition:transform .22s ease, visibility 0s .22s}
+    body.nav-open #nav{transform:none;visibility:visible;transition:transform .22s ease}
+    #navScrim{position:fixed;inset:0;z-index:40;background:rgba(20,16,12,.45)}
+    #navScrim[hidden]{display:none}
+    body.nav-open{overflow:hidden}
+    section[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+  }
+  @media (prefers-reduced-motion: reduce){ #nav{transition:none} }
+
+  /* Impresión y exportación a PDF: el reporte vuelve a ser un documento
+     entero, sin cromo de navegación. */
+  @media print{
+    #nav,#topbar,#navScrim,.skip-link{display:none}
+    body{padding-left:0}
+    .panel[hidden]{display:block}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand">
-      __BRAND_LOGO_HTML__
-      <span class="brand-div"></span>
-      <h1>Social Listening</h1>
-    </div>
+<a class="skip-link" href="#panel-social">Ir al contenido</a>
+
+<!-- Barra superior: solo debajo de 1288px, donde el sidebar es cajón.
+     Reemplaza al <header> de 92px que había, así que el alto de cabecera
+     en móvil BAJA 40px. Repite el nombre de marca como texto y no el
+     logo: el marcador del logo tiene que aparecer una sola vez en el
+     documento (build.render sustituye todas sus apariciones, comentarios
+     incluidos). -->
+<div id="topbar">
+  <button type="button" id="btnNav" aria-expanded="false" aria-controls="nav"
+          aria-label="Abrir el menú de secciones"><span class="hb"></span></button>
+  <span class="tb-brand">__BRAND_NAME__</span>
+  <span class="tb-sec" id="tbSec">1. Social Listening</span>
+</div>
+
+<div id="navScrim" hidden></div>
+
+<!-- Hijo directo de <body>, nunca de .wrap: un ancestro con transform
+     invalidaría el position:fixed del riel. -->
+<aside id="nav">
+  <div class="nav-id">
+    <div class="brand">__BRAND_LOGO_HTML__</div>
+    <h1>Social Listening</h1>
     <p id="rango" class="muted"></p>
-  </header>
+  </div>
+
+  <nav aria-label="Secciones del reporte">
+    <button type="button" class="nav-sec" data-panel="panel-social"
+            aria-controls="panel-social" aria-current="true">1. Social Listening</button>
+    <ul class="nav-items" data-for="panel-social">
+      <li><a href="#b1">Resumen</a></li>
+      <li><a href="#b2">Volumen y sentimiento</a></li>
+      <li><a href="#b3">De qué se queja la gente</a></li>
+      <li><a href="#b4">Driver por plataforma</a></li>
+      <li><a href="#b5">Sentimiento y emociones</a></li>
+      <li><a href="#b6">Todas las menciones</a></li>
+      <li><a href="#b7">Quejas con más impacto</a></li>
+      <li><a href="#b9a">Reseñas</a></li>
+      <li><a href="#b9b">Cobertura de prensa</a></li>
+    </ul>
+
+    <button type="button" class="nav-sec" data-panel="panel-ai"
+            aria-controls="panel-ai">2. AI Mentions</button>
+    <ul class="nav-items" data-for="panel-ai" hidden>
+      <li><a href="#b10a">Cuánto nos menciona la IA</a></li>
+      <li><a href="#b10b">Fuentes que cita</a></li>
+      <li><a href="#b10c">Preguntas por categoría</a></li>
+      <li><a href="#b10d">Preguntas directas</a></li>
+      <li><a href="#b10e">Lo que ya le preguntan</a></li>
+      <li><a href="#b11">Share of voice en búsqueda</a></li>
+    </ul>
+
+    <div class="nav-sep"></div>
+
+    <button type="button" class="nav-sec nav-apx" data-panel="panel-cobertura"
+            aria-controls="panel-cobertura">Cobertura de los datos</button>
+  </nav>
+
+  <label class="nav-allview">
+    <input type="checkbox" id="chkAllView"> Ver todo en una sola página
+  </label>
+</aside>
+
+<div class="wrap">
+  <div class="panel" id="panel-social">
+  <p class="panel-lead">Lo que dicen las personas sobre __BRAND_NAME__ en redes, reseñas y prensa dentro de la ventana del reporte.</p>
 
   <section id="b1"><h2>Resumen</h2>
     <div id="kpis" class="card"></div>
@@ -962,11 +1132,6 @@
 
   <section id="b7"><h2>Quejas con más impacto <span class="h2-sub">: por alcance propio cuando existe (TikTok); por interacciones cuando no (Instagram, sin alcance propio)</span></h2><div id="topQuejas"></div></section>
 
-  <section id="b8">
-    <h2>Calidad de los datos <span class="h2-sub">: qué tan confiable es esto</span></h2>
-    <div id="calidad" class="card"></div>
-  </section>
-
   <div class="two-col">
     <section id="b9a">
       <h2>Reseñas <span class="h2-sub">: Trustpilot, suman a la conversación de usuarios</span></h2>
@@ -977,9 +1142,16 @@
       <div class="card" id="pressCard"></div>
     </section>
   </div>
+  </div><!-- /panel-social -->
 
+  <div class="panel" id="panel-ai" hidden>
+  <!-- b10 deja de ser un bloque de navegación y pasa a ser el encabezado
+       del panel: con el sidebar nombrando la sección, un divisor de grupo
+       era redundante como ítem, pero sigue siendo valioso como título.
+       El elemento con id="b10" se conserva (hay un test que lo exige). -->
   <section id="b10">
     <h2>Visibilidad en respuestas de IA <span class="h2-sub">: cuando alguien le pregunta a un modelo en vez de a Google</span></h2>
+    <p class="panel-lead">Acá no se cuentan personas: se cuenta cuántas veces una máquina nombra a __BRAND_NAME__ al responder, y qué le preguntan los usuarios a esas máquinas. Los números de esta sección no son comparables con los de Social Listening, porque no miden lo mismo: allá cada número cuenta a alguien que habló, acá cuenta veces que alguien le preguntó a un modelo.</p>
   </section>
 
   <div class="two-col">
@@ -1013,6 +1185,26 @@
     <h2>Share of voice en búsqueda <span class="h2-sub">: intención de problema vs. intención comercial</span></h2>
     <div class="card" id="sovCard"></div>
   </section>
+  </div><!-- /panel-ai -->
+
+  <!-- Apéndice. El cliente pidió eliminar este bloque porque el reporte
+       era "un largero hacia abajo": medía 3.101px a 390px, el segundo más
+       alto del documento. Sacarlo del flujo elimina el 100% de ese costo
+       de largo, que era el problema real, y conserva el 100% del
+       contenido auditable: es el único lugar donde el reporte declara de
+       qué NO puede hablar (menciones fuera de ventana, canal web
+       retirado, asimetría de cuentas, sin fecha, sin clasificar). Sin
+       eso, "1 de cada 2" pasa a ser una afirmación sin respaldo
+       declarado, y cuatro leyendas del propio reporte quedan apuntando a
+       la nada. Va sin numerar, bajo un separador: las dos secciones que
+       el cliente pidió siguen siendo dos. -->
+  <div class="panel" id="panel-cobertura" hidden>
+  <section id="b8">
+    <h2>Cobertura de los datos <span class="h2-sub">: de qué puede y de qué no puede hablar este reporte</span></h2>
+    <p class="panel-lead">Qué se excluyó, por qué, y qué cobertura tiene cada métrica. Nada de lo que sigue cambia un número de las otras secciones: explica de dónde salen.</p>
+    <div id="calidad" class="card"></div>
+  </section>
+  </div><!-- /panel-cobertura -->
 
   <footer>__BRAND_NAME__ · Social Listening, reporte autocontenido, generado sin conexión a servidores externos.</footer>
 </div>
@@ -1336,7 +1528,7 @@ const ACCOUNT_META = {
   latamairlines_peru:      { label: 'LATAM Perú',     tag: 'local' },
 };
 function accountMeta(account) {
-  if (account == null) return { label: 'Cuenta sin registrar', tag: 'histórico, ver bloque 8' };
+  if (account == null) return { label: 'Cuenta sin registrar', tag: 'histórico, ver Cobertura de los datos' };
   return ACCOUNT_META[account] || { label: '@' + account, tag: 'otra cuenta' };
 }
 
@@ -1973,8 +2165,11 @@ function renderTabla() {
 
   pintaIndicadores();
 
-  document.getElementById('conteoTabla').textContent =
-    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · s/d = esa métrica no aplica a la plataforma o no se midió (ver bloque 8) · Alcance = propio del contenido, Interacciones = likes+comentarios+shares+saves · "Ver detalle de engagement" despliega Visib. post, Likes, Coment., Shares, Saves y Engagement`;
+  // innerHTML y no textContent: la leyenda ahora lleva un enlace al
+  // apéndice de cobertura. Todo lo interpolado son números formateados
+  // por fmtInt, nunca texto de un usuario.
+  document.getElementById('conteoTabla').innerHTML =
+    `Mostrando ${fmtInt(rows.length)} de ${fmtInt(DATA.mentions.length)} menciones · clic en una cabecera para ordenar · * fecha no confiable · ×N = veces que esa voz repitió el mismo texto · s/d = esa métrica no aplica a la plataforma o no se midió (ver <a class="xref" href="#b8">Cobertura de los datos</a>) · Alcance = propio del contenido, Interacciones = likes+comentarios+shares+saves · "Ver detalle de engagement" despliega Visib. post, Likes, Coment., Shares, Saves y Engagement`;
 }
 
 // ── Bloque 7: cards, en dos grupos por criterio de orden ──────────
@@ -2119,7 +2314,7 @@ function renderCalidad() {
       <span>menciones sin clasificar: el 100% de las ${fmtInt(q.total)} voces únicas tiene sentiment y emoción asignados.</span></div>`,
     q.press_total > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.press_total)}</span>
-      <span>notas de prensa dentro de la ventana <b style="color:var(--txt)">no cuentan en la tasa de quejas ni en ningún número de este bloque ni de los bloques 1-7</b>: un periodista reportando una demanda o una cancelación masiva es cobertura, no una queja de un usuario. Se agregan por su cuenta, con su propio sentimiento, medios y temas, en <b style="color:var(--txt)">"Cobertura de prensa"</b> más abajo.</span></div>`
+      <span>notas de prensa dentro de la ventana <b style="color:var(--txt)">no cuentan en la tasa de quejas ni en ningún número de esta sección ni de los bloques 1-7</b>: un periodista reportando una demanda o una cancelación masiva es cobertura, no una queja de un usuario. Se agregan por su cuenta, con su propio sentimiento, medios y temas, en <b style="color:var(--txt)">"Cobertura de prensa"</b> más abajo.</span></div>`
       : '',
     q.reviews_total > 0
       ? `<div class="q-note"><span class="q-num">${fmtInt(q.reviews_total)}</span>
@@ -2323,7 +2518,7 @@ function renderPressCard() {
     <div class="q-block-title">Titulares recientes</div>
     <div class="press-headlines">${headlines || '<p class="muted" style="font-size:11.5px">Sin titulares.</p>'}</div>
     <div class="press-scope-note">
-      <span>Estas ${fmtInt(p.total)} notas <b style="color:var(--txt)">no suman</b> a la tasa de quejas, al total de menciones ni a ningún gráfico de los bloques 1-7: un periodista reportando una demanda o una cancelación no es un cliente quejándose. Ver el bloque 8 ("Calidad de los datos") para el desglose completo del alcance.</span>
+      <span>Estas ${fmtInt(p.total)} notas <b style="color:var(--txt)">no suman</b> a la tasa de quejas, al total de menciones ni a ningún gráfico de los bloques 1-7: un periodista reportando una demanda o una cancelación no es un cliente quejándose. Ver <a class="xref" href="#b8">Cobertura de los datos</a> para el desglose completo del alcance.</span>
     </div>
   `;
 }
@@ -2791,6 +2986,152 @@ function _sovLectura(s, ENGINE_LABEL) {
     </div>`;
 }
 
+// ── Navegación: paneles + anclas + resaltado del activo ─────────────────
+// El array despachador de abajo NO se toca: las funciones de render se
+// siguen ejecutando todas al cargar, con los tres paneles ya en su estado
+// inicial. Lo único que cambia es qué panel se ve.
+const NAV_DEFAULT = 'panel-social';
+const BLOCK_PANEL = {
+  b1: 'panel-social', b2: 'panel-social', b3: 'panel-social', b4: 'panel-social',
+  b5: 'panel-social', b6: 'panel-social', b7: 'panel-social',
+  b9a: 'panel-social', b9b: 'panel-social',
+  b10: 'panel-ai', b10a: 'panel-ai', b10b: 'panel-ai', b10c: 'panel-ai',
+  b10d: 'panel-ai', b10e: 'panel-ai', b11: 'panel-ai',
+  b8: 'panel-cobertura',
+  'panel-social': 'panel-social', 'panel-ai': 'panel-ai', 'panel-cobertura': 'panel-cobertura',
+};
+const SEC_LABEL = {
+  'panel-social': '1. Social Listening',
+  'panel-ai': '2. AI Mentions',
+  'panel-cobertura': 'Cobertura de los datos',
+};
+let navActive = null;
+
+function navCharts() { return [tlChart, drChart, sentChart, emoChart].filter(Boolean); }
+
+function activatePanel(id) {
+  if (!SEC_LABEL[id]) id = NAV_DEFAULT;
+  if (id === navActive) return;
+  navActive = id;
+  document.querySelectorAll('.panel').forEach(p => { p.hidden = (p.id !== id); });
+  document.querySelectorAll('.nav-sec').forEach(b => {
+    if (b.dataset.panel === id) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+  // El sidebar despliega la lista de bloques SOLO de la sección activa:
+  // 9 ítems o 6, nunca los 16 a la vez.
+  document.querySelectorAll('.nav-items').forEach(ul => { ul.hidden = (ul.dataset.for !== id); });
+  const tb = document.getElementById('tbSec');
+  if (tb) tb.textContent = SEC_LABEL[id];
+  // Chart.js observa el tamaño del contenedor: cuando el panel pasa a
+  // display:none el canvas se queda en 0px de ancho. Se redimensiona dos
+  // veces a propósito: la primera, sincrónica, fuerza el reflow y cierra
+  // la ventana de un frame en la que el chart se vería vacío; la segunda,
+  // en el próximo frame, cubre el caso de que el ResizeObserver de
+  // Chart.js todavía tuviera pendiente el 0 que midió al ocultarse y lo
+  // aplicara después.
+  navCharts().forEach(c => c.resize());
+  requestAnimationFrame(() => navCharts().forEach(c => c.resize()));
+  spyUpdate();
+}
+
+function goTo(id) {
+  const panel = BLOCK_PANEL[id];
+  // Siempre el panel primero: un #b11 no se puede alcanzar mientras
+  // panel-ai está en display:none.
+  if (panel) activatePanel(panel);
+  const el = document.getElementById(id);
+  if (!el) return;
+  // location.hash y no history.pushState: el dashboard se abre como
+  // archivo local y pushState sobre file:// da SecurityError en algunos
+  // navegadores. Escribir el hash es nativo, da botón atrás gratis y el
+  // scroll lo hace el navegador respetando scroll-margin-top.
+  if (location.hash === '#' + id) el.scrollIntoView();
+  else location.hash = id;
+  closeDrawer();
+}
+
+// Delegación única: cubre el sidebar Y las referencias cruzadas en prosa
+// (.xref), que se pintan por JS después de este registro.
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href^="#"]');
+  if (a) {
+    const id = a.getAttribute('href').slice(1);
+    if (BLOCK_PANEL[id]) { ev.preventDefault(); goTo(id); }
+    return;
+  }
+  const b = ev.target.closest('.nav-sec');
+  if (b) { activatePanel(b.dataset.panel); window.scrollTo({ top: 0 }); closeDrawer(); }
+});
+
+window.addEventListener('hashchange', () => {
+  const id = location.hash.slice(1);
+  if (BLOCK_PANEL[id]) activatePanel(BLOCK_PANEL[id]);
+});
+
+// ── Cajón (debajo de 1288px) ──
+function openDrawer() {
+  document.body.classList.add('nav-open');
+  document.getElementById('navScrim').hidden = false;
+  document.getElementById('btnNav').setAttribute('aria-expanded', 'true');
+  const first = document.querySelector('#nav .nav-sec');
+  if (first) first.focus();
+}
+function closeDrawer() {
+  if (!document.body.classList.contains('nav-open')) return;
+  document.body.classList.remove('nav-open');
+  document.getElementById('navScrim').hidden = true;
+  const btn = document.getElementById('btnNav');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.focus();
+}
+document.getElementById('btnNav').addEventListener('click', () =>
+  document.body.classList.contains('nav-open') ? closeDrawer() : openDrawer());
+document.getElementById('navScrim').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+window.addEventListener('resize', () => { if (window.innerWidth >= 1288) closeDrawer(); });
+
+// ── Ver todo en una sola página ──
+// Contrapartida honesta del ocultamiento: la búsqueda del navegador y la
+// impresión no encuentran lo que está en display:none.
+document.getElementById('chkAllView').addEventListener('change', e => {
+  document.body.classList.toggle('all-view', e.target.checked);
+  if (e.target.checked) requestAnimationFrame(() => navCharts().forEach(c => c.resize()));
+});
+
+// ── Resaltado del ítem activo ──
+// El observer solo DISPARA; el ganador se resuelve leyendo los rects de
+// las secciones visibles. Con más de cien mil nodos en el DOM, un
+// listener de scroll leyendo por frame trabaría el hilo principal; esto
+// lee unos pocos rects solo cuando alguna sección cruza el borde.
+const SPY_SECTIONS = Array.from(document.querySelectorAll('.panel section[id]'));
+function spyUpdate() {
+  const top = (window.innerWidth < 1288 ? 52 : 0) + 40;
+  let winner = null;
+  for (const s of SPY_SECTIONS) {
+    if (s.offsetParent === null) continue;            // panel oculto
+    if (s.getBoundingClientRect().top <= top) winner = s;
+  }
+  if (!winner) winner = SPY_SECTIONS.find(s => s.offsetParent !== null) || null;
+  document.querySelectorAll('.nav-items a').forEach(a => {
+    a.classList.toggle('is-active', !!winner && a.getAttribute('href') === '#' + winner.id);
+  });
+}
+const spy = new IntersectionObserver(spyUpdate, { rootMargin: '-40px 0px -55% 0px', threshold: 0 });
+SPY_SECTIONS.forEach(s => spy.observe(s));
+
+// El panel activo al cargar es SIEMPRE panel-social, salvo hash
+// explícito: los cuatro canvas viven ahí y Chart.js mide el contenedor al
+// construirse. Si se construyen dentro de un display:none salen con 0px
+// de ancho (el requestAnimationFrame(resize) de activatePanel los repara
+// al volver, pero mejor no nacer rotos).
+function initNav() {
+  const id = location.hash.slice(1);
+  navActive = null;
+  activatePanel(BLOCK_PANEL[id] || NAV_DEFAULT);
+  if (id && document.getElementById(id)) document.getElementById(id).scrollIntoView();
+}
+
 [
   renderKpis, renderRepHealth, renderAccountBreakdown, renderTimeline,
   () => { renderDrivers(''); initDriverSelect(); },
@@ -2804,6 +3145,9 @@ function _sovLectura(s, ENGINE_LABEL) {
   // orden, pero el barrido de `hidden=until-found` sí necesita que los
   // paneles ya existan en el DOM.
   initAivRespuestas,
+  // Último: los charts ya están construidos con su ancho real y el
+  // resaltado del ítem activo tiene alturas de verdad que medir.
+  initNav,
 ].forEach(fn => fn());
 </script>
 </body>

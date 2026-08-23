@@ -289,3 +289,70 @@ def test_stage_for_deploy_avianca_y_latam_conviven_sin_pisarse(tmp_path, monkeyp
 
     assert (tmp_path / "index.html").read_text(encoding="utf-8") == "<html>avianca</html>"
     assert (tmp_path / "latam.html").read_text(encoding="utf-8") == "<html>latam</html>"
+
+
+# ── Navegación: sidebar de dos secciones (pedido 6 del cliente) ──────────
+# Estos miran la FORMA del HTML servido; el comportamiento en vivo (paneles
+# que se muestran y ocultan, anclas entre secciones, "ver todo en una sola
+# página") vive en tests/test_dashboard_interaccion.py, que sí ejecuta el JS.
+
+def test_los_tres_paneles_existen():
+    html = build.render(PAYLOAD)
+    for panel_id in ("panel-social", "panel-ai", "panel-cobertura"):
+        assert f'id="{panel_id}"' in html
+
+
+def test_el_sidebar_declara_las_dos_secciones_y_el_apendice():
+    """Dos secciones numeradas, ni una más: el apéndice de cobertura va
+    bajo un separador y sin numerar, para no leerse como una tercera."""
+    html = build.render(PAYLOAD)
+    assert ">1. Social Listening</button>" in html
+    assert ">2. AI Mentions</button>" in html
+    assert 'class="nav-sec nav-apx"' in html
+    assert ">3. " not in html
+
+
+def test_cada_bloque_del_reporte_tiene_panel_asignado_en_el_js():
+    """Una <section id> sin entrada en BLOCK_PANEL sería inalcanzable
+    desde el sidebar y quedaría escondida en cuanto se oculte su panel."""
+    import re
+    html = build.render(PAYLOAD)
+    ids_en_markup = set(re.findall(r'<section id="(b[0-9a-z]+)"', html))
+    mapa = html.split("const BLOCK_PANEL = {", 1)[1].split("};", 1)[0]
+    ids_en_mapa = set(re.findall(r"\b(b[0-9a-z]+)\s*:", mapa))
+    assert ids_en_markup <= ids_en_mapa, ids_en_markup - ids_en_mapa
+
+
+def test_el_logo_de_marca_aparece_una_sola_vez():
+    """El logo se mudó al sidebar; la barra superior de móvil repite el
+    NOMBRE, no el logo, justamente para no duplicar el marcador."""
+    html = build.render(PAYLOAD)
+    assert html.count('<img class="brand-logo"') == 1
+    html_latam = build.render(PAYLOAD, brand_name="LATAM")
+    assert html_latam.count('class="brand-wordmark"') == 1
+
+
+def test_sigue_habiendo_exactamente_un_h1():
+    html = build.render(PAYLOAD)
+    assert html.count("<h1>") == 1
+
+
+def test_el_footer_queda_fuera_de_los_paneles():
+    """Si el pie viviera dentro de un panel desaparecería al cambiar de
+    sección."""
+    html = build.render(PAYLOAD)
+    cuerpo = html.split('<div class="wrap">', 1)[1]
+    ultimo_cierre = cuerpo.rindex("<!-- /panel-cobertura -->")
+    assert cuerpo.index("<footer>") > ultimo_cierre
+
+
+def test_calidad_de_los_datos_se_conserva_como_apendice_no_se_borra():
+    """El cliente pidió eliminar el bloque porque el reporte era un
+    largero; sacarlo del flujo principal elimina ese costo y conserva la
+    auditoría, que es el único lugar donde el reporte declara de qué NO
+    puede hablar."""
+    html = build.render(PAYLOAD)
+    assert 'id="b8"' in html
+    assert 'id="calidad"' in html
+    assert "renderCalidad" in html
+    assert "Cobertura de los datos" in html

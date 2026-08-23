@@ -130,20 +130,29 @@ def pagina(html_dashboard):
         browser.close()
 
 
+@pytest.fixture
+def pagina_ai(pagina):
+    """Los bloques de IA viven en el panel 2, que arranca oculto: sin
+    activarlo, sus controles no son clicables ni tienen texto visible."""
+    pagina.locator('.nav-sec[data-panel="panel-ai"]').click()
+    yield pagina
+    pagina.locator('.nav-sec[data-panel="panel-social"]').click()
+
+
 # ── desplegable de respuesta completa ────────────────────────────────────
 
-def test_solo_las_respuestas_truncadas_traen_el_control(pagina):
+def test_solo_las_respuestas_truncadas_traen_el_control(pagina_ai):
     """La tarjeta de categoría tiene texto de sobra (control), la de marca
     cabía entera en el excerpt (sin control): esa asimetría es justo lo
     que evita una flechita que no despliega nada."""
-    assert pagina.locator("#aivCategory [data-aiv-toggle]").count() == 1
-    assert pagina.locator("#aivBrandPrompts [data-aiv-toggle]").count() == 0
-    assert pagina.locator("#aivSearchExamples [data-aiv-toggle]").count() == 1
+    assert pagina_ai.locator("#aivCategory [data-aiv-toggle]").count() == 1
+    assert pagina_ai.locator("#aivBrandPrompts [data-aiv-toggle]").count() == 0
+    assert pagina_ai.locator("#aivSearchExamples [data-aiv-toggle]").count() == 1
 
 
-def test_el_control_abre_y_cierra_la_respuesta_completa(pagina):
-    boton = pagina.locator("#aivCategory [data-aiv-toggle]")
-    panel = pagina.locator("#aivCategory .aiv-resp")
+def test_el_control_abre_y_cierra_la_respuesta_completa(pagina_ai):
+    boton = pagina_ai.locator("#aivCategory [data-aiv-toggle]")
+    panel = pagina_ai.locator("#aivCategory .aiv-resp")
 
     assert boton.get_attribute("aria-expanded") == "false"
     assert not panel.is_visible()
@@ -155,29 +164,29 @@ def test_el_control_abre_y_cierra_la_respuesta_completa(pagina):
     assert boton.inner_text().strip() == "Ocultar la respuesta completa"
     # Abierto, el excerpt recortado se retira: el texto completo empieza
     # con las mismas palabras, así que se lee como si hubiera crecido.
-    assert not pagina.locator("#aivCategory .aiv-prompt-excerpt").is_visible()
+    assert not pagina_ai.locator("#aivCategory .aiv-prompt-excerpt").is_visible()
 
     boton.click()
     assert boton.get_attribute("aria-expanded") == "false"
     assert not panel.is_visible()
-    assert pagina.locator("#aivCategory .aiv-prompt-excerpt").is_visible()
+    assert pagina_ai.locator("#aivCategory .aiv-prompt-excerpt").is_visible()
 
 
-def test_la_respuesta_desplegada_trae_el_texto_completo_no_el_excerpt(pagina):
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
-    texto = pagina.locator("#aivCategory .aiv-resp-txt").inner_text()
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
+def test_la_respuesta_desplegada_trae_el_texto_completo_no_el_excerpt(pagina_ai):
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
+    texto = pagina_ai.locator("#aivCategory .aiv-resp-txt").inner_text()
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
 
     assert len(texto) > 380
     assert "cien años de historia" in texto
 
 
-def test_resalta_la_marca_propia_y_al_competidor_con_conteo(pagina):
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
-    propias = pagina.locator("#aivCategory .aiv-resp .aiv-mark-own").count()
-    rivales = pagina.locator("#aivCategory .aiv-resp .aiv-mark-rival").count()
-    meta = pagina.locator("#aivCategory .aiv-resp-meta").inner_text()
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
+def test_resalta_la_marca_propia_y_al_competidor_con_conteo(pagina_ai):
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
+    propias = pagina_ai.locator("#aivCategory .aiv-resp .aiv-mark-own").count()
+    rivales = pagina_ai.locator("#aivCategory .aiv-resp .aiv-mark-rival").count()
+    meta = pagina_ai.locator("#aivCategory .aiv-resp-meta").inner_text()
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
 
     assert propias == 12  # una "Avianca" por repetición de LARGO
     assert rivales == 12
@@ -185,36 +194,36 @@ def test_resalta_la_marca_propia_y_al_competidor_con_conteo(pagina):
     assert "LATAM: 12 menciones" in meta
 
 
-def test_declara_que_modelo_respondio(pagina):
+def test_declara_que_modelo_respondio(pagina_ai):
     """`model` viajaba en el payload desde siempre y no se pintaba en
     ninguna parte: no se sabía qué modelo dijo qué."""
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
-    src = pagina.locator("#aivCategory .aiv-resp-src").inner_text()
-    pagina.locator("#aivCategory [data-aiv-toggle]").click()
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
+    src = pagina_ai.locator("#aivCategory .aiv-resp-src").inner_text()
+    pagina_ai.locator("#aivCategory [data-aiv-toggle]").click()
 
     assert "ChatGPT" in src
     assert "gpt-4o-mini-2024-07-18" in src
 
 
-def test_el_control_es_un_boton_real_operable_con_teclado(pagina):
+def test_el_control_es_un_boton_real_operable_con_teclado(pagina_ai):
     """<button> y no <div>: ya es enfocable con Tab y ya responde a Enter
     y Espacio, sin manejadores de teclado propios."""
-    boton = pagina.locator("#aivCategory [data-aiv-toggle]")
+    boton = pagina_ai.locator("#aivCategory [data-aiv-toggle]")
     assert boton.evaluate("b => b.tagName") == "BUTTON"
     boton.focus()
-    pagina.keyboard.press("Enter")
+    pagina_ai.keyboard.press("Enter")
     assert boton.get_attribute("aria-expanded") == "true"
-    pagina.keyboard.press(" ")
+    pagina_ai.keyboard.press(" ")
     assert boton.get_attribute("aria-expanded") == "false"
 
 
 # ── textos explicativos (pedidos 1 y 3) ──────────────────────────────────
 
-def test_el_bloque_de_menciones_en_ia_explica_que_se_mide(pagina):
+def test_el_bloque_de_menciones_en_ia_explica_que_se_mide(pagina_ai):
     """Pedido 1: "no entiendo esto, cómo se lee". Bajada (qué es cada
     número) arriba y nota de lectura (qué dice la comparación) abajo."""
-    bajada = pagina.locator("#aivCompare .aiv-bajada").inner_text()
-    lectura = pagina.locator("#aivCompare .aiv-lectura").inner_text()
+    bajada = pagina_ai.locator("#aivCompare .aiv-bajada").inner_text()
+    lectura = pagina_ai.locator("#aivCompare .aiv-lectura").inner_text()
 
     assert "cuántas veces la marca aparece nombrada" in bajada
     assert "volumen asociado" in bajada
@@ -225,20 +234,20 @@ def test_el_bloque_de_menciones_en_ia_explica_que_se_mide(pagina):
     assert "mide alcance" in lectura
 
 
-def test_share_of_voice_titula_con_1_de_cada_n_y_el_competidor_al_lado(pagina):
+def test_share_of_voice_titula_con_1_de_cada_n_y_el_competidor_al_lado(pagina_ai):
     """0,28% y 0,06% se leen los dos como "casi nada"; 351 contra 1.543 se
     lee como una diferencia de escala. Y sin el competidor en la misma
     tarjeta el bloque no es interpretable."""
-    ratios = pagina.locator("#sovCard .sov-ratio-row").all_inner_texts()
+    ratios = pagina_ai.locator("#sovCard .sov-ratio-row").all_inner_texts()
     assert any("1 de cada 351" in r and "Avianca" in r for r in ratios)
     assert any("1 de cada 1.543" in r and "LATAM" in r for r in ratios)
 
 
-def test_la_razon_de_share_of_voice_cuadra_con_los_numeros_que_muestra(pagina):
+def test_la_razon_de_share_of_voice_cuadra_con_los_numeros_que_muestra(pagina_ai):
     """1.543 / 351 = 4,4. Dividir los porcentajes ya redondeados daría 4,7
     y contradiría a los propios números de la frase: un cliente que divida
     lo que está leyendo tiene que obtener lo mismo que dice el texto."""
-    lectura = pagina.locator("#sovCard .aiv-lectura").inner_text()
+    lectura = pagina_ai.locator("#sovCard .aiv-lectura").inner_text()
 
     assert "4,4 veces más" in lectura
     assert "4,7" not in lectura
@@ -246,10 +255,10 @@ def test_la_razon_de_share_of_voice_cuadra_con_los_numeros_que_muestra(pagina):
     assert "890 búsquedas al mes" in lectura
 
 
-def test_los_porcentajes_usan_coma_decimal(pagina):
+def test_los_porcentajes_usan_coma_decimal(pagina_ai):
     """Mismo sistema de puntuación que el separador de miles que el
     dashboard ya usaba: "0.28%" al lado de "312.810" mezclaba dos."""
-    legend = pagina.locator("#sovCard .sov-legend").first.inner_text()
+    legend = pagina_ai.locator("#sovCard .sov-legend").first.inner_text()
     assert "0,28%" in legend
     assert "0.28%" not in legend
 
@@ -278,6 +287,7 @@ def test_cambiar_de_seccion_muestra_solo_esa_seccion(pagina):
 def test_los_charts_sobreviven_al_ida_y_vuelta_entre_secciones(pagina):
     """Chart.js mide el contenedor al construirse: un canvas que pasó por
     display:none puede quedarse en 0px si nadie lo redimensiona."""
+    pagina.wait_for_timeout(120)   # que se asiente lo que dejó el test anterior
     ancho_antes = pagina.locator("#chSentiment").evaluate("c => c.getBoundingClientRect().width")
     pagina.locator('.nav-sec[data-panel="panel-ai"]').click()
     pagina.locator('.nav-sec[data-panel="panel-social"]').click()
@@ -323,15 +333,17 @@ def test_ningun_bloque_queda_fuera_de_los_tres_paneles(pagina):
     assert huerfanas == []
 
 
-def test_sin_scroll_horizontal_en_escritorio_y_en_movil(html_dashboard):
-    html = html_dashboard
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
+def test_sin_scroll_horizontal_en_escritorio_y_en_movil(pagina):
+    """Los cinco anchos que el proyecto verifica: 1440 y 1288 con el riel
+    en flujo, 1287 y 1040 con el sidebar como cajón, y 390 de móvil.
+    Reusa la pestaña del módulo (Playwright sync no permite anidar dos
+    `sync_playwright()` a la vez) y devuelve el viewport al terminar."""
+    original = pagina.viewport_size
+    try:
         for ancho in (1440, 1288, 1287, 1040, 390):
-            page = browser.new_page(viewport={"width": ancho, "height": 900})
-            page.set_content(html, wait_until="load")
-            page.wait_for_timeout(150)
-            medido = page.evaluate("() => document.documentElement.scrollWidth")
+            pagina.set_viewport_size({"width": ancho, "height": 900})
+            pagina.wait_for_timeout(150)
+            medido = pagina.evaluate("() => document.documentElement.scrollWidth")
             assert medido <= ancho, f"scroll horizontal del body a {ancho}px: {medido}"
-            page.close()
-        browser.close()
+    finally:
+        pagina.set_viewport_size(original)

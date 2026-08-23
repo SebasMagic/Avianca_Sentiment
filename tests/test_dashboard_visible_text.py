@@ -161,6 +161,26 @@ def _visible_offenders(html: str) -> list[str]:
         page = browser.new_page()
         page.set_content(html, wait_until="load")
 
+        # El dashboard arranca con una sola sección visible (sidebar de
+        # dos secciones más apéndice), y `innerText` NO incluye lo que
+        # está en display:none: sin esto, el guion largo dejaría de
+        # detectarse en toda la sección de IA y en Cobertura de los datos.
+        # La casilla "Ver todo en una sola página" existe justamente para
+        # devolverle al documento su forma completa (Ctrl+F, impresión) y
+        # acá recupera la cobertura del escaneo.
+        # Se marca por JS y no con page.check(): debajo de 1288px de
+        # viewport (el default de Playwright es 1280) el sidebar es un
+        # cajón cerrado y la casilla no es clicable, pero el escaneo de
+        # texto no depende del ancho.
+        page.evaluate("() => { const c = document.getElementById('chkAllView');"
+                      "        c.checked = true; c.dispatchEvent(new Event('change')); }")
+        # Y se abre cada respuesta desplegable: su texto lo escribe un
+        # modelo, así que es el que más riesgo tiene de traer un guion
+        # largo (se normaliza al armar el payload, esto lo verifica de
+        # punta a punta).
+        page.evaluate("() => document.querySelectorAll('[data-aiv-toggle]').forEach(b => b.click())")
+        page.wait_for_timeout(80)
+
         body_text = page.inner_text("body")
         for linea in body_text.splitlines():
             if EM_DASH in linea:
